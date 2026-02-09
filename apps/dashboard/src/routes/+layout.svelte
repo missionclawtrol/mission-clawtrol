@@ -1,5 +1,8 @@
 <script lang="ts">
   import '../app.css';
+  import { onMount } from 'svelte';
+  import { wsConnected, connectWebSocket, disconnectWebSocket } from '$lib/websocket';
+  import { checkHealth } from '$lib/api';
   
   const tabs = [
     { name: 'Overview', href: '/', icon: '🏠' },
@@ -10,6 +13,25 @@
   ];
   
   import { page } from '$app/stores';
+  
+  let backendConnected = false;
+  
+  async function checkBackend() {
+    backendConnected = await checkHealth();
+  }
+  
+  onMount(() => {
+    checkBackend();
+    connectWebSocket();
+    
+    // Check backend health every 10 seconds
+    const interval = setInterval(checkBackend, 10000);
+    
+    return () => {
+      clearInterval(interval);
+      disconnectWebSocket();
+    };
+  });
 </script>
 
 <div class="min-h-screen flex flex-col">
@@ -17,12 +39,28 @@
   <header class="bg-slate-800 border-b border-slate-700 px-6 py-4">
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-3">
-        <span class="text-2xl">🤖</span>
-        <h1 class="text-xl font-semibold">Agent Dashboard</h1>
+        <span class="text-2xl">🦞</span>
+        <h1 class="text-xl font-semibold">Mission Clawtrol</h1>
       </div>
-      <div class="flex items-center gap-4">
-        <span class="text-sm text-slate-400">OpenClaw Connected</span>
-        <span class="w-2 h-2 bg-green-500 rounded-full"></span>
+      <div class="flex items-center gap-6">
+        <!-- Backend Status -->
+        <div class="flex items-center gap-2">
+          <span class="text-sm text-slate-400">Backend</span>
+          {#if backendConnected}
+            <span class="w-2 h-2 bg-green-500 rounded-full"></span>
+          {:else}
+            <span class="w-2 h-2 bg-red-500 rounded-full"></span>
+          {/if}
+        </div>
+        <!-- WebSocket Status -->
+        <div class="flex items-center gap-2">
+          <span class="text-sm text-slate-400">WebSocket</span>
+          {#if $wsConnected}
+            <span class="w-2 h-2 bg-green-500 rounded-full"></span>
+          {:else}
+            <span class="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></span>
+          {/if}
+        </div>
       </div>
     </div>
   </header>

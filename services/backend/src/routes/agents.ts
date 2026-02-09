@@ -3,7 +3,20 @@ import { readFile } from 'fs/promises';
 import { join } from 'path';
 
 // Path to OpenClaw sessions file
-const SESSIONS_PATH = join(process.env.HOME || '', '.openclaw/agents/main/sessions/sessions.json');
+const OPENCLAW_DIR = join(process.env.HOME || '', '.openclaw');
+const SESSIONS_PATH = join(OPENCLAW_DIR, 'agents/main/sessions/sessions.json');
+
+interface SessionData {
+  sessionId: string;
+  updatedAt: number;
+  model?: string;
+  modelProvider?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  lastChannel?: string;
+  chatType?: string;
+}
 
 interface Agent {
   id: string;
@@ -12,56 +25,115 @@ interface Agent {
   role?: string;
   task?: string;
   lastActive?: string;
+  model?: string;
+  provider?: string;
+  tokens?: number;
+  channel?: string;
+}
+
+function parseAgentName(sessionKey: string): { name: string; role: string } {
+  // Parse session keys like "agent:main:main", "voice:123", etc.
+  const parts = sessionKey.split(':');
+  
+  if (parts[0] === 'agent' && parts[1] === 'main') {
+    const agentName = parts[2] || 'main';
+    return {
+      name: agentName.charAt(0).toUpperCase() + agentName.slice(1),
+      role: agentName === 'main' ? 'Primary Assistant' : 'Agent',
+    };
+  }
+  
+  if (parts[0] === 'voice') {
+    return {
+      name: `Voice (${parts[1]})`,
+      role: 'Voice Call Agent',
+    };
+  }
+  
+  return {
+    name: sessionKey,
+    role: 'Agent',
+  };
+}
+
+function determineStatus(session: SessionData): 'idle' | 'working' | 'error' | 'offline' {
+  const now = Date.now();
+  const lastUpdate = session.updatedAt;
+  const diffMinutes = (now - lastUpdate) / 60000;
+  
+  // If updated within last 2 minutes, likely working
+  if (diffMinutes < 2) return 'working';
+  // If updated within last hour, idle
+  if (diffMinutes < 60) return 'idle';
+  // Otherwise, consider offline
+  return 'offline';
 }
 
 export async function agentRoutes(fastify: FastifyInstance) {
-  // Get all agents
+  // Get all agents from OpenClaw sessions
   fastify.get('/', async (request, reply) => {
     try {
       const sessionsData = await readFile(SESSIONS_PATH, 'utf-8');
-      const sessions = JSON.parse(sessionsData);
+      const sessions = JSON.parse(sessionsData) as Record<string, SessionData>;
       
       const agents: Agent[] = [];
       
       for (const [key, session] of Object.entries(sessions)) {
-        // Parse session key to get agent info
-        const parts = key.split(':');
-        const agentName = parts[1] || 'unknown';
+        const { name, role } = parseAgentName(key);
         
         agents.push({
           id: key,
-          name: agentName.charAt(0).toUpperCase() + agentName.slice(1),
-          status: 'idle', // TODO: Determine from session data
-          role: 'Agent',
-          lastActive: new Date((session as any).updatedAt).toISOString(),
+          name,
+          role,
+          status: determineStatus(session),
+          lastActive: new Date(session.updatedAt).toISOString(),
+          model: session.model,
+          provider: session.modelProvider,
+          tokens: session.totalTokens,
+          channel: session.lastChannel,
         });
       }
+      
+      // Sort by last active
+      agents.sort((a, b) => {
+        const aTime = a.lastActive ? new Date(a.lastActive).getTime() : 0;
+        const bTime = b.lastActive ? new Date(b.lastActive).getTime() : 0;
+        return bTime - aTime;
+      });
       
       return { agents };
     } catch (error) {
       fastify.log.error(error);
-      return { agents: [] };
+      return { agents: [], error: 'Failed to read sessions' };
     }
   });
   
-  // Get single agent
+  // Get single agent details
   fastify.get('/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
     
     try {
       const sessionsData = await readFile(SESSIONS_PATH, 'utf-8');
-      const sessions = JSON.parse(sessionsData);
+      const sessions = JSON.parse(sessionsData) as Record<string, SessionData>;
       
       const session = sessions[id];
       if (!session) {
         return reply.status(404).send({ error: 'Agent not found' });
       }
       
+      const { name, role } = parseAgentName(id);
+      
       return {
         id,
-        name: id.split(':')[1] || 'unknown',
-        status: 'idle',
-        session,
+        name,
+        role,
+        status: determineStatus(session),
+        lastActive: new Date(session.updatedAt).toISOString(),
+        model: session.model,
+        provider: session.modelProvider,
+        tokens: session.totalTokens,
+        channel: session.lastChannel,
+        sessionId: session.sessionId,
       };
     } catch (error) {
       fastify.log.error(error);
@@ -69,7 +141,7 @@ export async function agentRoutes(fastify: FastifyInstance) {
     }
   });
   
-  // Send message to agent
+  // Send message to agent (placeholder - needs OpenClaw integration)
   fastify.post('/:id/message', async (request, reply) => {
     const { id } = request.params as { id: string };
     const { message } = request.body as { message: string };
@@ -77,6 +149,6 @@ export async function agentRoutes(fastify: FastifyInstance) {
     // TODO: Integrate with OpenClaw sessions_send
     fastify.log.info(`Message to ${id}: ${message}`);
     
-    return { success: true, message: 'Message queued' };
+    return { success: true, message: 'Message queued (integration pending)' };
   });
 }
