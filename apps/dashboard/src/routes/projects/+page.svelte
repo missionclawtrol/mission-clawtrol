@@ -1,11 +1,29 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fetchProjects, fetchProject, type Project } from '$lib/api';
+  import { fetchProjects, fetchProject, createProject, deleteProject, spawnAgent, fetchProjectAgents, sendMessageToAgent, type Project, type AgentAssociation } from '$lib/api';
   
   let projects: Project[] = [];
   let selectedProject: Project | null = null;
+  let projectAgents: AgentAssociation[] = [];
   let loading = true;
   let loadingDetail = false;
+  
+  // Modal states
+  let showNewProjectModal = false;
+  let showSpawnAgentModal = false;
+  let showDeleteConfirm = false;
+  let showMessageModal = false;
+  let selectedAgent: AgentAssociation | null = null;
+  let agentMessage = '';
+  
+  // Form states
+  let newProjectName = '';
+  let newProjectDescription = '';
+  let agentTask = '';
+  let agentModel = '';
+  let agentTimeout = 300;
+  let formError = '';
+  let formLoading = false;
   
   async function loadProjects() {
     loading = true;
@@ -20,8 +38,117 @@
   
   async function selectProject(id: string) {
     loadingDetail = true;
-    selectedProject = await fetchProject(id);
+    const [project, agents] = await Promise.all([
+      fetchProject(id),
+      fetchProjectAgents(id),
+    ]);
+    selectedProject = project;
+    projectAgents = agents;
     loadingDetail = false;
+  }
+  
+  async function handleCreateProject() {
+    if (!newProjectName.trim()) {
+      formError = 'Project name is required';
+      return;
+    }
+    
+    formLoading = true;
+    formError = '';
+    
+    const result = await createProject({
+      name: newProjectName.trim(),
+      description: newProjectDescription.trim(),
+    });
+    
+    formLoading = false;
+    
+    if (result.success) {
+      showNewProjectModal = false;
+      newProjectName = '';
+      newProjectDescription = '';
+      await loadProjects();
+      if (result.project) {
+        await selectProject(result.project.id);
+      }
+    } else {
+      formError = result.error || 'Failed to create project';
+    }
+  }
+  
+  async function handleDeleteProject() {
+    if (!selectedProject) return;
+    
+    formLoading = true;
+    const result = await deleteProject(selectedProject.id);
+    formLoading = false;
+    
+    if (result.success) {
+      showDeleteConfirm = false;
+      selectedProject = null;
+      await loadProjects();
+    } else {
+      formError = result.error || 'Failed to delete project';
+    }
+  }
+  
+  async function handleSpawnAgent() {
+    if (!agentTask.trim()) {
+      formError = 'Task description is required';
+      return;
+    }
+    
+    formLoading = true;
+    formError = '';
+    
+    const result = await spawnAgent({
+      task: agentTask.trim(),
+      projectId: selectedProject?.id,
+      model: agentModel || undefined,
+      timeoutSeconds: agentTimeout,
+    });
+    
+    formLoading = false;
+    
+    if (result.success) {
+      showSpawnAgentModal = false;
+      agentTask = '';
+      agentModel = '';
+      // Refresh agents list
+      if (selectedProject) {
+        projectAgents = await fetchProjectAgents(selectedProject.id);
+      }
+    } else {
+      formError = result.error || 'Failed to spawn agent';
+    }
+  }
+  
+  async function handleSendMessage() {
+    if (!selectedAgent || !agentMessage.trim()) {
+      formError = 'Message is required';
+      return;
+    }
+    
+    formLoading = true;
+    formError = '';
+    
+    const success = await sendMessageToAgent(selectedAgent.sessionKey, agentMessage.trim());
+    
+    formLoading = false;
+    
+    if (success) {
+      showMessageModal = false;
+      agentMessage = '';
+      selectedAgent = null;
+    } else {
+      formError = 'Failed to send message';
+    }
+  }
+  
+  function openMessageModal(agent: AgentAssociation) {
+    selectedAgent = agent;
+    agentMessage = '';
+    showMessageModal = true;
   }
   
   function formatRelativeTime(timestamp: string): string {
@@ -38,23 +165,292 @@
     return `${diffDays}d ago`;
   }
   
+  function closeModals() {
+    showNewProjectModal = false;
+    showSpawnAgentModal = false;
+    showDeleteConfirm = false;
+    showMessageModal = false;
+    selectedAgent = null;
+    formError = '';
+  }
+  
+  function formatTimeAgo(timestamp: number): string {
+    const now = Date.now();
+    const diffMs = now - timestamp;
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHr = Math.floor(diffMin / 60);
+    
+    if (diffSec < 60) return `${diffSec}s ago`;
+    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffHr < 24) return `${diffHr}h ago`;
+    return `${Math.floor(diffHr / 24)}d ago`;
+  }
+  
+  function getAgentStatusIcon(status: string): string {
+    switch (status) {
+      case 'running': return '🔵';
+      case 'completed': return '✅';
+      case 'failed': return '❌';
+      default: return '⚪';
+    }
+  }
+  
+  function getShortSessionKey(sessionKey: string): string {
+    const parts = sessionKey.split(':');
+    const uuid = parts.pop() || '';
+    return uuid.slice(0, 8);
+  }
+  
   onMount(() => {
     loadProjects();
   });
 </script>
+
+<!-- Modal Backdrop -->
+{#if showNewProjectModal || showSpawnAgentModal || showDeleteConfirm}
+  <div 
+    class="fixed inset-0 bg-black/50 z-40"
+    on:click={closeModals}
+    on:keydown={(e) => e.key === 'Escape' && closeModals()}
+    role="button"
+    tabindex="0"
+  ></div>
+{/if}
+
+<!-- New Project Modal -->
+{#if showNewProjectModal}
+  <div class="fixed inset-0 flex items-center justify-center z-50 p-4">
+    <div class="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-md" on:click|stopPropagation role="dialog">
+      <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+        <h2 class="font-semibold">New Project</h2>
+        <button on:click={closeModals} class="text-slate-400 hover:text-white">✕</button>
+      </div>
+      <div class="p-4 space-y-4">
+        {#if formError}
+          <div class="p-3 bg-red-500/20 border border-red-500 rounded text-red-400 text-sm">{formError}</div>
+        {/if}
+        <div>
+          <label class="block text-sm text-slate-400 mb-1">Project Name</label>
+          <input 
+            type="text" 
+            bind:value={newProjectName}
+            placeholder="My New Project"
+            class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-blue-500 focus:outline-none"
+          />
+        </div>
+        <div>
+          <label class="block text-sm text-slate-400 mb-1">Description (optional)</label>
+          <textarea 
+            bind:value={newProjectDescription}
+            placeholder="Brief description of the project..."
+            rows="3"
+            class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-blue-500 focus:outline-none resize-none"
+          ></textarea>
+        </div>
+      </div>
+      <div class="px-4 py-3 border-t border-slate-700 flex justify-end gap-2">
+        <button 
+          on:click={closeModals}
+          class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors"
+        >
+          Cancel
+        </button>
+        <button 
+          on:click={handleCreateProject}
+          disabled={formLoading}
+          class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition-colors disabled:opacity-50"
+        >
+          {formLoading ? 'Creating...' : 'Create Project'}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Spawn Agent Modal -->
+{#if showSpawnAgentModal}
+  <div class="fixed inset-0 flex items-center justify-center z-50 p-4">
+    <div class="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-lg" on:click|stopPropagation role="dialog">
+      <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+        <h2 class="font-semibold">🚀 Spawn Agent</h2>
+        <button on:click={closeModals} class="text-slate-400 hover:text-white">✕</button>
+      </div>
+      <div class="p-4 space-y-4">
+        {#if formError}
+          <div class="p-3 bg-red-500/20 border border-red-500 rounded text-red-400 text-sm">{formError}</div>
+        {/if}
+        
+        {#if selectedProject}
+          <div class="p-3 bg-blue-500/10 border border-blue-500/30 rounded text-sm">
+            <span class="text-blue-400">📁 Project:</span> {selectedProject.name}
+            <div class="text-xs text-slate-400 mt-1">Agent will have context about this project</div>
+          </div>
+        {/if}
+        
+        <div>
+          <label class="block text-sm text-slate-400 mb-1">Task</label>
+          <textarea 
+            bind:value={agentTask}
+            placeholder="Describe what you want the agent to do..."
+            rows="4"
+            class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-blue-500 focus:outline-none resize-none"
+          ></textarea>
+        </div>
+        
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm text-slate-400 mb-1">Model (optional)</label>
+            <select 
+              bind:value={agentModel}
+              class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-blue-500 focus:outline-none"
+            >
+              <option value="">Default (Claude Opus)</option>
+              <option value="anthropic/claude-sonnet-4-20250514">Claude Sonnet 4</option>
+              <option value="anthropic/claude-3-5-haiku-20241022">Claude Haiku 3.5</option>
+              <option value="openai/gpt-4o">GPT-4o</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm text-slate-400 mb-1">Timeout (seconds)</label>
+            <input 
+              type="number" 
+              bind:value={agentTimeout}
+              min="60"
+              max="3600"
+              class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+        </div>
+      </div>
+      <div class="px-4 py-3 border-t border-slate-700 flex justify-end gap-2">
+        <button 
+          on:click={closeModals}
+          class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors"
+        >
+          Cancel
+        </button>
+        <button 
+          on:click={handleSpawnAgent}
+          disabled={formLoading}
+          class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-sm font-medium transition-colors disabled:opacity-50"
+        >
+          {formLoading ? 'Spawning...' : '🚀 Spawn Agent'}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Message Agent Modal -->
+{#if showMessageModal && selectedAgent}
+  <div class="fixed inset-0 flex items-center justify-center z-50 p-4">
+    <div class="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-md" on:click|stopPropagation role="dialog">
+      <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+        <h2 class="font-semibold">💬 Message Agent</h2>
+        <button on:click={closeModals} class="text-slate-400 hover:text-white">✕</button>
+      </div>
+      <div class="p-4 space-y-4">
+        {#if formError}
+          <div class="p-3 bg-red-500/20 border border-red-500 rounded text-red-400 text-sm">{formError}</div>
+        {/if}
+        
+        <div class="p-3 bg-slate-700/50 rounded text-sm">
+          <div class="flex items-center gap-2 mb-1">
+            <span>{getAgentStatusIcon(selectedAgent.status)}</span>
+            <span class="font-medium">{selectedAgent.label || getShortSessionKey(selectedAgent.sessionKey)}</span>
+          </div>
+          <div class="text-xs text-slate-400 truncate">{selectedAgent.task}</div>
+        </div>
+        
+        <div>
+          <label class="block text-sm text-slate-400 mb-1">Message</label>
+          <textarea 
+            bind:value={agentMessage}
+            placeholder="Send a message to this agent..."
+            rows="3"
+            class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-blue-500 focus:outline-none resize-none"
+          ></textarea>
+        </div>
+      </div>
+      <div class="px-4 py-3 border-t border-slate-700 flex justify-end gap-2">
+        <button 
+          on:click={closeModals}
+          class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors"
+        >
+          Cancel
+        </button>
+        <button 
+          on:click={handleSendMessage}
+          disabled={formLoading}
+          class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition-colors disabled:opacity-50"
+        >
+          {formLoading ? 'Sending...' : 'Send'}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Delete Confirm Modal -->
+{#if showDeleteConfirm}
+  <div class="fixed inset-0 flex items-center justify-center z-50 p-4">
+    <div class="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-sm" on:click|stopPropagation role="dialog">
+      <div class="px-4 py-3 border-b border-slate-700">
+        <h2 class="font-semibold text-red-400">⚠️ Delete Project</h2>
+      </div>
+      <div class="p-4">
+        <p class="text-slate-300">Are you sure you want to delete <strong>{selectedProject?.name}</strong>?</p>
+        <p class="text-sm text-slate-400 mt-2">The project will be moved to trash and can be recovered.</p>
+      </div>
+      <div class="px-4 py-3 border-t border-slate-700 flex justify-end gap-2">
+        <button 
+          on:click={closeModals}
+          class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors"
+        >
+          Cancel
+        </button>
+        <button 
+          on:click={handleDeleteProject}
+          disabled={formLoading}
+          class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-sm font-medium transition-colors disabled:opacity-50"
+        >
+          {formLoading ? 'Deleting...' : 'Delete'}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <div class="grid grid-cols-3 gap-6 h-[calc(100vh-180px)]">
   <!-- Project List -->
   <div class="bg-slate-800 rounded-lg border border-slate-700 flex flex-col">
     <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
       <h2 class="font-semibold">Projects</h2>
-      <button on:click={loadProjects} class="text-xs text-slate-500 hover:text-slate-300">Refresh</button>
+      <div class="flex items-center gap-2">
+        <button 
+          on:click={() => showNewProjectModal = true}
+          class="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs font-medium transition-colors"
+        >
+          + New
+        </button>
+        <button on:click={loadProjects} class="text-xs text-slate-500 hover:text-slate-300">↻</button>
+      </div>
     </div>
     <div class="p-4 space-y-2 overflow-y-auto flex-1">
       {#if loading}
         <div class="text-center py-8 text-slate-500">Loading projects...</div>
       {:else if projects.length === 0}
-        <div class="text-center py-8 text-slate-500">No projects found</div>
+        <div class="text-center py-8 text-slate-500">
+          <div class="text-2xl mb-2">📁</div>
+          <div>No projects yet</div>
+          <button 
+            on:click={() => showNewProjectModal = true}
+            class="mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition-colors"
+          >
+            Create First Project
+          </button>
+        </div>
       {:else}
         {#each projects as project}
           <button
@@ -113,12 +509,92 @@
             <div class="text-xs text-slate-500">{selectedProject.path}</div>
           </div>
         </div>
-        {#if selectedProject.updated}
-          <span class="text-xs text-slate-500">Updated {formatRelativeTime(selectedProject.updated)}</span>
-        {/if}
+        <div class="flex items-center gap-2">
+          {#if selectedProject.updated}
+            <span class="text-xs text-slate-500">Updated {formatRelativeTime(selectedProject.updated)}</span>
+          {/if}
+          <button 
+            on:click={() => showDeleteConfirm = true}
+            class="px-2 py-1 text-red-400 hover:bg-red-500/20 rounded text-xs transition-colors"
+          >
+            🗑️
+          </button>
+        </div>
       </div>
       
       <div class="p-4 overflow-y-auto flex-1 space-y-6">
+        <!-- Actions -->
+        <div>
+          <h3 class="text-sm text-slate-400 mb-2 font-medium">ACTIONS</h3>
+          <div class="flex gap-2 flex-wrap">
+            <button 
+              on:click={() => showSpawnAgentModal = true}
+              class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-sm font-medium transition-colors"
+            >
+              🚀 Spawn Agent
+            </button>
+            <button class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors">
+              📂 Open in Terminal
+            </button>
+          </div>
+        </div>
+        
+        <!-- Project Agents -->
+        <div>
+          <h3 class="text-sm text-slate-400 mb-2 font-medium flex items-center justify-between">
+            <span>AGENTS ({projectAgents.length})</span>
+            {#if projectAgents.length > 0}
+              <button 
+                on:click={() => selectedProject && selectProject(selectedProject.id)}
+                class="text-xs text-slate-500 hover:text-slate-300"
+              >
+                ↻ Refresh
+              </button>
+            {/if}
+          </h3>
+          
+          {#if projectAgents.length === 0}
+            <div class="p-4 bg-slate-700/30 rounded-lg text-center text-slate-500 text-sm">
+              No agents spawned for this project yet.
+              <button 
+                on:click={() => showSpawnAgentModal = true}
+                class="block mt-2 mx-auto text-blue-400 hover:text-blue-300"
+              >
+                Spawn your first agent →
+              </button>
+            </div>
+          {:else}
+            <div class="space-y-2">
+              {#each projectAgents as agent}
+                <div class="p-3 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors">
+                  <div class="flex items-center justify-between mb-1">
+                    <div class="flex items-center gap-2">
+                      <span>{getAgentStatusIcon(agent.status)}</span>
+                      <span class="font-medium text-sm">{agent.label || getShortSessionKey(agent.sessionKey)}</span>
+                      <span class="text-xs px-1.5 py-0.5 bg-slate-600 rounded text-slate-400">{agent.status}</span>
+                    </div>
+                    <span class="text-xs text-slate-500">{formatTimeAgo(agent.spawnedAt)}</span>
+                  </div>
+                  <div class="text-xs text-slate-400 mb-2 line-clamp-2">{agent.task}</div>
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs text-slate-500 font-mono">{getShortSessionKey(agent.sessionKey)}</span>
+                    <div class="flex gap-2">
+                      {#if agent.status === 'running'}
+                        <button 
+                          on:click={() => openMessageModal(agent)}
+                          class="px-2 py-1 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded text-xs transition-colors"
+                        >
+                          💬 Message
+                        </button>
+                      {/if}
+                    </div>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+        
         <!-- Files -->
         {#if selectedProject.files && selectedProject.files.length > 0}
           <div>
@@ -162,19 +638,6 @@
             </div>
           </div>
         {/if}
-        
-        <!-- Actions -->
-        <div>
-          <h3 class="text-sm text-slate-400 mb-2 font-medium">ACTIONS</h3>
-          <div class="flex gap-2">
-            <button class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition-colors">
-              Message Agents
-            </button>
-            <button class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors">
-              Open in Terminal
-            </button>
-          </div>
-        </div>
       </div>
     {/if}
   </div>

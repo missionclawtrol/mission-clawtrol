@@ -1,9 +1,76 @@
 import { FastifyInstance } from 'fastify';
-import { readFile, readdir, stat } from 'fs/promises';
+import { readFile, readdir, stat, mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 
 // Path to OpenClaw workspace
 const WORKSPACE_PATH = join(process.env.HOME || '', '.openclaw/workspace');
+
+// Template for new projects
+const PROJECT_TEMPLATE = (name: string, description: string) => `# ${name}
+
+${description}
+
+## Overview
+
+*Add project overview here.*
+
+## Goals
+
+- [ ] Define goals
+
+## Notes
+
+*Working notes and decisions.*
+`;
+
+const STATUS_TEMPLATE = (name: string) => `# Status
+
+**Last Updated:** ${new Date().toISOString().split('T')[0]}
+
+## Current Phase
+
+Phase 1: Setup
+
+## Progress
+
+- [ ] Project created
+- [ ] Goals defined
+- [ ] Implementation started
+
+## Next Steps
+
+1. Define project scope
+2. Assign agents
+3. Begin work
+
+## Blockers
+
+None yet.
+`;
+
+const HANDOFF_TEMPLATE = (name: string) => `# Handoff - ${name}
+
+## Context for New Agents
+
+This document provides context for agents joining this project.
+
+## Key Files
+
+- \`PROJECT.md\` - Project overview and goals
+- \`STATUS.md\` - Current progress and blockers
+
+## Current State
+
+*Describe what's been done and what's next.*
+
+## Important Decisions
+
+*List key decisions made so far.*
+
+## Tips
+
+*Any gotchas or tips for working on this project.*
+`;
 
 // Folders to exclude from project list
 const EXCLUDED_FOLDERS = ['.git', 'node_modules', '.svelte-kit', 'dist', 'build'];
@@ -163,6 +230,87 @@ export async function projectRoutes(fastify: FastifyInstance) {
       return { content };
     } catch (error) {
       return reply.status(404).send({ error: 'PROJECT.md not found' });
+    }
+  });
+
+  // Create a new project
+  fastify.post<{
+    Body: { name: string; description?: string };
+  }>('/', async (request, reply) => {
+    const { name, description = '' } = request.body;
+
+    if (!name || typeof name !== 'string') {
+      return reply.status(400).send({ error: 'Project name is required' });
+    }
+
+    // Convert name to folder-safe id
+    const id = name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+
+    if (!id) {
+      return reply.status(400).send({ error: 'Invalid project name' });
+    }
+
+    const projectPath = join(WORKSPACE_PATH, id);
+
+    // Check if already exists
+    try {
+      await stat(projectPath);
+      return reply.status(409).send({ error: 'Project already exists' });
+    } catch {
+      // Good - doesn't exist
+    }
+
+    try {
+      // Create directory
+      await mkdir(projectPath, { recursive: true });
+
+      // Create standard files
+      await writeFile(join(projectPath, 'PROJECT.md'), PROJECT_TEMPLATE(name, description));
+      await writeFile(join(projectPath, 'STATUS.md'), STATUS_TEMPLATE(name));
+      await writeFile(join(projectPath, 'HANDOFF.md'), HANDOFF_TEMPLATE(name));
+
+      return {
+        success: true,
+        project: {
+          id,
+          name,
+          path: id + '/',
+          hasStatusMd: true,
+          hasProjectMd: true,
+          hasHandoffMd: true,
+        },
+      };
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({ error: 'Failed to create project' });
+    }
+  });
+
+  // Delete a project (move to trash)
+  fastify.delete('/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const projectPath = join(WORKSPACE_PATH, id);
+    const trashPath = join(WORKSPACE_PATH, '.trash', id + '-' + Date.now());
+
+    try {
+      await stat(projectPath);
+    } catch {
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+
+    try {
+      // Move to trash instead of deleting
+      await mkdir(join(WORKSPACE_PATH, '.trash'), { recursive: true });
+      const { rename } = await import('fs/promises');
+      await rename(projectPath, trashPath);
+
+      return { success: true, trashedTo: trashPath };
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({ error: 'Failed to delete project' });
     }
   });
 }

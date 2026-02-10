@@ -1,10 +1,10 @@
 # Status
 
-**Last Updated:** February 9, 2026 08:15 EST
+**Last Updated:** February 9, 2026 12:10 EST
 
 ## Current Phase
 
-Phase 1: Foundation ✅ COMPLETE
+Phase 3: Project & Agent Management ✅ COMPLETE
 
 ## Progress
 
@@ -13,11 +13,19 @@ Phase 1: Foundation ✅ COMPLETE
 - [x] Frontend scaffold (SvelteKit + TypeScript + Tailwind)
 - [x] All 5 tabs implemented (Overview, Monitor, Approvals, Projects, Settings)
 - [x] Backend scaffold (Fastify + TypeScript)
-- [x] API routes (agents, projects, activity)
+- [x] API routes (agents, projects, activity, approvals)
 - [x] WebSocket infrastructure
-- [ ] Connect frontend to backend API
-- [ ] Real-time updates via WebSocket
-- [ ] Connect to actual OpenClaw data
+- [x] Connect frontend to backend API
+- [x] Real-time updates via WebSocket
+- [x] Connect to actual OpenClaw data
+- [x] pm2 process management for stability
+- [x] Gateway operator connection with approvals scope
+- [x] Live exec approval queue - receive, display, resolve approvals
+- [x] **Create new projects from UI** - with standard structure (PROJECT.md, STATUS.md, HANDOFF.md)
+- [x] **Delete projects** (moves to trash)
+- [x] **Spawn agents from UI** - with project context, model selection, timeout config
+- [x] **Agent communication** - send messages to running agents
+- [x] **Agent history** - fetch conversation history
 
 ## What's Built
 

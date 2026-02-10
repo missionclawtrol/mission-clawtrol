@@ -1,6 +1,8 @@
 import { FastifyInstance } from 'fastify';
-import { readFile } from 'fs/promises';
+import { readFile, readdir } from 'fs/promises';
 import { join } from 'path';
+import { gatewayClient } from '../gateway-client.js';
+import { addAssociation, getProjectAgents, getAllAssociations, updateAssociation, type AgentAssociation } from '../project-agents.js';
 
 // Path to OpenClaw sessions file
 const OPENCLAW_DIR = join(process.env.HOME || '', '.openclaw');
@@ -141,14 +143,153 @@ export async function agentRoutes(fastify: FastifyInstance) {
     }
   });
   
-  // Send message to agent (placeholder - needs OpenClaw integration)
-  fastify.post('/:id/message', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const { message } = request.body as { message: string };
-    
-    // TODO: Integrate with OpenClaw sessions_send
-    fastify.log.info(`Message to ${id}: ${message}`);
-    
-    return { success: true, message: 'Message queued (integration pending)' };
+  // Send message to agent
+  fastify.post<{
+    Params: { id: string };
+    Body: { message: string };
+  }>('/:id/message', async (request, reply) => {
+    const { id } = request.params;
+    const { message } = request.body;
+
+    if (!message) {
+      return reply.status(400).send({ error: 'Message is required' });
+    }
+
+    if (!gatewayClient.isConnected()) {
+      return reply.status(503).send({ error: 'Not connected to gateway' });
+    }
+
+    try {
+      const result = await gatewayClient.request('sessions.send', {
+        sessionKey: id,
+        message,
+      });
+      return { success: true, result };
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({ error: `Failed to send message: ${(error as Error).message}` });
+    }
+  });
+
+  // Spawn a new agent
+  fastify.post<{
+    Body: {
+      task: string;
+      label?: string;
+      model?: string;
+      projectId?: string;
+      timeoutSeconds?: number;
+    };
+  }>('/spawn', async (request, reply) => {
+    const { task, label, model, projectId, timeoutSeconds = 300 } = request.body;
+
+    if (!task) {
+      return reply.status(400).send({ error: 'Task description is required' });
+    }
+
+    if (!gatewayClient.isConnected()) {
+      return reply.status(503).send({ error: 'Not connected to gateway' });
+    }
+
+    // Build the task with project context if provided
+    let fullTask = task;
+    if (projectId) {
+      fullTask = `You are working on the project "${projectId}". ` +
+        `Read the project files in ~/.openclaw/workspace/${projectId}/ for context. ` +
+        `Update STATUS.md as you make progress.\n\n` +
+        `Task: ${task}`;
+    }
+
+    const agentLabel = label || (projectId ? `${projectId}-agent` : undefined);
+
+    try {
+      const result = await gatewayClient.request('sessions.spawn', {
+        task: fullTask,
+        label: agentLabel,
+        model,
+        runTimeoutSeconds: timeoutSeconds,
+        cleanup: 'keep',
+      }) as { childSessionKey?: string };
+
+      // Track the association if this is a project agent
+      if (projectId && result.childSessionKey) {
+        await addAssociation({
+          sessionKey: result.childSessionKey,
+          projectId,
+          task,
+          label: agentLabel,
+          model,
+        });
+      }
+
+      return {
+        success: true,
+        ...result,
+      };
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({ error: `Failed to spawn agent: ${(error as Error).message}` });
+    }
+  });
+
+  // Get agents associated with a project
+  fastify.get<{
+    Params: { projectId: string };
+  }>('/project/:projectId', async (request, reply) => {
+    const { projectId } = request.params;
+    const agents = getProjectAgents(projectId);
+    return { agents };
+  });
+
+  // Get all project-agent associations
+  fastify.get('/associations', async (request, reply) => {
+    const associations = getAllAssociations();
+    return { associations };
+  });
+
+  // List active subagent sessions
+  fastify.get('/subagents', async (request, reply) => {
+    if (!gatewayClient.isConnected()) {
+      return reply.status(503).send({ error: 'Not connected to gateway' });
+    }
+
+    try {
+      const result = await gatewayClient.request('sessions.list', {
+        kinds: ['subagent'],
+        limit: 50,
+        messageLimit: 1,
+      });
+
+      return result;
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({ error: `Failed to list subagents: ${(error as Error).message}` });
+    }
+  });
+
+  // Get agent history
+  fastify.get<{
+    Params: { id: string };
+    Querystring: { limit?: string };
+  }>('/:id/history', async (request, reply) => {
+    const { id } = request.params;
+    const limit = parseInt(request.query.limit || '20');
+
+    if (!gatewayClient.isConnected()) {
+      return reply.status(503).send({ error: 'Not connected to gateway' });
+    }
+
+    try {
+      const result = await gatewayClient.request('sessions.history', {
+        sessionKey: id,
+        limit,
+        includeTools: false,
+      });
+
+      return result;
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({ error: `Failed to get history: ${(error as Error).message}` });
+    }
   });
 }

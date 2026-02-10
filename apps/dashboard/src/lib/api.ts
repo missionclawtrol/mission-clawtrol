@@ -97,6 +97,117 @@ export async function fetchProject(id: string): Promise<Project | null> {
   }
 }
 
+export interface CreateProjectParams {
+  name: string;
+  description?: string;
+}
+
+export async function createProject(params: CreateProjectParams): Promise<{ success: boolean; project?: Project; error?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.error || 'Failed to create project' };
+    }
+    return { success: true, project: data.project };
+  } catch (error) {
+    console.error('Failed to create project:', error);
+    return { success: false, error: 'Network error' };
+  }
+}
+
+export async function deleteProject(id: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/projects/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      return { success: false, error: data.error || 'Failed to delete project' };
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to delete project:', error);
+    return { success: false, error: 'Network error' };
+  }
+}
+
+// Agent spawning
+export interface SpawnAgentParams {
+  task: string;
+  label?: string;
+  model?: string;
+  projectId?: string;
+  timeoutSeconds?: number;
+}
+
+export interface SpawnResult {
+  success: boolean;
+  childSessionKey?: string;
+  runId?: string;
+  error?: string;
+}
+
+export async function spawnAgent(params: SpawnAgentParams): Promise<SpawnResult> {
+  try {
+    const res = await fetch(`${API_BASE}/agents/spawn`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.error || 'Failed to spawn agent' };
+    }
+    return { success: true, ...data };
+  } catch (error) {
+    console.error('Failed to spawn agent:', error);
+    return { success: false, error: 'Network error' };
+  }
+}
+
+export async function fetchAgentHistory(id: string, limit = 20): Promise<{ messages?: Array<{ role: string; content: string }>; error?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/agents/${encodeURIComponent(id)}/history?limit=${limit}`);
+    if (!res.ok) {
+      const data = await res.json();
+      return { error: data.error || 'Failed to fetch history' };
+    }
+    return await res.json();
+  } catch (error) {
+    console.error('Failed to fetch agent history:', error);
+    return { error: 'Network error' };
+  }
+}
+
+// Project-Agent associations
+export interface AgentAssociation {
+  sessionKey: string;
+  projectId: string;
+  task: string;
+  spawnedAt: number;
+  label?: string;
+  model?: string;
+  status: 'running' | 'completed' | 'failed' | 'unknown';
+  completedAt?: number;
+  result?: string;
+}
+
+export async function fetchProjectAgents(projectId: string): Promise<AgentAssociation[]> {
+  try {
+    const res = await fetch(`${API_BASE}/agents/project/${encodeURIComponent(projectId)}`);
+    const data = await res.json();
+    return data.agents || [];
+  } catch (error) {
+    console.error('Failed to fetch project agents:', error);
+    return [];
+  }
+}
+
 // Activity
 export async function fetchActivity(limit = 50): Promise<ActivityEvent[]> {
   try {
