@@ -1,10 +1,10 @@
 # Status
 
-**Last Updated:** February 9, 2026 12:10 EST
+**Last Updated:** February 10, 2026 18:13 EST
 
 ## Current Phase
 
-Phase 3: Project & Agent Management ✅ COMPLETE
+Phase 4: Real-Time Enhancements ✅ COMPLETE
 
 ## Progress
 
@@ -26,6 +26,16 @@ Phase 3: Project & Agent Management ✅ COMPLETE
 - [x] **Spawn agents from UI** - with project context, model selection, timeout config
 - [x] **Agent communication** - send messages to running agents
 - [x] **Agent history** - fetch conversation history
+- [x] **Accessibility fixes** - Fixed a11y click-events-have-key-events warnings in projects page
+- [x] **Label association fixes** - Fixed all a11y form label warnings in projects and settings pages (11 total)
+- [x] **Model display in Overview** - Added model name and token count display in agent cards on Overview page
+- [x] **Improved spawn error handling** - Enhanced error messages with codes, validation, and user-friendly guidance
+- [x] **Activity feed enhancements** - Added richer event types (spawn, error, approval, project, complete) with logging integration
+- [x] **Real-time activity via WebSocket** - Activity events now broadcast immediately to all connected dashboard clients
+- [x] **Bug fix: Activity logging** - Fixed spawn endpoint not calling logSpawnEvent (imported but never used)
+- [x] **Bug fix: Subagents endpoint** - Fixed invalid gateway API params (kinds/messageLimit), now reads from sessions.json
+- [x] **Bug fix: Error logging** - Added logErrorEvent calls to background spawn error handlers
+- [x] **Bug fix: Token fallback** - Added consistent GATEWAY_TOKEN fallback in spawn route (matches gateway-client.ts)
 
 ## What's Built
 

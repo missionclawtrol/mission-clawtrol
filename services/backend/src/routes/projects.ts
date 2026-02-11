@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { readFile, readdir, stat, mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
+import { logProjectEvent } from './activity.js';
 
 // Path to OpenClaw workspace
 const WORKSPACE_PATH = join(process.env.HOME || '', '.openclaw/workspace');
@@ -272,6 +273,9 @@ export async function projectRoutes(fastify: FastifyInstance) {
       await writeFile(join(projectPath, 'STATUS.md'), STATUS_TEMPLATE(name));
       await writeFile(join(projectPath, 'HANDOFF.md'), HANDOFF_TEMPLATE(name));
 
+      // Log to activity feed
+      logProjectEvent({ action: 'created', projectName: name });
+
       return {
         success: true,
         project: {
@@ -306,6 +310,9 @@ export async function projectRoutes(fastify: FastifyInstance) {
       await mkdir(join(WORKSPACE_PATH, '.trash'), { recursive: true });
       const { rename } = await import('fs/promises');
       await rename(projectPath, trashPath);
+
+      // Log to activity feed
+      logProjectEvent({ action: 'deleted', projectName: id });
 
       return { success: true, trashedTo: trashPath };
     } catch (error) {

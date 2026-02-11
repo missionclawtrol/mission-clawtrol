@@ -1,8 +1,71 @@
 import { FastifyInstance } from 'fastify';
-import { readFile, readdir } from 'fs/promises';
+import { readFile, readdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { gatewayClient } from '../gateway-client.js';
-import { addAssociation, getProjectAgents, getAllAssociations, updateAssociation, type AgentAssociation } from '../project-agents.js';
+import { addAssociation, getProjectAgents, getAllAssociations, updateAssociation, removeAssociation, type AgentAssociation } from '../project-agents.js';
+
+// Helper to update model in sessions.json
+async function updateSessionModel(sessionKey: string, model: string): Promise<boolean> {
+  try {
+    const sessionsPath = join(process.env.HOME || '', '.openclaw/agents/main/sessions/sessions.json');
+    const data = await readFile(sessionsPath, 'utf-8');
+    const sessions = JSON.parse(data);
+    
+    if (sessions[sessionKey]) {
+      sessions[sessionKey].model = model;
+      await writeFile(sessionsPath, JSON.stringify(sessions, null, 2));
+      return true;
+    }
+    return false;
+  } catch (err) {
+    console.error('[updateSessionModel] Failed:', err);
+    return false;
+  }
+}
+
+// Helper to delete session from sessions.json
+async function deleteSessionFromFile(sessionKey: string): Promise<boolean> {
+  try {
+    const sessionsPath = join(process.env.HOME || '', '.openclaw/agents/main/sessions/sessions.json');
+    const data = await readFile(sessionsPath, 'utf-8');
+    const sessions = JSON.parse(data);
+    
+    if (sessions[sessionKey]) {
+      delete sessions[sessionKey];
+      await writeFile(sessionsPath, JSON.stringify(sessions, null, 2));
+      return true;
+    }
+    return false;
+  } catch (err) {
+    console.error('[deleteSessionFromFile] Failed:', err);
+    return false;
+  }
+}
+
+// Helper to create a new session entry in sessions.json
+async function createSessionEntry(sessionKey: string, model: string): Promise<boolean> {
+  try {
+    const sessionsPath = join(process.env.HOME || '', '.openclaw/agents/main/sessions/sessions.json');
+    const data = await readFile(sessionsPath, 'utf-8');
+    const sessions = JSON.parse(data);
+    
+    // Create new session entry with the specified model
+    sessions[sessionKey] = {
+      sessionId: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+      updatedAt: Date.now(),
+      model: model,
+      totalTokens: 0,
+      contextTokens: 200000,
+    };
+    
+    await writeFile(sessionsPath, JSON.stringify(sessions, null, 2));
+    return true;
+  } catch (err) {
+    console.error('[createSessionEntry] Failed:', err);
+    return false;
+  }
+}
+import { logSpawnEvent, logErrorEvent } from './activity.js';
 
 // Path to OpenClaw sessions file
 const OPENCLAW_DIR = join(process.env.HOME || '', '.openclaw');
@@ -34,10 +97,19 @@ interface Agent {
 }
 
 function parseAgentName(sessionKey: string): { name: string; role: string } {
-  // Parse session keys like "agent:main:main", "voice:123", etc.
+  // Parse session keys like "agent:main:main", "agent:main:subagent:name:timestamp", "voice:123", etc.
   const parts = sessionKey.split(':');
   
   if (parts[0] === 'agent' && parts[1] === 'main') {
+    // Check if it's a subagent: agent:main:subagent:name:timestamp
+    if (parts[2] === 'subagent' && parts[3]) {
+      const subagentName = parts[3];
+      return {
+        name: subagentName.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+        role: 'Subagent',
+      };
+    }
+    
     const agentName = parts[2] || 'main';
     return {
       name: agentName.charAt(0).toUpperCase() + agentName.slice(1),
@@ -85,12 +157,13 @@ export async function agentRoutes(fastify: FastifyInstance) {
         
         agents.push({
           id: key,
-          name,
+          name: session.label || name,
+          label: session.label,
           role,
           status: determineStatus(session),
           lastActive: new Date(session.updatedAt).toISOString(),
-          model: session.model,
-          provider: session.modelProvider,
+          model: session.model || session.modelOverride,
+          provider: session.modelProvider || session.providerOverride,
           tokens: session.totalTokens,
           channel: session.lastChannel,
         });
@@ -160,9 +233,10 @@ export async function agentRoutes(fastify: FastifyInstance) {
     }
 
     try {
-      const result = await gatewayClient.request('sessions.send', {
+      const result = await gatewayClient.request('chat.send', {
         sessionKey: id,
         message,
+        idempotencyKey: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       });
       return { success: true, result };
     } catch (error) {
@@ -174,61 +248,78 @@ export async function agentRoutes(fastify: FastifyInstance) {
   // Spawn a new agent
   fastify.post<{
     Body: {
-      task: string;
+      task?: string;
       label?: string;
       model?: string;
       projectId?: string;
-      timeoutSeconds?: number;
     };
   }>('/spawn', async (request, reply) => {
-    const { task, label, model, projectId, timeoutSeconds = 300 } = request.body;
+    const { task, label, model, projectId } = request.body;
 
-    if (!task) {
-      return reply.status(400).send({ error: 'Task description is required' });
+    // Project is required
+    if (!projectId) {
+      return reply.status(400).send({ 
+        error: 'Project ID is required',
+        code: 'MISSING_PROJECT',
+      });
     }
 
     if (!gatewayClient.isConnected()) {
       return reply.status(503).send({ error: 'Not connected to gateway' });
     }
 
-    // Build the task with project context if provided
-    let fullTask = task;
-    if (projectId) {
-      fullTask = `You are working on the project "${projectId}". ` +
-        `Read the project files in ~/.openclaw/workspace/${projectId}/ for context. ` +
-        `Update STATUS.md as you make progress.\n\n` +
-        `Task: ${task}`;
-    }
+    const agentLabel = label || `${projectId}-agent`;
+    const agentModel = model || 'ollama/qwen3-coder';
+    const initialTask = task || 'You are a project agent. Await instructions.';
 
-    const agentLabel = label || (projectId ? `${projectId}-agent` : undefined);
+    // Use the standard session key format that chat.send expects
+    const timestamp = Date.now();
+    const sessionKey = `agent:main:subagent:${agentLabel}:${timestamp}`;
 
     try {
-      const result = await gatewayClient.request('sessions.spawn', {
-        task: fullTask,
-        label: agentLabel,
-        model,
-        runTimeoutSeconds: timeoutSeconds,
-        cleanup: 'keep',
-      }) as { childSessionKey?: string };
+      // Send initial message to create the session via chat.send
+      // This creates a proper session that subsequent messages will find
+      await gatewayClient.request('chat.send', {
+        sessionKey,
+        message: initialTask,
+        idempotencyKey: `spawn-${timestamp}`,
+      });
+      
+      fastify.log.info(`Created session ${sessionKey} via chat.send`);
 
-      // Track the association if this is a project agent
-      if (projectId && result.childSessionKey) {
-        await addAssociation({
-          sessionKey: result.childSessionKey,
-          projectId,
-          task,
-          label: agentLabel,
-          model,
-        });
-      }
+      // Track the association
+      await addAssociation({
+        sessionKey,
+        projectId,
+        task: initialTask,
+        label: agentLabel,
+        model: agentModel,
+      });
+
+      // Log the spawn event to activity feed
+      logSpawnEvent({
+        agent: agentLabel,
+        task: initialTask,
+        project: projectId,
+        model: agentModel,
+        sessionKey,
+      });
 
       return {
         success: true,
-        ...result,
+        childSessionKey: sessionKey,
+        model: agentModel,
+        status: 'created',
+        message: `Agent created. Use Message to send tasks.`,
       };
-    } catch (error) {
-      fastify.log.error(error);
-      return reply.status(500).send({ error: `Failed to spawn agent: ${(error as Error).message}` });
+
+    } catch (spawnError) {
+      const err = spawnError as Error;
+      fastify.log.error(err);
+      return reply.status(500).send({ 
+        error: err.message || 'Failed to create agent',
+        code: 'SPAWN_FAILED',
+      });
     }
   });
 
@@ -248,19 +339,26 @@ export async function agentRoutes(fastify: FastifyInstance) {
   });
 
   // List active subagent sessions
+  // Note: Fetches from local sessions.json since gateway sessions.list has limited params
   fastify.get('/subagents', async (request, reply) => {
-    if (!gatewayClient.isConnected()) {
-      return reply.status(503).send({ error: 'Not connected to gateway' });
-    }
-
     try {
-      const result = await gatewayClient.request('sessions.list', {
-        kinds: ['subagent'],
-        limit: 50,
-        messageLimit: 1,
-      });
-
-      return result;
+      const sessionsData = await readFile(SESSIONS_PATH, 'utf-8');
+      const sessions = JSON.parse(sessionsData) as Record<string, SessionData>;
+      
+      // Filter to only subagent sessions
+      const subagents = Object.entries(sessions)
+        .filter(([key]) => key.startsWith('subagent:'))
+        .map(([key, session]) => ({
+          id: key,
+          status: determineStatus(session),
+          lastActive: new Date(session.updatedAt).toISOString(),
+          model: session.model,
+          tokens: session.totalTokens,
+        }))
+        .sort((a, b) => new Date(b.lastActive).getTime() - new Date(a.lastActive).getTime())
+        .slice(0, 50);
+      
+      return { subagents };
     } catch (error) {
       fastify.log.error(error);
       return reply.status(500).send({ error: `Failed to list subagents: ${(error as Error).message}` });
@@ -290,6 +388,81 @@ export async function agentRoutes(fastify: FastifyInstance) {
     } catch (error) {
       fastify.log.error(error);
       return reply.status(500).send({ error: `Failed to get history: ${(error as Error).message}` });
+    }
+  });
+
+  // Delete an agent session
+  fastify.delete<{
+    Params: { id: string };
+  }>('/:id', async (request, reply) => {
+    const { id } = request.params;
+
+    if (!gatewayClient.isConnected()) {
+      return reply.status(503).send({ error: 'Not connected to gateway' });
+    }
+
+    try {
+      // Delete the session from OpenClaw gateway
+      try {
+        await gatewayClient.request('sessions.delete', {
+          key: id,
+        });
+      } catch (gwErr) {
+        // Gateway delete may fail, continue with file cleanup
+        fastify.log.warn(`Gateway delete failed: ${(gwErr as Error).message}`);
+      }
+
+      // Also delete directly from sessions.json (backup method)
+      await deleteSessionFromFile(id);
+
+      // Remove from our local associations tracking
+      await removeAssociation(id);
+
+      fastify.log.info(`Deleted agent session: ${id}`);
+      return { success: true, deleted: id };
+    } catch (error) {
+      const err = error as Error;
+      fastify.log.error(error);
+      
+      // If session doesn't exist in gateway, still try to clean up local tracking
+      if (err.message.includes('not found') || err.message.includes('Unknown')) {
+        await deleteSessionFromFile(id);
+        await removeAssociation(id);
+        return { success: true, deleted: id, note: 'Session was already gone from gateway' };
+      }
+      
+      return reply.status(500).send({ error: `Failed to delete agent: ${err.message}` });
+    }
+  });
+
+  // Change agent model
+  fastify.patch<{
+    Params: { id: string };
+    Body: { model: string };
+  }>('/:id/model', async (request, reply) => {
+    const { id } = request.params;
+    const { model } = request.body;
+
+    if (!model) {
+      return reply.status(400).send({ error: 'Model is required' });
+    }
+
+    try {
+      // Update sessions.json directly
+      const updated = await updateSessionModel(id, model);
+      if (!updated) {
+        return reply.status(404).send({ error: 'Session not found' });
+      }
+
+      // Also update our local tracking
+      await updateAssociation(id, { model } as any);
+
+      fastify.log.info(`Changed model for ${id} to ${model}`);
+      return { success: true, model };
+    } catch (error) {
+      const err = error as Error;
+      fastify.log.error(error);
+      return reply.status(500).send({ error: `Failed to change model: ${err.message}` });
     }
   });
 }

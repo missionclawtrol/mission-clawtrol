@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fetchProjects, fetchProject, createProject, deleteProject, spawnAgent, fetchProjectAgents, sendMessageToAgent, type Project, type AgentAssociation } from '$lib/api';
+  import { fetchProjects, fetchProject, createProject, deleteProject, spawnAgent, fetchProjectAgents, sendMessageToAgent, deleteAgent, changeAgentModel, type Project, type AgentAssociation } from '$lib/api';
   
   let projects: Project[] = [];
   let selectedProject: Project | null = null;
@@ -12,9 +12,14 @@
   let showNewProjectModal = false;
   let showSpawnAgentModal = false;
   let showDeleteConfirm = false;
+  let showDeleteAgentConfirm = false;
   let showMessageModal = false;
+  let showModelModal = false;
   let selectedAgent: AgentAssociation | null = null;
+  let agentToDelete: AgentAssociation | null = null;
+  let agentToChangeModel: AgentAssociation | null = null;
   let agentMessage = '';
+  let selectedModel = '';
   
   // Form states
   let newProjectName = '';
@@ -93,8 +98,8 @@
   }
   
   async function handleSpawnAgent() {
-    if (!agentTask.trim()) {
-      formError = 'Task description is required';
+    if (!selectedProject) {
+      formError = 'No project selected';
       return;
     }
     
@@ -102,24 +107,17 @@
     formError = '';
     
     const result = await spawnAgent({
-      task: agentTask.trim(),
-      projectId: selectedProject?.id,
-      model: agentModel || undefined,
-      timeoutSeconds: agentTimeout,
+      projectId: selectedProject.id,
     });
     
     formLoading = false;
     
     if (result.success) {
       showSpawnAgentModal = false;
-      agentTask = '';
-      agentModel = '';
       // Refresh agents list
-      if (selectedProject) {
-        projectAgents = await fetchProjectAgents(selectedProject.id);
-      }
+      projectAgents = await fetchProjectAgents(selectedProject.id);
     } else {
-      formError = result.error || 'Failed to spawn agent';
+      formError = result.error || 'Failed to create agent';
     }
   }
   
@@ -150,6 +148,33 @@
     agentMessage = '';
     showMessageModal = true;
   }
+
+  function confirmDeleteAgent(agent: AgentAssociation) {
+    agentToDelete = agent;
+    showDeleteAgentConfirm = true;
+  }
+
+  async function handleDeleteAgent() {
+    if (!agentToDelete) return;
+    
+    formLoading = true;
+    formError = '';
+    
+    const result = await deleteAgent(agentToDelete.sessionKey);
+    
+    if (result.success) {
+      showDeleteAgentConfirm = false;
+      agentToDelete = null;
+      // Refresh agents list
+      if (selectedProject) {
+        projectAgents = await fetchProjectAgents(selectedProject.id);
+      }
+    } else {
+      formError = result.error || 'Failed to delete agent';
+    }
+    
+    formLoading = false;
+  }
   
   function formatRelativeTime(timestamp: string): string {
     const now = new Date();
@@ -169,9 +194,43 @@
     showNewProjectModal = false;
     showSpawnAgentModal = false;
     showDeleteConfirm = false;
+    showDeleteAgentConfirm = false;
     showMessageModal = false;
+    showModelModal = false;
     selectedAgent = null;
+    agentToDelete = null;
+    agentToChangeModel = null;
+    selectedModel = '';
     formError = '';
+  }
+
+  function openModelModal(agent: AgentAssociation) {
+    agentToChangeModel = agent;
+    selectedModel = agent.model || 'claude-opus-4-5';
+    showModelModal = true;
+  }
+
+  async function handleChangeModel() {
+    if (!agentToChangeModel || !selectedModel) return;
+    
+    formLoading = true;
+    formError = '';
+    
+    const result = await changeAgentModel(agentToChangeModel.sessionKey, selectedModel);
+    
+    if (result.success) {
+      showModelModal = false;
+      agentToChangeModel = null;
+      selectedModel = '';
+      // Refresh agents list
+      if (selectedProject) {
+        projectAgents = await fetchProjectAgents(selectedProject.id);
+      }
+    } else {
+      formError = result.error || 'Failed to change model';
+    }
+    
+    formLoading = false;
   }
   
   function formatTimeAgo(timestamp: number): string {
@@ -208,22 +267,21 @@
 </script>
 
 <!-- Modal Backdrop -->
-{#if showNewProjectModal || showSpawnAgentModal || showDeleteConfirm}
-  <div 
-    class="fixed inset-0 bg-black/50 z-40"
+{#if showNewProjectModal || showSpawnAgentModal || showDeleteConfirm || showDeleteAgentConfirm || showModelModal}
+  <button 
+    class="fixed inset-0 bg-black/50 z-40 cursor-default"
     on:click={closeModals}
     on:keydown={(e) => e.key === 'Escape' && closeModals()}
-    role="button"
-    tabindex="0"
-  ></div>
+    aria-label="Close modal"
+  ></button>
 {/if}
 
 <!-- New Project Modal -->
 {#if showNewProjectModal}
   <div class="fixed inset-0 flex items-center justify-center z-50 p-4">
-    <div class="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-md" on:click|stopPropagation role="dialog">
+    <div class="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-md" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="new-project-title" tabindex="-1">
       <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
-        <h2 class="font-semibold">New Project</h2>
+        <h2 id="new-project-title" class="font-semibold">New Project</h2>
         <button on:click={closeModals} class="text-slate-400 hover:text-white">✕</button>
       </div>
       <div class="p-4 space-y-4">
@@ -231,8 +289,9 @@
           <div class="p-3 bg-red-500/20 border border-red-500 rounded text-red-400 text-sm">{formError}</div>
         {/if}
         <div>
-          <label class="block text-sm text-slate-400 mb-1">Project Name</label>
+          <label for="new-project-name" class="block text-sm text-slate-400 mb-1">Project Name</label>
           <input 
+            id="new-project-name"
             type="text" 
             bind:value={newProjectName}
             placeholder="My New Project"
@@ -240,8 +299,9 @@
           />
         </div>
         <div>
-          <label class="block text-sm text-slate-400 mb-1">Description (optional)</label>
+          <label for="new-project-description" class="block text-sm text-slate-400 mb-1">Description (optional)</label>
           <textarea 
+            id="new-project-description"
             bind:value={newProjectDescription}
             placeholder="Brief description of the project..."
             rows="3"
@@ -271,57 +331,25 @@
 <!-- Spawn Agent Modal -->
 {#if showSpawnAgentModal}
   <div class="fixed inset-0 flex items-center justify-center z-50 p-4">
-    <div class="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-lg" on:click|stopPropagation role="dialog">
+    <div class="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-lg" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="spawn-agent-title" tabindex="-1">
       <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
-        <h2 class="font-semibold">🚀 Spawn Agent</h2>
+        <h2 id="spawn-agent-title" class="font-semibold">🚀 Spawn Agent</h2>
         <button on:click={closeModals} class="text-slate-400 hover:text-white">✕</button>
       </div>
       <div class="p-4 space-y-4">
         {#if formError}
-          <div class="p-3 bg-red-500/20 border border-red-500 rounded text-red-400 text-sm">{formError}</div>
+          <div class="p-3 bg-red-500/20 border border-red-500 rounded text-red-400 text-sm whitespace-pre-wrap">{formError}</div>
         {/if}
         
         {#if selectedProject}
           <div class="p-3 bg-blue-500/10 border border-blue-500/30 rounded text-sm">
             <span class="text-blue-400">📁 Project:</span> {selectedProject.name}
-            <div class="text-xs text-slate-400 mt-1">Agent will have context about this project</div>
           </div>
         {/if}
         
-        <div>
-          <label class="block text-sm text-slate-400 mb-1">Task</label>
-          <textarea 
-            bind:value={agentTask}
-            placeholder="Describe what you want the agent to do..."
-            rows="4"
-            class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-blue-500 focus:outline-none resize-none"
-          ></textarea>
-        </div>
-        
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="block text-sm text-slate-400 mb-1">Model (optional)</label>
-            <select 
-              bind:value={agentModel}
-              class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-blue-500 focus:outline-none"
-            >
-              <option value="">Default (Claude Opus)</option>
-              <option value="anthropic/claude-sonnet-4-20250514">Claude Sonnet 4</option>
-              <option value="anthropic/claude-3-5-haiku-20241022">Claude Haiku 3.5</option>
-              <option value="openai/gpt-4o">GPT-4o</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm text-slate-400 mb-1">Timeout (seconds)</label>
-            <input 
-              type="number" 
-              bind:value={agentTimeout}
-              min="60"
-              max="3600"
-              class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-blue-500 focus:outline-none"
-            />
-          </div>
-        </div>
+        <p class="text-slate-400 text-sm">
+          Create a new agent for this project. You can message it and change its model after creation.
+        </p>
       </div>
       <div class="px-4 py-3 border-t border-slate-700 flex justify-end gap-2">
         <button 
@@ -335,7 +363,7 @@
           disabled={formLoading}
           class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-sm font-medium transition-colors disabled:opacity-50"
         >
-          {formLoading ? 'Spawning...' : '🚀 Spawn Agent'}
+          {formLoading ? 'Creating...' : '➕ Create Agent'}
         </button>
       </div>
     </div>
@@ -345,9 +373,9 @@
 <!-- Message Agent Modal -->
 {#if showMessageModal && selectedAgent}
   <div class="fixed inset-0 flex items-center justify-center z-50 p-4">
-    <div class="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-md" on:click|stopPropagation role="dialog">
+    <div class="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-md" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="message-agent-title" tabindex="-1">
       <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
-        <h2 class="font-semibold">💬 Message Agent</h2>
+        <h2 id="message-agent-title" class="font-semibold">💬 Message Agent</h2>
         <button on:click={closeModals} class="text-slate-400 hover:text-white">✕</button>
       </div>
       <div class="p-4 space-y-4">
@@ -364,8 +392,9 @@
         </div>
         
         <div>
-          <label class="block text-sm text-slate-400 mb-1">Message</label>
+          <label for="agent-message" class="block text-sm text-slate-400 mb-1">Message</label>
           <textarea 
+            id="agent-message"
             bind:value={agentMessage}
             placeholder="Send a message to this agent..."
             rows="3"
@@ -395,9 +424,9 @@
 <!-- Delete Confirm Modal -->
 {#if showDeleteConfirm}
   <div class="fixed inset-0 flex items-center justify-center z-50 p-4">
-    <div class="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-sm" on:click|stopPropagation role="dialog">
+    <div class="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-sm" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="delete-confirm-title" tabindex="-1">
       <div class="px-4 py-3 border-b border-slate-700">
-        <h2 class="font-semibold text-red-400">⚠️ Delete Project</h2>
+        <h2 id="delete-confirm-title" class="font-semibold text-red-400">⚠️ Delete Project</h2>
       </div>
       <div class="p-4">
         <p class="text-slate-300">Are you sure you want to delete <strong>{selectedProject?.name}</strong>?</p>
@@ -416,6 +445,79 @@
           class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-sm font-medium transition-colors disabled:opacity-50"
         >
           {formLoading ? 'Deleting...' : 'Delete'}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Delete Agent Confirm Modal -->
+{#if showDeleteAgentConfirm}
+  <div class="fixed inset-0 flex items-center justify-center z-50 p-4">
+    <div class="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-sm" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="delete-agent-title" tabindex="-1">
+      <div class="px-4 py-3 border-b border-slate-700">
+        <h2 id="delete-agent-title" class="font-semibold text-red-400">🗑️ Delete Agent</h2>
+      </div>
+      <div class="p-4">
+        <p class="text-slate-300">Are you sure you want to delete agent <strong>{agentToDelete?.label || 'this agent'}</strong>?</p>
+        <p class="text-sm text-slate-400 mt-2">This will permanently delete the agent session and its history.</p>
+        {#if formError}
+          <p class="text-sm text-red-400 mt-2">{formError}</p>
+        {/if}
+      </div>
+      <div class="px-4 py-3 border-t border-slate-700 flex justify-end gap-2">
+        <button 
+          on:click={closeModals}
+          class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors"
+        >
+          Cancel
+        </button>
+        <button 
+          on:click={handleDeleteAgent}
+          disabled={formLoading}
+          class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-sm font-medium transition-colors disabled:opacity-50"
+        >
+          {formLoading ? 'Deleting...' : 'Delete'}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Change Model Modal -->
+{#if showModelModal && agentToChangeModel}
+  <div class="fixed inset-0 flex items-center justify-center z-50 p-4">
+    <div class="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-sm" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="model-title" tabindex="-1">
+      <div class="px-4 py-3 border-b border-slate-700">
+        <h2 id="model-title" class="font-semibold text-purple-400">⚙️ Change Model</h2>
+      </div>
+      <div class="p-4 space-y-4">
+        <p class="text-slate-300 text-sm">Select model for <strong>{agentToChangeModel.label || 'agent'}</strong>:</p>
+        <select 
+          bind:value={selectedModel}
+          class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-purple-500 focus:outline-none"
+        >
+          <option value="claude-opus-4-5">Claude Opus 4.5</option>
+          <option value="anthropic/claude-sonnet-4-20250514">Claude Sonnet 4</option>
+          <option value="ollama/qwen3-coder">Qwen3 Coder (Local)</option>
+        </select>
+        {#if formError}
+          <p class="text-sm text-red-400">{formError}</p>
+        {/if}
+      </div>
+      <div class="px-4 py-3 border-t border-slate-700 flex justify-end gap-2">
+        <button 
+          on:click={closeModals}
+          class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors"
+        >
+          Cancel
+        </button>
+        <button 
+          on:click={handleChangeModel}
+          disabled={formLoading}
+          class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded text-sm font-medium transition-colors disabled:opacity-50"
+        >
+          {formLoading ? 'Saving...' : 'Save'}
         </button>
       </div>
     </div>
@@ -587,6 +689,18 @@
                           💬 Message
                         </button>
                       {/if}
+                      <button 
+                        on:click={() => openModelModal(agent)}
+                        class="px-2 py-1 bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 rounded text-xs transition-colors"
+                      >
+                        ⚙️ Model
+                      </button>
+                      <button 
+                        on:click={() => confirmDeleteAgent(agent)}
+                        class="px-2 py-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded text-xs transition-colors"
+                      >
+                        🗑️ Delete
+                      </button>
                     </div>
                   </div>
                 </div>

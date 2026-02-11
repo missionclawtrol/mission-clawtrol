@@ -1,0 +1,11 @@
+[
+  {
+    "sessionKey": "agent:main:subagent:626e8a92-7c2b-4310-9d7b-a331649d67a1",
+    "projectId": "mission-clawtrol",
+    "task": "Coding agent focused on mission-clawtrol folder",
+    "label": "mc-coder",
+    "model": "ollama/qwen3-coder",
+    "status": "running",
+    "spawnedAt": 1770772903000
+  }
+]

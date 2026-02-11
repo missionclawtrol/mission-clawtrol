@@ -60,10 +60,10 @@ export async function addAssociation(assoc: Omit<AgentAssociation, 'status' | 's
   await saveAssociations();
 }
 
-// Update an association's status
+// Update an association
 export async function updateAssociation(
   sessionKey: string,
-  update: Partial<Pick<AgentAssociation, 'status' | 'completedAt' | 'result'>>
+  update: Partial<Pick<AgentAssociation, 'status' | 'completedAt' | 'result' | 'model'>>
 ): Promise<void> {
   const assoc = associations.find(a => a.sessionKey === sessionKey);
   if (assoc) {
@@ -99,4 +99,15 @@ export async function cleanupOldAssociations(): Promise<void> {
   
   associations = [...running, ...completed];
   await saveAssociations();
+}
+
+// Remove an association by session key
+export async function removeAssociation(sessionKey: string): Promise<boolean> {
+  const index = associations.findIndex(a => a.sessionKey === sessionKey);
+  if (index === -1) {
+    return false;
+  }
+  associations.splice(index, 1);
+  await saveAssociations();
+  return true;
 }

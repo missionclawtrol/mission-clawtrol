@@ -48,8 +48,9 @@
       
       {#if settings.alerts.audio}
         <div>
-          <label class="block text-sm font-medium mb-2">Audio Volume</label>
+          <label for="audio-volume" class="block text-sm font-medium mb-2">Audio Volume</label>
           <input 
+            id="audio-volume"
             type="range" 
             min="0" 
             max="100" 
@@ -74,16 +75,18 @@
       {#if settings.alerts.quietHours.enabled}
         <div class="flex gap-4">
           <div>
-            <label class="block text-sm font-medium mb-2">Start</label>
+            <label for="quiet-hours-start" class="block text-sm font-medium mb-2">Start</label>
             <input 
+              id="quiet-hours-start"
               type="time" 
               bind:value={settings.alerts.quietHours.start}
               class="bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm"
             >
           </div>
           <div>
-            <label class="block text-sm font-medium mb-2">End</label>
+            <label for="quiet-hours-end" class="block text-sm font-medium mb-2">End</label>
             <input 
+              id="quiet-hours-end"
               type="time" 
               bind:value={settings.alerts.quietHours.end}
               class="bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm"
@@ -100,8 +103,9 @@
     
     <div class="space-y-4">
       <div>
-        <label class="block text-sm font-medium mb-2">Theme</label>
+        <label for="theme-select" class="block text-sm font-medium mb-2">Theme</label>
         <select 
+          id="theme-select"
           bind:value={settings.theme}
           class="bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm w-full"
         >
@@ -111,8 +115,9 @@
       </div>
       
       <div>
-        <label class="block text-sm font-medium mb-2">Refresh Interval (seconds)</label>
+        <label for="refresh-interval" class="block text-sm font-medium mb-2">Refresh Interval (seconds)</label>
         <input 
+          id="refresh-interval"
           type="number" 
           min="1" 
           max="30"

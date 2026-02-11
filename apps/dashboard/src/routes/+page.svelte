@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fetchAgents, fetchProjects, fetchActivity, checkHealth, type Agent, type Project, type ActivityEvent } from '$lib/api';
+  import { fetchAgents, fetchProjects, fetchActivity, checkHealth, deleteAgent, type Agent, type Project, type ActivityEvent } from '$lib/api';
   import { connectWebSocket, wsConnected, wsMessages } from '$lib/websocket';
   
   let agents: Agent[] = [];
@@ -8,6 +8,16 @@
   let activity: ActivityEvent[] = [];
   let backendConnected = false;
   let loading = true;
+  let deletingAgent: Agent | null = null;
+  
+  async function handleDeleteAgent() {
+    if (!deletingAgent) return;
+    const result = await deleteAgent(deletingAgent.id);
+    if (result.success) {
+      agents = agents.filter(a => a.id !== deletingAgent?.id);
+    }
+    deletingAgent = null;
+  }
   
   const statusIcons: Record<string, string> = {
     idle: '🟢',
@@ -73,7 +83,14 @@
   // React to WebSocket messages
   $: if ($wsMessages.length > 0) {
     const lastMsg = $wsMessages[0];
-    if (lastMsg.type === 'agent_status' || lastMsg.type === 'activity') {
+    if (lastMsg.type === 'agent_status') {
+      loadData();
+    } else if (lastMsg.type === 'activity' && lastMsg.payload) {
+      // Insert new activity event at the top without full reload
+      const newEvent = lastMsg.payload as ActivityEvent;
+      activity = [newEvent, ...activity.slice(0, 9)]; // Keep max 10 items
+    } else if (lastMsg.type === 'approval-requested' || lastMsg.type === 'approval-resolved') {
+      // Refresh data on approval events
       loadData();
     }
   }
@@ -134,18 +151,35 @@
           <div class="text-center py-8 text-slate-500">No agents found</div>
         {:else}
           {#each agents as agent}
-            <div class="flex items-center justify-between p-3 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors cursor-pointer">
+            <div class="flex items-center justify-between p-3 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors">
               <div class="flex items-center gap-3">
                 <span>{statusIcons[agent.status] || '⚫'}</span>
                 <div>
                   <div class="font-medium">{agent.name}</div>
-                  <div class="text-sm text-slate-400">{agent.role || 'Agent'}</div>
+                  <div class="text-xs text-slate-500 font-mono">{agent.id.slice(-8)}</div>
+                  {#if agent.model}
+                    <div class="text-xs text-blue-400/70 mt-0.5">🧠 {agent.model.split('/').pop()}</div>
+                  {/if}
                 </div>
               </div>
-              <div class="text-right">
-                <div class="text-sm capitalize text-slate-300">{agent.status}</div>
-                {#if agent.lastActive}
-                  <div class="text-xs text-slate-500">{formatRelativeTime(agent.lastActive)}</div>
+              <div class="flex items-center gap-3">
+                <div class="text-right">
+                  <div class="text-sm capitalize text-slate-300">{agent.status}</div>
+                  {#if agent.lastActive}
+                    <div class="text-xs text-slate-500">{formatRelativeTime(agent.lastActive)}</div>
+                  {/if}
+                  {#if agent.tokens}
+                    <div class="text-xs text-emerald-400/60">{agent.tokens.toLocaleString()} tokens</div>
+                  {/if}
+                </div>
+                {#if agent.id !== 'agent:main:main'}
+                  <button
+                    on:click|stopPropagation={() => deletingAgent = agent}
+                    class="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                    title="Delete agent"
+                  >
+                    🗑️
+                  </button>
                 {/if}
               </div>
             </div>
@@ -208,6 +242,21 @@
             {:else if event.type === 'file'}
               <span class="text-green-400">📄</span>
               <span><span class="text-slate-300">{event.agent}</span>: {event.message}</span>
+            {:else if event.type === 'spawn'}
+              <span class="text-purple-400">🚀</span>
+              <span><span class="text-slate-300 font-medium">{event.agent}</span>: {event.message}</span>
+            {:else if event.type === 'error'}
+              <span class="text-red-400">❌</span>
+              <span class="text-red-300">{event.message}</span>
+            {:else if event.type === 'approval'}
+              <span class="text-orange-400">🔐</span>
+              <span>{event.message}</span>
+            {:else if event.type === 'project'}
+              <span class="text-cyan-400">📁</span>
+              <span>{event.message}</span>
+            {:else if event.type === 'complete'}
+              <span class="text-green-400">✅</span>
+              <span><span class="text-slate-300">{event.agent}</span>: {event.message}</span>
             {:else}
               <span class="text-slate-400">•</span>
               <span>{event.message || 'Unknown event'}</span>
@@ -218,3 +267,30 @@
     </div>
   </div>
 </div>
+
+<!-- Delete Confirmation Modal -->
+{#if deletingAgent}
+  <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" on:click={() => deletingAgent = null}>
+    <div class="bg-slate-800 rounded-lg p-6 max-w-md border border-slate-700" on:click|stopPropagation>
+      <h3 class="text-lg font-semibold mb-4">Delete Agent?</h3>
+      <p class="text-slate-400 mb-4">
+        Are you sure you want to delete <span class="text-white font-medium">{deletingAgent.name}</span>?
+        This will remove the session and cannot be undone.
+      </p>
+      <div class="flex gap-3 justify-end">
+        <button
+          on:click={() => deletingAgent = null}
+          class="px-4 py-2 text-slate-400 hover:text-white transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          on:click={handleDeleteAgent}
+          class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}

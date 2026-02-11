@@ -30,11 +30,15 @@ export interface Project {
 export interface ActivityEvent {
   id: string;
   timestamp: string;
-  type: 'message' | 'status' | 'file' | 'approval' | 'task';
+  type: 'message' | 'status' | 'file' | 'approval' | 'task' | 'spawn' | 'complete' | 'error' | 'project' | 'system';
   agent?: string;
   from?: string;
   to?: string;
   message?: string;
+  project?: string;
+  model?: string;
+  sessionKey?: string;
+  severity?: 'info' | 'warning' | 'error' | 'success';
 }
 
 // Agents
@@ -138,7 +142,7 @@ export async function deleteProject(id: string): Promise<{ success: boolean; err
 
 // Agent spawning
 export interface SpawnAgentParams {
-  task: string;
+  task?: string;
   label?: string;
   model?: string;
   projectId?: string;
@@ -150,6 +154,8 @@ export interface SpawnResult {
   childSessionKey?: string;
   runId?: string;
   error?: string;
+  errorCode?: string;
+  details?: string;
 }
 
 export async function spawnAgent(params: SpawnAgentParams): Promise<SpawnResult> {
@@ -161,7 +167,12 @@ export async function spawnAgent(params: SpawnAgentParams): Promise<SpawnResult>
     });
     const data = await res.json();
     if (!res.ok) {
-      return { success: false, error: data.error || 'Failed to spawn agent' };
+      return { 
+        success: false, 
+        error: data.error || 'Failed to spawn agent',
+        errorCode: data.code,
+        details: data.details,
+      };
     }
     return { success: true, ...data };
   } catch (error) {
@@ -205,6 +216,40 @@ export async function fetchProjectAgents(projectId: string): Promise<AgentAssoci
   } catch (error) {
     console.error('Failed to fetch project agents:', error);
     return [];
+  }
+}
+
+export async function deleteAgent(sessionKey: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/agents/${encodeURIComponent(sessionKey)}`, {
+      method: 'DELETE',
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.error || 'Failed to delete agent' };
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to delete agent:', error);
+    return { success: false, error: 'Network error' };
+  }
+}
+
+export async function changeAgentModel(sessionKey: string, model: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/agents/${encodeURIComponent(sessionKey)}/model`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.error || 'Failed to change model' };
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to change agent model:', error);
+    return { success: false, error: 'Network error' };
   }
 }
 

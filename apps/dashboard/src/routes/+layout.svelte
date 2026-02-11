@@ -6,7 +6,6 @@
   
   const tabs = [
     { name: 'Overview', href: '/', icon: '🏠' },
-    { name: 'Monitor', href: '/monitor', icon: '📊' },
     { name: 'Approvals', href: '/approvals', icon: '✅' },
     { name: 'Projects', href: '/projects', icon: '📁' },
     { name: 'Settings', href: '/settings', icon: '⚙️' },

@@ -1,10 +1,11 @@
+import 'dotenv/config';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
 import { WebSocket } from 'ws';
 import { agentRoutes } from './routes/agents.js';
 import { projectRoutes } from './routes/projects.js';
-import { activityRoutes } from './routes/activity.js';
+import { activityRoutes, logApprovalEvent, setBroadcastFunction } from './routes/activity.js';
 import { approvalRoutes } from './routes/approvals.js';
 import { gatewayClient, ApprovalRequest, ApprovalResolved } from './gateway-client.js';
 import { loadAssociations } from './project-agents.js';
@@ -50,6 +51,9 @@ function broadcast(type: string, payload: unknown) {
   }
 }
 
+// Wire up broadcast function for activity module
+setBroadcastFunction(broadcast);
+
 // WebSocket for real-time updates
 fastify.register(async function (fastify) {
   fastify.get('/ws', { websocket: true }, (socket, req) => {
@@ -90,6 +94,14 @@ fastify.register(async function (fastify) {
 
 // Wire gateway events to dashboard broadcasts
 gatewayClient.on('approval-requested', (request: ApprovalRequest) => {
+  // Log to activity feed
+  logApprovalEvent({
+    action: 'requested',
+    command: request.request.command || 'unknown command',
+    agent: request.request.agentId,
+    sessionKey: request.request.sessionKey,
+  });
+  
   broadcast('approval-requested', {
     id: request.id,
     command: request.request.command,
@@ -101,6 +113,14 @@ gatewayClient.on('approval-requested', (request: ApprovalRequest) => {
 });
 
 gatewayClient.on('approval-resolved', (resolved: ApprovalResolved) => {
+  // Log to activity feed
+  const action = resolved.decision === 'deny' ? 'denied' : 'approved';
+  logApprovalEvent({
+    action,
+    command: 'command',  // We don't have the command here, would need to track it
+    resolvedBy: resolved.resolvedBy,
+  });
+  
   broadcast('approval-resolved', {
     id: resolved.id,
     decision: resolved.decision,

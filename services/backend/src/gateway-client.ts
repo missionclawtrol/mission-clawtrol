@@ -1,6 +1,6 @@
 /**
  * Gateway Operator Client
- * Connects to OpenClaw gateway as an operator with approvals scope
+ * Connects to OpenClaw gateway as an operator with approvals + admin scope
  */
 import WebSocket from 'ws';
 import { EventEmitter } from 'events';
@@ -34,6 +34,7 @@ export class GatewayClient extends EventEmitter {
   private ws: WebSocket | null = null;
   private connected = false;
   private reconnectTimer: NodeJS.Timeout | null = null;
+  private pingTimer: NodeJS.Timeout | null = null;
   private pendingRequests = new Map<string, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
   private deviceId = `mission-clawtrol-${randomUUID().slice(0, 8)}`;
 
@@ -74,6 +75,7 @@ export class GatewayClient extends EventEmitter {
             if (msg.ok) {
               this.connected = true;
               console.log('[GatewayClient] Connected as operator with approvals scope');
+              this.startPing();
               resolve();
             } else {
               reject(new Error(msg.error?.message || 'Connect failed'));
@@ -105,6 +107,7 @@ export class GatewayClient extends EventEmitter {
       this.ws.on('close', () => {
         console.log('[GatewayClient] Disconnected');
         this.connected = false;
+        this.stopPing();
         this.scheduleReconnect();
       });
 
@@ -135,7 +138,7 @@ export class GatewayClient extends EventEmitter {
           mode: 'backend', // Must be a known mode constant
         },
         role: 'operator',
-        scopes: ['operator.read', 'operator.write', 'operator.approvals'],
+        scopes: ['operator.read', 'operator.write', 'operator.approvals', 'operator.admin'],
         caps: [],
         commands: [],
         permissions: {},
@@ -173,6 +176,23 @@ export class GatewayClient extends EventEmitter {
         console.error('[GatewayClient] Reconnect failed:', err.message);
       });
     }, 5000);
+  }
+
+  private startPing(): void {
+    this.stopPing();
+    // Send a ping every 30 seconds to keep connection alive
+    this.pingTimer = setInterval(() => {
+      if (this.ws && this.connected) {
+        this.ws.ping();
+      }
+    }, 30000);
+  }
+
+  private stopPing(): void {
+    if (this.pingTimer) {
+      clearInterval(this.pingTimer);
+      this.pingTimer = null;
+    }
   }
 
   async request(method: string, params: unknown): Promise<unknown> {
