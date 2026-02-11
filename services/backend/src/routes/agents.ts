@@ -338,6 +338,42 @@ export async function agentRoutes(fastify: FastifyInstance) {
     return { associations };
   });
 
+  // Register an agent association (for agents spawned externally, e.g., by main agent)
+  fastify.post<{
+    Body: {
+      sessionKey: string;
+      projectId: string;
+      task: string;
+      label?: string;
+      model?: string;
+    };
+  }>('/associations', async (request, reply) => {
+    const { sessionKey, projectId, task, label, model } = request.body;
+
+    if (!sessionKey || !projectId || !task) {
+      return reply.status(400).send({ 
+        error: 'sessionKey, projectId, and task are required' 
+      });
+    }
+
+    try {
+      await addAssociation({
+        sessionKey,
+        projectId,
+        task,
+        label,
+        model,
+      });
+
+      fastify.log.info(`Registered association: ${sessionKey} -> ${projectId}`);
+      return { success: true, sessionKey, projectId };
+    } catch (error) {
+      const err = error as Error;
+      fastify.log.error(error);
+      return reply.status(500).send({ error: `Failed to register association: ${err.message}` });
+    }
+  });
+
   // List active subagent sessions
   // Note: Fetches from local sessions.json since gateway sessions.list has limited params
   fastify.get('/subagents', async (request, reply) => {

@@ -136,6 +136,11 @@ export async function projectRoutes(fastify: FastifyInstance) {
           hasHandoffMd = true;
         } catch {}
         
+        // Only include folders that have at least one project marker file
+        if (!hasStatusMd && !hasProjectMd && !hasHandoffMd) {
+          continue;
+        }
+        
         projects.push({
           id: entry.name,
           name: formatProjectName(entry.name),

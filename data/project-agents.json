@@ -7,5 +7,14 @@
     "model": "ollama/qwen3-coder",
     "status": "running",
     "spawnedAt": 1770772903000
+  },
+  {
+    "sessionKey": "agent:main:subagent:bbde437e-1a81-447d-96c0-85afcb4425a4",
+    "projectId": "stocks",
+    "task": "Research stock-picking strategies and potentially build a simple app",
+    "label": "stocks-research",
+    "model": "anthropic/claude-sonnet-4-5",
+    "status": "running",
+    "spawnedAt": 1739271794000
   }
 ]
