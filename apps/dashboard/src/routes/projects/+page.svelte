@@ -106,18 +106,28 @@
     formLoading = true;
     formError = '';
     
-    const result = await spawnAgent({
-      projectId: selectedProject.id,
-    });
+    // Send a message to the main agent asking it to spawn a subagent
+    // This uses sessions_spawn internally which properly creates isolated subagents
+    const spawnMessage = agentTask.trim()
+      ? `Create a subagent for the project at ${selectedProject.path}. Task: ${agentTask.trim()}`
+      : `Create a subagent for the project at ${selectedProject.path}. The agent should read the project files and await further instructions.`;
+    
+    const success = await sendMessageToAgent('agent:main:main', spawnMessage);
     
     formLoading = false;
     
-    if (result.success) {
+    if (success) {
       showSpawnAgentModal = false;
-      // Refresh agents list
-      projectAgents = await fetchProjectAgents(selectedProject.id);
+      agentTask = ''; // Reset task field
+      // Note: Agent list won't update immediately - the main agent needs to spawn first
+      // Could add a small delay and refresh, or use websocket for real-time updates
+      setTimeout(async () => {
+        if (selectedProject) {
+          projectAgents = await fetchProjectAgents(selectedProject.id);
+        }
+      }, 3000);
     } else {
-      formError = result.error || 'Failed to create agent';
+      formError = 'Failed to send spawn request to main agent. Make sure OpenClaw gateway is running.';
     }
   }
   
@@ -201,6 +211,7 @@
     agentToDelete = null;
     agentToChangeModel = null;
     selectedModel = '';
+    agentTask = '';
     formError = '';
   }
 
@@ -344,11 +355,23 @@
         {#if selectedProject}
           <div class="p-3 bg-blue-500/10 border border-blue-500/30 rounded text-sm">
             <span class="text-blue-400">📁 Project:</span> {selectedProject.name}
+            <div class="text-xs text-slate-500 mt-1">{selectedProject.path}</div>
           </div>
         {/if}
         
-        <p class="text-slate-400 text-sm">
-          Create a new agent for this project. You can message it and change its model after creation.
+        <div>
+          <label for="agent-task" class="block text-sm text-slate-400 mb-1">Task (optional)</label>
+          <textarea 
+            id="agent-task"
+            bind:value={agentTask}
+            placeholder="What should this agent work on? Leave empty for a general-purpose project agent."
+            rows="3"
+            class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-green-500 focus:outline-none resize-none"
+          ></textarea>
+        </div>
+        
+        <p class="text-slate-500 text-xs">
+          This will ask the main agent (Jarvis) to spawn a subagent for this project. The subagent runs in isolation and reports back when complete.
         </p>
       </div>
       <div class="px-4 py-3 border-t border-slate-700 flex justify-end gap-2">
@@ -363,7 +386,7 @@
           disabled={formLoading}
           class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-sm font-medium transition-colors disabled:opacity-50"
         >
-          {formLoading ? 'Creating...' : '➕ Create Agent'}
+          {formLoading ? 'Spawning...' : '🚀 Spawn Agent'}
         </button>
       </div>
     </div>
