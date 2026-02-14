@@ -171,6 +171,9 @@ export class GatewayClient extends EventEmitter {
     } else if (event === 'sessions.spawn.completed' || event === 'subagent-completed' || event === 'session.completed') {
       console.log('[GatewayClient] Subagent completed:', payload);
       this.emit('subagent-completed', payload);
+    } else if (event === 'agent') {
+      // Emit agent events for streaming content (used for subagent detection)
+      this.emit('agent', payload);
     }
   }
 

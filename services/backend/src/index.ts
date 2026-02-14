@@ -20,6 +20,10 @@ const fastify = Fastify({
 // Track connected dashboard clients
 const dashboardClients = new Set<WebSocket>();
 
+// Track known subagent sessions to detect when they start/complete
+const knownSubagentSessions = new Map<string, { agentId: string; title: string; startedAt: number }>();
+const subagentTaskIds = new Map<string, string>(); // sessionKey -> taskId
+
 // Plugins
 await fastify.register(cors, {
   origin: true,
@@ -133,7 +137,121 @@ gatewayClient.on('approval-resolved', (resolved: ApprovalResolved) => {
   });
 });
 
-// Handle subagent spawn events
+// Handle agent stream events to detect subagents
+gatewayClient.on('agent', async (payload: any) => {
+  try {
+    const sessionKey = payload.sessionKey;
+    const stream = payload.stream;
+    const data = payload.data || {};
+
+    // Check if this is a subagent session (contains :subagent:)
+    if (!sessionKey || !sessionKey.includes(':subagent:')) {
+      return;
+    }
+
+    // Check if this is a NEW subagent session
+    if (!knownSubagentSessions.has(sessionKey)) {
+      // Extract agentId from sessionKey (format: "agent:senior-dev:subagent:...")
+      const parts = sessionKey.split(':');
+      const agentId = parts.length >= 2 ? parts[1] : 'unknown';
+
+      // Generate a title from the first part of the text, or use a generic one
+      let title = 'Subagent task';
+      if (data.text && typeof data.text === 'string') {
+        const firstLine = data.text.split('\n')[0].trim();
+        if (firstLine) {
+          title = firstLine.substring(0, 100);
+        }
+      }
+
+      console.log('[SubagentHandler] Detected new subagent session:', {
+        sessionKey,
+        agentId,
+        title,
+      });
+
+      // Register this session
+      knownSubagentSessions.set(sessionKey, {
+        agentId,
+        title,
+        startedAt: Date.now(),
+      });
+
+      // Create a task for this subagent
+      try {
+        const task = await createTask({
+          title,
+          description: `Subagent task spawned by ${agentId}`,
+          status: 'in-progress',
+          priority: 'P2',
+          projectId: 'mission-clawtrol',
+          agentId,
+          sessionKey,
+          handoffNotes: null,
+        });
+
+        subagentTaskIds.set(sessionKey, task.id);
+
+        console.log('[SubagentHandler] Created task:', task.id, 'for session:', sessionKey);
+
+        // Broadcast the new task
+        broadcast('task-created', {
+          id: task.id,
+          title: task.title,
+          status: task.status,
+          priority: task.priority,
+          agentId: task.agentId,
+          sessionKey: task.sessionKey,
+        });
+      } catch (err) {
+        console.error('[SubagentHandler] Error creating task:', err);
+      }
+    }
+
+    // Check for completion indicators
+    if (stream === 'complete' || stream === 'done') {
+      console.log('[SubagentHandler] Detected subagent completion:', {
+        sessionKey,
+        stream,
+      });
+
+      const taskId = subagentTaskIds.get(sessionKey);
+      if (taskId) {
+        try {
+          const summary = data.summary || data.text || 'Completed';
+          const updatedTask = await updateTask(taskId, {
+            status: 'done',
+            handoffNotes: typeof summary === 'string' ? summary.substring(0, 500) : 'Completed',
+          });
+
+          console.log('[SubagentHandler] Updated task to done:', taskId);
+
+          // Broadcast the task update
+          if (updatedTask) {
+            broadcast('task-updated', {
+              id: updatedTask.id,
+              title: updatedTask.title,
+              status: updatedTask.status,
+              priority: updatedTask.priority,
+              completedAt: updatedTask.completedAt,
+              handoffNotes: updatedTask.handoffNotes,
+            });
+          }
+
+          // Clean up
+          subagentTaskIds.delete(sessionKey);
+          knownSubagentSessions.delete(sessionKey);
+        } catch (err) {
+          console.error('[SubagentHandler] Error updating task:', err);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[SubagentHandler] Error handling agent event:', err);
+  }
+});
+
+// Handle subagent spawn events (kept for backward compatibility)
 gatewayClient.on('subagent-started', async (payload: any) => {
   try {
     console.log('[SubagentHandler] Subagent started:', JSON.stringify(payload));
