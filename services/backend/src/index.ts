@@ -51,11 +51,25 @@ function extractMeaningfulTitle(text: string): string {
     return 'Task in progress...';
   }
 
+  // Try to find "## Task:" pattern (common in briefs)
+  const taskHeaderMatch = text.match(/##\s*Task[:\s]+([^\n]+)/i);
+  if (taskHeaderMatch) {
+    const extracted = taskHeaderMatch[1].trim().slice(0, 100);
+    if (extracted.length > 5) return extracted;
+  }
+
   // Try to find "YOUR TASK:" pattern
   const taskMatch = text.match(/YOUR TASK[:\s]+([^\n]+)/i);
   if (taskMatch) {
     const extracted = taskMatch[1].trim().slice(0, 100);
     if (extracted.length > 10) return extracted;
+  }
+
+  // Try "Quick test:" pattern
+  const quickTestMatch = text.match(/Quick test[:\s]+([^\n]+)/i);
+  if (quickTestMatch) {
+    const extracted = quickTestMatch[1].trim().slice(0, 100);
+    if (extracted.length > 5) return extracted;
   }
 
   // Try to find bolded text (**...**)
@@ -502,7 +516,18 @@ async function completeTask(sessionKey: string) {
       // Get AI cost data from session transcript
       const sessionCost = await getSessionCostFromTranscript(sessionKey);
       
+      // Extract title if still placeholder
+      let finalTitle = task.title;
+      if (task.title === 'Task in progress...' && accumulatedText.length > 0) {
+        const extractedTitle = extractMeaningfulTitle(accumulatedText);
+        if (extractedTitle !== 'Task in progress...') {
+          finalTitle = extractedTitle;
+          console.log('[CompleteTask] Extracted title on completion:', finalTitle);
+        }
+      }
+      
       const updatedTask = await updateTask(task.id, {
+        title: finalTitle !== task.title ? finalTitle : undefined,
         status: 'review', // Move to review, not done - CSO will review and mark done
         updatedAt: new Date().toISOString(),
         commitHash,
