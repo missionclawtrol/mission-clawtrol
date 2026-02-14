@@ -2,17 +2,19 @@
 
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fetchTasks, createTask, updateTask, deleteTask, fetchProjects, fetchAgents, type Task, type Project, type Agent } from '$lib/api';
+  import { fetchTasks, createTask, updateTask, deleteTask, fetchProjects, fetchAgents, fetchSettings, type Task, type Project, type Agent, type Settings } from '$lib/api';
   
   // Data
   let tasks: Task[] = [];
   let projects: Project[] = [];
   let agents: Agent[] = [];
+  let settings: Settings = { humanHourlyRate: 100 };
   let loading = true;
   
   // UI state
   let showNewTaskModal = false;
   let showTaskDetail = false;
+  let showEstimateModal = false;
   let selectedTask: Task | null = null;
   let draggedTask: Task | null = null;
   let dragOverColumn: string | null = null;
@@ -27,6 +29,13 @@
     agentId: '',
     priority: 'P2' as const,
   };
+
+  // Estimate form state
+  let estimateForm = {
+    estimatedHumanMinutes: 0,
+    complexity: 'medium' as 'simple' | 'medium' | 'complex',
+    humanHourlyRate: 100,
+  };
   
   // Kanban columns configuration
   const columns = [
@@ -39,14 +48,16 @@
   
   async function loadData() {
     loading = true;
-    const [tasksData, projectsData, agentsData] = await Promise.all([
+    const [tasksData, projectsData, agentsData, settingsData] = await Promise.all([
       fetchTasks(),
       fetchProjects(),
       fetchAgents(),
+      fetchSettings(),
     ]);
     tasks = tasksData;
     projects = projectsData;
     agents = agentsData;
+    settings = settingsData;
     loading = false;
   }
   
@@ -84,6 +95,85 @@
       return `${minutes}m ${secs}s`;
     }
     return `${seconds}s`;
+  }
+
+  function suggestHumanMinutes(complexity: string, aiRuntimeMs: number): number {
+    const aiMinutes = aiRuntimeMs / 60000;
+    switch (complexity) {
+      case 'simple':
+        return Math.max(30, Math.round(aiMinutes * 20));
+      case 'medium':
+        return Math.max(60, Math.round(aiMinutes * 40));
+      case 'complex':
+        return Math.max(120, Math.round(aiMinutes * 60));
+      default:
+        return Math.round(aiMinutes * 30);
+    }
+  }
+
+  function formatMinutes(mins: number): string {
+    if (mins < 60) {
+      return `${mins}m`;
+    }
+    const hours = Math.floor(mins / 60);
+    const minutes = mins % 60;
+    if (minutes > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+    return `${hours}h`;
+  }
+
+  function calculateSavings(task: Task): { timeSavedMinutes: number; moneySavedUSD: number } | null {
+    if (!task.estimatedHumanMinutes || !task.runtime) {
+      return null;
+    }
+
+    const humanMinutes = task.estimatedHumanMinutes;
+    const aiMinutes = task.runtime / 60000;
+    const timeSavedMinutes = Math.max(0, humanMinutes - aiMinutes);
+
+    const hourlyRate = task.humanHourlyRate || settings.humanHourlyRate;
+    const humanCost = (humanMinutes / 60) * hourlyRate;
+    const aiCost = task.cost || 0;
+    const moneySavedUSD = Math.max(0, humanCost - aiCost);
+
+    return { timeSavedMinutes, moneySavedUSD };
+  }
+
+  function openEstimateModal(task: Task) {
+    selectedTask = task;
+    estimateForm.estimatedHumanMinutes = task.estimatedHumanMinutes || 0;
+    estimateForm.complexity = task.complexity || 'medium';
+    estimateForm.humanHourlyRate = task.humanHourlyRate || settings.humanHourlyRate;
+    showEstimateModal = true;
+  }
+
+  async function handleSaveEstimate() {
+    if (!selectedTask) return;
+
+    formLoading = true;
+    formError = '';
+
+    const result = await updateTask(selectedTask.id, {
+      estimatedHumanMinutes: estimateForm.estimatedHumanMinutes || undefined,
+      complexity: estimateForm.complexity,
+      humanHourlyRate: estimateForm.humanHourlyRate !== settings.humanHourlyRate ? estimateForm.humanHourlyRate : undefined,
+    });
+
+    formLoading = false;
+
+    if (result.success) {
+      showEstimateModal = false;
+      await loadData();
+    } else {
+      formError = result.error || 'Failed to save estimate';
+    }
+  }
+
+  function autoSuggestHumanTime() {
+    if (selectedTask?.runtime && estimateForm.complexity) {
+      estimateForm.estimatedHumanMinutes = suggestHumanMinutes(estimateForm.complexity, selectedTask.runtime);
+    }
   }
   
   function getProjectName(projectId: string): string {
@@ -179,6 +269,7 @@
   function closeModals() {
     showNewTaskModal = false;
     showTaskDetail = false;
+    showEstimateModal = false;
     selectedTask = null;
     formError = '';
   }
@@ -189,7 +280,7 @@
 </script>
 
 <!-- Modal Backdrop -->
-{#if showNewTaskModal || showTaskDetail}
+{#if showNewTaskModal || showTaskDetail || showEstimateModal}
   <button 
     class="fixed inset-0 bg-black/50 z-40 cursor-default"
     on:click={closeModals}
@@ -342,6 +433,33 @@
           <h4 class="text-sm text-slate-400 mb-1">Status</h4>
           <div class="text-slate-300 capitalize">{selectedTask.status.replace('_', ' ')}</div>
         </div>
+
+        {#if selectedTask.status === 'done' && selectedTask.runtime}
+          <div class="pt-2 border-t border-slate-700">
+            <h4 class="text-sm text-slate-400 mb-2">AI Performance</h4>
+            <div class="space-y-1 text-sm">
+              <p class="text-slate-300">
+                ⏱️ AI Time: <span class="font-semibold">{formatRuntime(selectedTask.runtime)}</span>
+              </p>
+              {#if selectedTask.estimatedHumanMinutes}
+                <p class="text-slate-300">
+                  👤 Human Est: <span class="font-semibold">{formatMinutes(selectedTask.estimatedHumanMinutes)}</span>
+                </p>
+              {/if}
+              {#if selectedTask.estimatedHumanMinutes && selectedTask.runtime}
+                {@const savings = calculateSavings(selectedTask)}
+                {#if savings}
+                  <p class="text-green-400 font-semibold">
+                    ⏱️ Time Saved: {formatMinutes(savings.timeSavedMinutes)}
+                  </p>
+                  <p class="text-green-400 font-semibold">
+                    💰 Money Saved: ${savings.moneySavedUSD.toFixed(2)}
+                  </p>
+                {/if}
+              {/if}
+            </div>
+          </div>
+        {/if}
       </div>
       <div class="px-4 py-3 border-t border-slate-700 flex justify-between gap-2">
         <button 
@@ -350,11 +468,119 @@
         >
           🗑️ Delete
         </button>
+        <div class="flex gap-2">
+          {#if selectedTask.status === 'done'}
+            <button 
+              on:click={() => openEstimateModal(selectedTask!)}
+              class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-sm font-medium transition-colors"
+            >
+              📊 {selectedTask.estimatedHumanMinutes ? 'Edit' : 'Set'} Estimate
+            </button>
+          {/if}
+          <button 
+            on:click={closeModals}
+            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Estimate Modal -->
+{#if showEstimateModal && selectedTask}
+  <div class="fixed inset-0 flex items-center justify-center z-50 p-4">
+    <div class="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-md" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="estimate-title" tabindex="-1">
+      <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+        <h2 id="estimate-title" class="font-semibold">Set Human Estimate</h2>
+        <button on:click={closeModals} class="text-slate-400 hover:text-white">✕</button>
+      </div>
+      <div class="p-4 space-y-4">
+        {#if formError}
+          <div class="p-3 bg-red-500/20 border border-red-500 rounded text-red-400 text-sm">{formError}</div>
+        {/if}
+
+        <div>
+          <label for="complexity" class="block text-sm text-slate-400 mb-1">Task Complexity *</label>
+          <select 
+            id="complexity"
+            bind:value={estimateForm.complexity}
+            on:change={autoSuggestHumanTime}
+            class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-blue-500 focus:outline-none"
+          >
+            <option value="simple">Simple (30 min baseline)</option>
+            <option value="medium">Medium (1 hour baseline)</option>
+            <option value="complex">Complex (2 hour baseline)</option>
+          </select>
+          <p class="text-xs text-slate-500 mt-1">Select based on how complex the task is for a human developer</p>
+        </div>
+
+        <div>
+          <label for="humanMinutes" class="block text-sm text-slate-400 mb-1">Estimated Time (minutes) *</label>
+          <div class="flex gap-2">
+            <input 
+              id="humanMinutes"
+              type="number" 
+              bind:value={estimateForm.estimatedHumanMinutes}
+              min="1"
+              placeholder="Enter minutes"
+              class="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-blue-500 focus:outline-none"
+            />
+            <button 
+              on:click={autoSuggestHumanTime}
+              class="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors"
+            >
+              Auto
+            </button>
+          </div>
+          <p class="text-xs text-slate-500 mt-1">How long would this take a human developer?</p>
+        </div>
+
+        <div>
+          <label for="hourlyRate" class="block text-sm text-slate-400 mb-1">Hourly Rate ($/hour)</label>
+          <input 
+            id="hourlyRate"
+            type="number" 
+            bind:value={estimateForm.humanHourlyRate}
+            min="1"
+            step="10"
+            placeholder="100"
+            class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-blue-500 focus:outline-none"
+          />
+          <p class="text-xs text-slate-500 mt-1">Leave blank to use default (${settings.humanHourlyRate}/hr)</p>
+        </div>
+
+        {#if estimateForm.estimatedHumanMinutes && selectedTask.runtime}
+          {@const timeSaved = Math.max(0, estimateForm.estimatedHumanMinutes - (selectedTask.runtime / 60000))}
+          {@const moneySaved = Math.max(0, ((estimateForm.estimatedHumanMinutes / 60) * estimateForm.humanHourlyRate) - (selectedTask.cost || 0))}
+          <div class="p-3 bg-slate-700/40 rounded border border-slate-600">
+            <h4 class="text-sm text-slate-300 mb-2 font-semibold">💰 ROI Preview</h4>
+            <div class="text-xs text-slate-400 space-y-1">
+              <p>Human time: {formatMinutes(estimateForm.estimatedHumanMinutes)}</p>
+              <p>Human cost: ${((estimateForm.estimatedHumanMinutes / 60) * estimateForm.humanHourlyRate).toFixed(2)}</p>
+              <p>AI time: {formatRuntime(selectedTask.runtime)}</p>
+              <p>AI cost: ${(selectedTask.cost || 0).toFixed(2)}</p>
+              <p class="text-green-400 font-semibold pt-1 border-t border-slate-600">Time saved: {formatMinutes(timeSaved)}</p>
+              <p class="text-green-400 font-semibold">Money saved: ${moneySaved.toFixed(2)}</p>
+            </div>
+          </div>
+        {/if}
+      </div>
+      <div class="px-4 py-3 border-t border-slate-700 flex justify-end gap-2">
         <button 
           on:click={closeModals}
-          class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition-colors"
+          class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors"
         >
-          Close
+          Cancel
+        </button>
+        <button 
+          on:click={handleSaveEstimate}
+          disabled={formLoading || !estimateForm.estimatedHumanMinutes}
+          class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-sm font-medium transition-colors disabled:opacity-50"
+        >
+          {formLoading ? 'Saving...' : 'Save Estimate'}
         </button>
       </div>
     </div>
@@ -426,6 +652,17 @@
                       <span>⏱️ {formatRuntime(task.runtime)}</span>
                     {/if}
                   </div>
+
+                  <!-- Savings Info (if human estimate exists) -->
+                  {#if task.estimatedHumanMinutes && task.runtime}
+                    {@const savings = calculateSavings(task)}
+                    {#if savings}
+                      <div class="mb-2 pb-2 border-b border-slate-700 flex gap-2 text-xs">
+                        <span class="text-green-400 font-semibold">⏱️ Saved {formatMinutes(savings.timeSavedMinutes)}</span>
+                        <span class="text-green-400 font-semibold">💰 ${savings.moneySavedUSD.toFixed(0)}</span>
+                      </div>
+                    {/if}
+                  {/if}
                 {/if}
                 
                 <!-- Agent + Priority -->

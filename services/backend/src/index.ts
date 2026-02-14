@@ -9,6 +9,7 @@ import { activityRoutes, logApprovalEvent, setBroadcastFunction } from './routes
 import { approvalRoutes } from './routes/approvals.js';
 import { taskRoutes } from './routes/tasks.js';
 import { sessionRoutes } from './routes/sessions.js';
+import { settingsRoutes } from './routes/settings.js';
 import { gatewayClient, ApprovalRequest, ApprovalResolved } from './gateway-client.js';
 import { loadAssociations } from './project-agents.js';
 import { createTask, updateTask, findTaskBySessionKey } from './task-store.js';
@@ -261,6 +262,7 @@ await fastify.register(activityRoutes, { prefix: '/api/activity' });
 await fastify.register(approvalRoutes, { prefix: '/api/approvals' });
 await fastify.register(taskRoutes, { prefix: '/api/tasks' });
 await fastify.register(sessionRoutes, { prefix: '/api/sessions' });
+await fastify.register(settingsRoutes, { prefix: '/api/settings' });
 
 // Health check
 fastify.get('/api/health', async () => {

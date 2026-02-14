@@ -311,6 +311,9 @@ export interface Task {
   cost?: number; // estimated USD
   model?: string; // which model was used
   runtime?: number; // milliseconds
+  estimatedHumanMinutes?: number; // How long would this take a human dev?
+  humanHourlyRate?: number; // Override rate for this task (optional)
+  complexity?: 'simple' | 'medium' | 'complex'; // Task complexity
 }
 
 export async function fetchTasks(): Promise<Task[]> {
@@ -357,6 +360,9 @@ export interface UpdateTaskParams {
   agentId?: string;
   priority?: 'P0' | 'P1' | 'P2' | 'P3';
   status?: 'backlog' | 'todo' | 'in_progress' | 'review' | 'done';
+  estimatedHumanMinutes?: number;
+  humanHourlyRate?: number;
+  complexity?: 'simple' | 'medium' | 'complex';
 }
 
 export async function updateTask(id: string, params: UpdateTaskParams): Promise<{ success: boolean; task?: Task; error?: string }> {
@@ -390,6 +396,25 @@ export async function deleteTask(id: string): Promise<{ success: boolean; error?
   } catch (error) {
     console.error('Failed to delete task:', error);
     return { success: false, error: 'Network error' };
+  }
+}
+
+// Settings
+export interface Settings {
+  humanHourlyRate: number;
+}
+
+export async function fetchSettings(): Promise<Settings> {
+  try {
+    const res = await fetch(`${API_BASE}/settings`);
+    if (!res.ok) {
+      // Return default if endpoint doesn't exist
+      return { humanHourlyRate: 100 };
+    }
+    return await res.json();
+  } catch (error) {
+    console.error('Failed to fetch settings:', error);
+    return { humanHourlyRate: 100 };
   }
 }
 

@@ -23,6 +23,9 @@ export interface Task {
   cost?: number; // estimated USD
   model?: string; // which model was used
   runtime?: number; // milliseconds
+  estimatedHumanMinutes?: number; // How long would this take a human dev?
+  humanHourlyRate?: number; // Override rate for this task (optional)
+  complexity?: 'simple' | 'medium' | 'complex'; // Task complexity
 }
 
 const TASKS_FILE = join(process.env.HOME || '', '.openclaw/tasks.json');
