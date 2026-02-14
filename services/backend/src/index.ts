@@ -316,6 +316,112 @@ async function getLinesChanged(
 }
 
 /**
+ * Get session cost data from transcript file
+ */
+async function getSessionCostFromTranscript(sessionKey: string): Promise<{
+  model: string | null;
+  tokens: { input: number; output: number; total: number };
+  cost: number;
+  runtime: number;
+} | null> {
+  try {
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    
+    // Parse sessionKey to find transcript path
+    // Format: agent:<agentId>:subagent:<uuid> or agent:<agentId>:main
+    const parts = sessionKey.split(':');
+    if (parts.length < 2) return null;
+    
+    const agentId = parts[1];
+    const sessionsDir = path.join(process.env.HOME || '', '.openclaw', 'agents', agentId, 'sessions');
+    
+    // Find the transcript file - look for .jsonl files that aren't deleted
+    let transcriptPath: string | null = null;
+    try {
+      const files = await fs.readdir(sessionsDir);
+      // Find most recent non-deleted jsonl file
+      const jsonlFiles = files.filter(f => f.endsWith('.jsonl') && !f.includes('.deleted'));
+      if (jsonlFiles.length > 0) {
+        // Get the most recent one
+        const stats = await Promise.all(jsonlFiles.map(async f => ({
+          file: f,
+          mtime: (await fs.stat(path.join(sessionsDir, f))).mtime.getTime()
+        })));
+        stats.sort((a, b) => b.mtime - a.mtime);
+        transcriptPath = path.join(sessionsDir, stats[0].file);
+      }
+    } catch {
+      // Sessions dir might not exist
+      return null;
+    }
+    
+    if (!transcriptPath) return null;
+    
+    // Read and parse the transcript
+    const content = await fs.readFile(transcriptPath, 'utf-8');
+    const lines = content.trim().split('\n');
+    
+    let totalInput = 0;
+    let totalOutput = 0;
+    let totalCost = 0;
+    let model: string | null = null;
+    let firstTimestamp: number | null = null;
+    let lastTimestamp: number | null = null;
+    
+    for (const line of lines) {
+      try {
+        const entry = JSON.parse(line);
+        const msg = entry.message || entry;
+        
+        // Track timestamps for runtime
+        if (entry.timestamp) {
+          const ts = new Date(entry.timestamp).getTime();
+          if (!firstTimestamp || ts < firstTimestamp) firstTimestamp = ts;
+          if (!lastTimestamp || ts > lastTimestamp) lastTimestamp = ts;
+        }
+        
+        // Extract model
+        if (msg.model && !model) {
+          model = msg.model;
+        }
+        
+        // Extract usage
+        if (msg.usage) {
+          totalInput += msg.usage.input || msg.usage.prompt_tokens || 0;
+          totalOutput += msg.usage.output || msg.usage.completion_tokens || 0;
+          if (msg.usage.cost?.total) {
+            totalCost += msg.usage.cost.total;
+          }
+        }
+      } catch {
+        // Skip invalid JSON lines
+      }
+    }
+    
+    const runtime = firstTimestamp && lastTimestamp ? lastTimestamp - firstTimestamp : 0;
+    
+    console.log('[SessionCost] Extracted from transcript:', {
+      sessionKey,
+      model,
+      tokens: { input: totalInput, output: totalOutput, total: totalInput + totalOutput },
+      cost: totalCost,
+      runtime,
+    });
+    
+    return {
+      model,
+      tokens: { input: totalInput, output: totalOutput, total: totalInput + totalOutput },
+      cost: totalCost,
+      runtime,
+    };
+  } catch (err) {
+    console.error('[SessionCost] Error reading transcript:', err);
+    return null;
+  }
+}
+
+/**
  * Complete a task and move it to review status
  * (CSO will review and mark as done)
  */
@@ -393,6 +499,9 @@ async function completeTask(sessionKey: string) {
         console.log('[CompleteTask] ⚠️ No commit hash found (neither explicit nor via fallback)');
       }
       
+      // Get AI cost data from session transcript
+      const sessionCost = await getSessionCostFromTranscript(sessionKey);
+      
       const updatedTask = await updateTask(task.id, {
         status: 'review', // Move to review, not done - CSO will review and mark done
         updatedAt: new Date().toISOString(),
@@ -400,6 +509,11 @@ async function completeTask(sessionKey: string) {
         linesChanged,
         estimatedHumanMinutes,
         humanCost,
+        // AI cost data
+        model: sessionCost?.model || undefined,
+        cost: sessionCost?.cost || undefined,
+        runtime: sessionCost?.runtime || undefined,
+        tokens: sessionCost?.tokens || undefined,
       });
 
       console.log('[CompleteTask] Successfully updated task:', {
