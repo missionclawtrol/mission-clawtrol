@@ -4,20 +4,15 @@
   import { page } from '$app/stores';
   
   interface TranscriptMessage {
-    id: string;
-    role: 'user' | 'assistant';
-    timestamp: string;
+    role: 'user' | 'assistant' | 'system';
+    timestamp: number;
     content: string;
-    toolCalls?: ToolCall[];
+    toolCalls?: { name: string; arguments: any }[];
   }
   
   interface ToolCall {
-    id: string;
     name: string;
-    args?: any;
-    result?: any;
-    error?: string;
-    status: 'pending' | 'executing' | 'completed' | 'failed';
+    arguments: any;
   }
   
   interface Agent {
@@ -27,11 +22,12 @@
   }
   
   interface Session {
-    id: string;
     agentId: string;
-    startTime: string;
-    lastUpdated: string;
-    status: 'active' | 'completed' | 'error';
+    sessionId: string;
+    model: string;
+    totalTokens?: number;
+    updatedAt: number;
+    lastChannel?: string;
   }
   
   let messages: TranscriptMessage[] = [];
@@ -39,12 +35,10 @@
   let session: Session | null = null;
   let loading = true;
   let error: string | null = null;
-  let agentId: string = '';
-  let sessionId: string = '';
   let scrollContainer: HTMLDivElement;
   
-  $: agentId = $page.params.agentId;
-  $: sessionId = $page.params.sessionId;
+  $: agentId = $page.params.agentId || '';
+  $: sessionId = $page.params.sessionId || '';
   
   async function loadTranscript() {
     if (!agentId || !sessionId) return;
@@ -68,11 +62,18 @@
       
       // Fetch transcript
       const transcriptRes = await api.get(`/sessions/${encodeURIComponent(agentId)}/${encodeURIComponent(sessionId)}/transcript`);
-      messages = transcriptRes.messages || [];
+      messages = (transcriptRes.messages || []).map((msg: any, idx: number) => ({
+        ...msg,
+        id: `${msg.timestamp}-${idx}`,
+      }));
       
-      if (transcriptRes.session) {
-        session = transcriptRes.session;
-      }
+      // Create session metadata from response
+      session = {
+        agentId,
+        sessionId: transcriptRes.sessionId,
+        model: transcriptRes.model || 'unknown',
+        updatedAt: Date.now(),
+      };
       
       // Scroll to bottom after loading
       setTimeout(() => {
@@ -88,8 +89,9 @@
     }
   }
   
-  function formatTime(timestamp: string): string {
-    const date = new Date(timestamp);
+  function formatTime(timestamp: number | string): string {
+    const dateMs = typeof timestamp === 'number' ? timestamp : new Date(timestamp).getTime();
+    const date = new Date(dateMs);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
@@ -103,29 +105,12 @@
     return date.toLocaleDateString();
   }
   
-  function formatAbsoluteTime(timestamp: string): string {
-    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  function formatAbsoluteTime(timestamp: number | string): string {
+    const dateMs = typeof timestamp === 'number' ? timestamp : new Date(timestamp).getTime();
+    return new Date(dateMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
   
-  function getToolStatusColor(status: string): string {
-    switch (status) {
-      case 'pending': return 'bg-yellow-50 border-yellow-200 text-yellow-700';
-      case 'executing': return 'bg-blue-50 border-blue-200 text-blue-700';
-      case 'completed': return 'bg-green-50 border-green-200 text-green-700';
-      case 'failed': return 'bg-red-50 border-red-200 text-red-700';
-      default: return 'bg-gray-50 border-gray-200 text-gray-700';
-    }
-  }
   
-  function getToolStatusBadge(status: string): string {
-    switch (status) {
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'executing': return 'bg-blue-100 text-blue-800';
-      case 'completed': return 'bg-green-100 text-green-800';
-      case 'failed': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  }
   
   onMount(() => {
     loadTranscript();
@@ -165,12 +150,13 @@
       {#if session}
         <div class="space-y-1 text-right">
           <div class="flex items-center gap-2 justify-end">
-            <span class={`inline-block w-2 h-2 rounded-full ${
-              session.status === 'active' ? 'bg-blue-500' : session.status === 'completed' ? 'bg-green-500' : 'bg-red-500'
-            }`}></span>
-            <span class="text-sm font-medium text-gray-600">{session.status}</span>
+            <span class="inline-block w-2 h-2 rounded-full bg-blue-500"></span>
+            <span class="text-sm font-medium text-gray-600">active</span>
           </div>
-          <div class="text-xs text-gray-500">{formatTime(session.lastUpdated)}</div>
+          <div class="text-xs text-gray-500">{formatTime(session.updatedAt)}</div>
+          {#if session.model}
+            <div class="text-xs text-gray-500">{session.model.split('/').pop()}</div>
+          {/if}
         </div>
       {/if}
     </div>
@@ -194,7 +180,7 @@
       bind:this={scrollContainer}
       class="flex-1 overflow-y-auto pr-4 space-y-4"
     >
-      {#each messages as message (message.id)}
+      {#each messages as message, idx (idx)}
         <div class={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
           <!-- Message -->
           <div class={`max-w-xl ${message.role === 'user' ? 'bg-blue-500 text-white rounded-2xl rounded-tr-md' : 'bg-gray-200 text-gray-900 rounded-2xl rounded-tl-md'} px-4 py-3 shadow-sm`}>
@@ -218,35 +204,21 @@
         {#if message.toolCalls && message.toolCalls.length > 0}
           <div class="flex justify-start">
             <div class="space-y-2 max-w-2xl w-full">
-              {#each message.toolCalls as toolCall (toolCall.id)}
+              {#each message.toolCalls as toolCall, idx}
                 <details class="group">
-                  <summary class={`cursor-pointer px-3 py-2 rounded-lg border ${getToolStatusColor(toolCall.status)} font-mono text-sm font-medium`}>
+                  <summary class="cursor-pointer px-3 py-2 rounded-lg border bg-blue-50 border-blue-200 font-mono text-sm font-medium text-blue-700 hover:bg-blue-100 transition-colors">
                     <span class="inline-block mr-2 group-open:rotate-90 transition-transform">▶</span>
                     {toolCall.name}
-                    <span class={`ml-2 px-2 py-0.5 rounded text-xs font-semibold ${getToolStatusBadge(toolCall.status)}`}>
-                      {toolCall.status}
+                    <span class="ml-2 px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-800">
+                      called
                     </span>
                   </summary>
                   
                   <div class="mt-2 space-y-2">
-                    {#if toolCall.args}
+                    {#if toolCall.arguments && Object.keys(toolCall.arguments).length > 0}
                       <div class="p-3 bg-gray-50 rounded-lg border border-gray-200">
                         <div class="text-xs font-semibold text-gray-600 mb-2">Arguments:</div>
-                        <pre class="font-mono text-xs text-gray-700 overflow-x-auto"><code>{JSON.stringify(toolCall.args, null, 2)}</code></pre>
-                      </div>
-                    {/if}
-                    
-                    {#if toolCall.result}
-                      <div class="p-3 bg-green-50 rounded-lg border border-green-200">
-                        <div class="text-xs font-semibold text-green-700 mb-2">Result:</div>
-                        <pre class="font-mono text-xs text-green-800 overflow-x-auto max-h-48"><code>{JSON.stringify(toolCall.result, null, 2)}</code></pre>
-                      </div>
-                    {/if}
-                    
-                    {#if toolCall.error}
-                      <div class="p-3 bg-red-50 rounded-lg border border-red-200">
-                        <div class="text-xs font-semibold text-red-700 mb-2">Error:</div>
-                        <pre class="font-mono text-xs text-red-800 overflow-x-auto"><code>{toolCall.error}</code></pre>
+                        <pre class="font-mono text-xs text-gray-700 overflow-x-auto"><code>{JSON.stringify(toolCall.arguments, null, 2)}</code></pre>
                       </div>
                     {/if}
                   </div>

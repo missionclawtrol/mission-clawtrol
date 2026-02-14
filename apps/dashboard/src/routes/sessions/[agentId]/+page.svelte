@@ -4,12 +4,12 @@
   import { page } from '$app/stores';
   
   interface Session {
-    id: string;
-    agentId: string;
-    timestamp: string;
-    lastUpdated: string;
-    messageCount: number;
-    status: 'active' | 'completed' | 'error';
+    sessionId: string;
+    sessionKey: string;
+    updatedAt: number;
+    model: string;
+    totalTokens?: number;
+    lastChannel?: string;
   }
   
   interface Agent {
@@ -23,9 +23,8 @@
   let agent: Agent | null = null;
   let loading = true;
   let error: string | null = null;
-  let agentId: string = '';
   
-  $: agentId = $page.params.agentId;
+  $: agentId = $page.params.agentId || '';
   
   async function loadSessions() {
     if (!agentId) return;
@@ -52,8 +51,8 @@
       const sessionsRes = await api.get(`/sessions/${encodeURIComponent(agentId)}`);
       sessions = sessionsRes.sessions || [];
       
-      // Sort by lastUpdated descending
-      sessions.sort((a, b) => new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime());
+      // Sort by updatedAt descending
+      sessions.sort((a, b) => b.updatedAt - a.updatedAt);
     } catch (err) {
       console.error('Failed to load sessions:', err);
       error = err instanceof Error ? err.message : 'Failed to load sessions';
@@ -77,14 +76,6 @@
     return date.toLocaleDateString();
   }
   
-  function getStatusColor(status: string): string {
-    switch (status) {
-      case 'active': return 'bg-blue-100 text-blue-800';
-      case 'completed': return 'bg-green-100 text-green-800';
-      case 'error': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  }
   
   onMount(() => {
     loadSessions();
@@ -144,30 +135,34 @@
       <table class="w-full">
         <thead class="bg-gray-50 border-b border-gray-200">
           <tr>
-            <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700">Session ID</th>
+            <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700">Session</th>
             <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700">Status</th>
-            <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700">Messages</th>
+            <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700">Model</th>
             <th class="px-6 py-3 text-left text-sm font-semibold text-gray-700">Last Updated</th>
             <th class="px-6 py-3 text-right text-sm font-semibold text-gray-700">Action</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-200">
-          {#each sessions as session (session.id)}
+          {#each sessions as session (session.sessionKey)}
             <tr class="hover:bg-gray-50 transition-colors">
-              <td class="px-6 py-4 text-sm font-mono text-gray-900">{session.id}</td>
+              <td class="px-6 py-4 text-sm font-mono text-gray-900">{session.sessionId.slice(0, 12)}...</td>
               <td class="px-6 py-4 text-sm">
-                <span class={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(session.status)}`}>
-                  {session.status}
+                <span class="inline-block px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  active
                 </span>
               </td>
-              <td class="px-6 py-4 text-sm text-gray-600">{session.messageCount}</td>
               <td class="px-6 py-4 text-sm text-gray-600">
-                <div>{formatTime(session.lastUpdated)}</div>
-                <div class="text-xs text-gray-500">{new Date(session.lastUpdated).toLocaleString()}</div>
+                {#if session.model}
+                  <span class="font-mono text-xs">{session.model.split('/').pop()}</span>
+                {/if}
+              </td>
+              <td class="px-6 py-4 text-sm text-gray-600">
+                <div>{formatTime(new Date(session.updatedAt).toISOString())}</div>
+                <div class="text-xs text-gray-500">{new Date(session.updatedAt).toLocaleString()}</div>
               </td>
               <td class="px-6 py-4 text-right">
                 <a
-                  href="/sessions/{agentId}/{session.id}"
+                  href="/sessions/{agentId}/{session.sessionId}"
                   class="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 rounded hover:bg-blue-100 transition-colors"
                 >
                   View
