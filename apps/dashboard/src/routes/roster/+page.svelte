@@ -77,13 +77,36 @@
     return `${diffDays}d ago`;
   }
   
-  function getModelShort(model: string): string {
-    // Extract short model name (e.g., "anthropic/claude-opus-4-5" -> "opus")
-    if (model.includes('opus')) return 'opus';
-    if (model.includes('sonnet')) return 'sonnet';
-    if (model.includes('haiku')) return 'haiku';
-    if (model.includes('qwen')) return 'qwen';
-    return model.split('/').pop()?.split('-')[0] || model;
+  function formatModelName(model: string): string {
+    if (!model) return 'Unknown';
+    
+    const lowerModel = model.toLowerCase();
+    
+    if (lowerModel.includes('opus')) {
+      const version = model.match(/[\d.]+/)?.[0] || '';
+      return version ? `Opus ${version}` : 'Opus';
+    }
+    if (lowerModel.includes('sonnet')) {
+      const version = model.match(/[\d.]+/)?.[0] || '';
+      return version ? `Sonnet ${version}` : 'Sonnet';
+    }
+    if (lowerModel.includes('haiku')) {
+      const version = model.match(/[\d.]+/)?.[0] || '';
+      return version ? `Haiku ${version}` : 'Haiku';
+    }
+    if (lowerModel.includes('minimax')) {
+      return 'MiniMax M2.5';
+    }
+    if (lowerModel.includes('gpt-4')) {
+      return 'GPT-4';
+    }
+    if (lowerModel.includes('qwen')) {
+      const version = model.match(/[\d.]+/)?.[0] || '';
+      return version ? `Qwen ${version}` : 'Qwen';
+    }
+    
+    // Fallback: extract last part of the model name
+    return model.split('/').pop() || model;
   }
   
   function openDetails(agent: RosterAgent) {
@@ -198,9 +221,9 @@
           
           <!-- Model info -->
           <div class="mb-3">
-            <div class="flex items-center space-x-2 text-sm">
-              <span class="text-gray-500">🧠</span>
-              <span class="font-mono text-gray-700">{getModelShort(agent.model)}</span>
+            <div class="flex items-center space-x-2 text-xs text-slate-400">
+              <span>🧠</span>
+              <span>{formatModelName(agent.model)}</span>
             </div>
           </div>
           
@@ -315,8 +338,9 @@
               </span>
             </div>
             <div class="p-3 bg-gray-50 rounded-lg">
-              <div class="text-xs text-gray-500 mb-1">Model</div>
-              <div class="font-mono text-sm text-gray-900">{selectedAgent.model}</div>
+              <div class="text-xs text-gray-500 mb-1">AI Model</div>
+              <div class="text-sm text-gray-900 font-medium">{formatModelName(selectedAgent.model)}</div>
+              <div class="text-xs text-gray-400 mt-1 font-mono">{selectedAgent.model}</div>
             </div>
           </div>
           
