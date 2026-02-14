@@ -24,6 +24,60 @@ const dashboardClients = new Set<WebSocket>();
 const knownSubagentSessions = new Map<string, { agentId: string; title: string; startedAt: number }>();
 const subagentTaskIds = new Map<string, string>(); // sessionKey -> taskId
 
+// Track last activity timestamp for each session (for timeout detection)
+const sessionLastActivity = new Map<string, number>(); // sessionKey -> timestamp
+
+// Completion markers that indicate a subagent has finished
+const completionMarkers = ['✅', 'Task Complete', '## Summary', 'Commit:', 'Done:', 'completed', 'finished'];
+
+/**
+ * Check if an event text contains any completion markers
+ */
+function hasCompletionMarker(text: string | undefined): boolean {
+  if (!text || typeof text !== 'string') return false;
+  return completionMarkers.some(marker => text.includes(marker));
+}
+
+/**
+ * Complete a task and move it to review status
+ * (CSO will review and mark as done)
+ */
+async function completeTask(sessionKey: string) {
+  try {
+    const task = await findTaskBySessionKey(sessionKey);
+    if (!task) {
+      console.log('[CompleteTask] Task not found for session:', sessionKey);
+      return;
+    }
+
+    if (task.status === 'in-progress') {
+      const updatedTask = await updateTask(task.id, {
+        status: 'review', // Move to review, not done - CSO will review and mark done
+        updatedAt: new Date().toISOString(),
+      });
+
+      console.log('[CompleteTask] Moved task to review:', task.id, 'for session:', sessionKey);
+
+      // Broadcast the update
+      broadcast('task-updated', {
+        id: updatedTask!.id,
+        title: updatedTask!.title,
+        status: updatedTask!.status,
+        priority: updatedTask!.priority,
+        updatedAt: updatedTask!.updatedAt,
+        handoffNotes: updatedTask!.handoffNotes,
+      });
+
+      // Clean up
+      sessionLastActivity.delete(sessionKey);
+      knownSubagentSessions.delete(sessionKey);
+      subagentTaskIds.delete(sessionKey);
+    }
+  } catch (err) {
+    console.error('[CompleteTask] Error completing task:', err);
+  }
+}
+
 // Plugins
 await fastify.register(cors, {
   origin: true,
@@ -62,6 +116,21 @@ function broadcast(type: string, payload: unknown) {
 
 // Wire up broadcast function for activity module
 setBroadcastFunction(broadcast);
+
+// Start a timer to check for stale sessions (30 seconds of inactivity = completion)
+const completionCheckInterval = setInterval(() => {
+  const now = Date.now();
+  for (const [sessionKey, lastActivity] of sessionLastActivity.entries()) {
+    const inactivityTime = now - lastActivity;
+    if (inactivityTime > 30000) { // 30 seconds of inactivity
+      console.log('[CompletionCheck] Session inactive for 30s, marking as complete:', {
+        sessionKey,
+        inactivityMs: inactivityTime,
+      });
+      completeTask(sessionKey);
+    }
+  }
+}, 15000); // Check every 15 seconds
 
 // WebSocket for real-time updates
 fastify.register(async function (fastify) {
@@ -149,6 +218,9 @@ gatewayClient.on('agent', async (payload: any) => {
       return;
     }
 
+    // Update activity timestamp for this session
+    sessionLastActivity.set(sessionKey, Date.now());
+
     // Check if this is a NEW subagent session
     if (!knownSubagentSessions.has(sessionKey)) {
       // Extract agentId from sessionKey (format: "agent:senior-dev:subagent:...")
@@ -208,43 +280,23 @@ gatewayClient.on('agent', async (payload: any) => {
       }
     }
 
-    // Check for completion indicators
+    // Check for completion markers in the event text
+    if (hasCompletionMarker(data.text)) {
+      console.log('[SubagentHandler] Detected completion marker in agent event:', {
+        sessionKey,
+        marker: completionMarkers.find(m => data.text.includes(m)),
+      });
+      await completeTask(sessionKey);
+      return;
+    }
+
+    // Check for stream completion indicators
     if (stream === 'complete' || stream === 'done') {
-      console.log('[SubagentHandler] Detected subagent completion:', {
+      console.log('[SubagentHandler] Detected subagent completion (stream event):', {
         sessionKey,
         stream,
       });
-
-      const taskId = subagentTaskIds.get(sessionKey);
-      if (taskId) {
-        try {
-          const summary = data.summary || data.text || 'Completed';
-          const updatedTask = await updateTask(taskId, {
-            status: 'done',
-            handoffNotes: typeof summary === 'string' ? summary.substring(0, 500) : 'Completed',
-          });
-
-          console.log('[SubagentHandler] Updated task to done:', taskId);
-
-          // Broadcast the task update
-          if (updatedTask) {
-            broadcast('task-updated', {
-              id: updatedTask.id,
-              title: updatedTask.title,
-              status: updatedTask.status,
-              priority: updatedTask.priority,
-              completedAt: updatedTask.completedAt,
-              handoffNotes: updatedTask.handoffNotes,
-            });
-          }
-
-          // Clean up
-          subagentTaskIds.delete(sessionKey);
-          knownSubagentSessions.delete(sessionKey);
-        } catch (err) {
-          console.error('[SubagentHandler] Error updating task:', err);
-        }
-      }
+      await completeTask(sessionKey);
     }
   } catch (err) {
     console.error('[SubagentHandler] Error handling agent event:', err);
@@ -416,9 +468,9 @@ gatewayClient.on('subagent-completed', async (payload: any) => {
       return;
     }
 
-    // Update the task to done with token/cost info
+    // Update the task to review status (CSO will review and mark as done)
     const updatedTask = await updateTask(task.id, {
-      status: 'done',
+      status: 'review',
       handoffNotes: completionSummary,
       tokens,
       cost,
@@ -426,7 +478,7 @@ gatewayClient.on('subagent-completed', async (payload: any) => {
       runtime,
     });
 
-    console.log('[SubagentHandler] Updated task:', task.id, 'to done', {
+    console.log('[SubagentHandler] Updated task:', task.id, 'to review', {
       tokens,
       cost,
       model,
@@ -439,13 +491,18 @@ gatewayClient.on('subagent-completed', async (payload: any) => {
       title: updatedTask!.title,
       status: updatedTask!.status,
       priority: updatedTask!.priority,
-      completedAt: updatedTask!.completedAt,
+      updatedAt: updatedTask!.updatedAt,
       handoffNotes: updatedTask!.handoffNotes,
       tokens: updatedTask!.tokens,
       cost: updatedTask!.cost,
       model: updatedTask!.model,
       runtime: updatedTask!.runtime,
     });
+
+    // Clean up
+    sessionLastActivity.delete(sessionKey);
+    knownSubagentSessions.delete(sessionKey);
+    subagentTaskIds.delete(sessionKey);
   } catch (err) {
     console.error('[SubagentHandler] Error handling subagent-completed:', err);
   }
