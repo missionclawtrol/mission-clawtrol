@@ -144,3 +144,33 @@ export async function getTasksByStatus(status: Task['status']): Promise<Task[]> 
   const tasks = await loadTasks();
   return tasks.filter(t => t.status === status);
 }
+
+/**
+ * Get task statistics for a project
+ */
+export async function getProjectTaskStats(projectId: string): Promise<{
+  total: number;
+  byStatus: Record<string, number>;
+  completionPercent: number;
+}> {
+  const tasks = await getTasksByProject(projectId);
+  
+  // Count total tasks
+  const total = tasks.length;
+  
+  // Count by status
+  const byStatus: Record<string, number> = {};
+  for (const task of tasks) {
+    byStatus[task.status] = (byStatus[task.status] || 0) + 1;
+  }
+  
+  // Calculate completion percentage
+  const completedCount = tasks.filter(t => t.status === 'done').length;
+  const completionPercent = total === 0 ? 0 : Math.round((completedCount / total) * 100);
+  
+  return {
+    total,
+    byStatus,
+    completionPercent,
+  };
+}

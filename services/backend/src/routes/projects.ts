@@ -1,8 +1,10 @@
 import { FastifyInstance } from 'fastify';
 import { readFile, readdir, stat, mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
-import { logProjectEvent } from './activity.js';
+import { logProjectEvent, addActivity } from './activity.js';
 import { parseAgentsMd, type ProjectAgent } from '../agents-md-parser.js';
+import { getProjectTaskStats, getTasksByProject, createTask, type Task } from '../task-store.js';
+import { parseProjectMd } from '../project-parser.js';
 
 // Path to OpenClaw workspace
 const WORKSPACE_PATH = join(process.env.HOME || '', '.openclaw/workspace');
@@ -362,6 +364,121 @@ export async function projectRoutes(fastify: FastifyInstance) {
     } catch (error) {
       fastify.log.error(error);
       return reply.status(500).send({ error: 'Failed to delete project' });
+    }
+  });
+
+  // Get all tasks for a project with stats
+  fastify.get('/:id/tasks', async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    try {
+      const tasks = await getTasksByProject(id);
+      const stats = await getProjectTaskStats(id);
+
+      return {
+        projectId: id,
+        tasks,
+        stats,
+      };
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({ error: 'Failed to get project tasks' });
+    }
+  });
+
+  // Parse PROJECT.md and return suggested tasks (without creating them)
+  fastify.post<{
+    Params: { id: string };
+  }>('/:id/parse-tasks', async (request, reply) => {
+    const { id } = request.params;
+    const projectPath = join(WORKSPACE_PATH, id);
+
+    try {
+      // Read PROJECT.md from the project's workspace
+      const projectMdPath = join(projectPath, 'PROJECT.md');
+      const content = await readFile(projectMdPath, 'utf-8');
+
+      // Parse the content
+      const parsed = parseProjectMd(content);
+
+      return {
+        projectId: id,
+        title: parsed.title,
+        description: parsed.description,
+        suggestedTasks: parsed.suggestedTasks,
+      };
+    } catch (error) {
+      fastify.log.error(error);
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return reply.status(404).send({ error: 'PROJECT.md not found' });
+      }
+      return reply.status(500).send({ error: 'Failed to parse PROJECT.md' });
+    }
+  });
+
+  // Bulk create tasks from suggestions
+  fastify.post<{
+    Params: { id: string };
+    Body: {
+      tasks: Array<{
+        title: string;
+        description: string;
+        priority: 'P0' | 'P1' | 'P2' | 'P3';
+      }>;
+    };
+  }>('/:id/create-tasks', async (request, reply) => {
+    const { id } = request.params;
+    const { tasks: taskSpecs } = request.body;
+
+    if (!Array.isArray(taskSpecs) || taskSpecs.length === 0) {
+      return reply.status(400).send({ error: 'Tasks array is required and must not be empty' });
+    }
+
+    try {
+      // Verify project exists
+      const projectPath = join(WORKSPACE_PATH, id);
+      await stat(projectPath);
+
+      // Create all tasks
+      const createdTasks: Task[] = [];
+      for (const taskSpec of taskSpecs) {
+        const task = await createTask({
+          title: taskSpec.title,
+          description: taskSpec.description,
+          priority: taskSpec.priority,
+          projectId: id,
+          status: 'backlog',
+          agentId: null,
+          sessionKey: null,
+          handoffNotes: null,
+        });
+        createdTasks.push(task);
+      }
+
+      // Log the event
+      addActivity({
+        type: 'task',
+        message: `Created ${createdTasks.length} task(s) from PROJECT.md in project: ${id}`,
+        project: id,
+        severity: 'success',
+        details: {
+          taskCount: createdTasks.length,
+          taskIds: createdTasks.map(t => t.id),
+        },
+      });
+
+      return {
+        success: true,
+        projectId: id,
+        created: createdTasks.length,
+        tasks: createdTasks,
+      };
+    } catch (error) {
+      fastify.log.error(error);
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return reply.status(404).send({ error: 'Project not found' });
+      }
+      return reply.status(500).send({ error: 'Failed to create tasks' });
     }
   });
 }
