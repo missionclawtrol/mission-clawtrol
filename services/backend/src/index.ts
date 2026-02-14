@@ -231,6 +231,53 @@ function extractCommitHash(text: string): string | undefined {
 }
 
 /**
+ * Get the most recent commit hash from git log since a certain date
+ * Converts UTC timestamps to local time for git log (which uses local time)
+ */
+async function getMostRecentCommitHash(
+  repoPath: string,
+  sinceDate?: Date
+): Promise<string | undefined> {
+  try {
+    console.log('[GetRecentCommit] Querying git log', sinceDate ? `since ${sinceDate.toISOString()}` : '');
+    
+    let command = `git -C ${repoPath} log --pretty=format:%H -n 1`;
+    if (sinceDate) {
+      // git log --since uses local time, not UTC
+      // Convert UTC timestamp to local time by accounting for timezone offset
+      const tzOffsetMs = new Date().getTimezoneOffset() * 60 * 1000;
+      const localDate = new Date(sinceDate.getTime() - tzOffsetMs);
+      
+      // Format: "YYYY-MM-DD HH:MM:SS"
+      const year = localDate.getUTCFullYear();
+      const month = String(localDate.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(localDate.getUTCDate()).padStart(2, '0');
+      const hours = String(localDate.getUTCHours()).padStart(2, '0');
+      const minutes = String(localDate.getUTCMinutes()).padStart(2, '0');
+      const seconds = String(localDate.getUTCSeconds()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+      
+      console.log('[GetRecentCommit] Date filter (local time):', dateStr);
+      command += ` --since="${dateStr}"`;
+    }
+    
+    const { stdout } = await execAsync(command, { timeout: 5000 });
+    const hash = stdout.trim();
+    
+    if (hash && hash.match(/^[a-f0-9]{7,40}$/)) {
+      console.log('[GetRecentCommit] ✅ Found recent commit:', hash);
+      return hash;
+    }
+    
+    console.log('[GetRecentCommit] No valid commit hash found in git log');
+    return undefined;
+  } catch (err) {
+    console.error('[GetRecentCommit] Error querying git log:', err);
+    return undefined;
+  }
+}
+
+/**
  * Calculate lines changed from a git commit
  */
 async function getLinesChanged(
@@ -284,7 +331,17 @@ async function completeTask(sessionKey: string) {
       console.log('[CompleteTask] First 500 chars of accumulated text:', accumulatedText.substring(0, 500));
       
       // Extract commit hash from accumulated text
-      const commitHash = extractCommitHash(accumulatedText);
+      let commitHash = extractCommitHash(accumulatedText);
+      
+      // Fallback: if no explicit hash found, query git log for recent commits
+      if (!commitHash && task.createdAt) {
+        console.log('[CompleteTask] No explicit commit hash found, trying git log fallback');
+        const repoPath = '/home/chris/.openclaw/workspace/mission-clawtrol';
+        const taskStartTime = new Date(task.createdAt);
+        // Add a small buffer to catch commits made right at task start
+        taskStartTime.setSeconds(taskStartTime.getSeconds() - 5);
+        commitHash = await getMostRecentCommitHash(repoPath, taskStartTime);
+      }
       
       // Calculate lines changed if we have a commit hash
       let linesChanged: { added: number; removed: number; total: number } | undefined;
@@ -292,7 +349,7 @@ async function completeTask(sessionKey: string) {
       let humanCost: number | undefined;
       
       if (commitHash) {
-        console.log('[CompleteTask] Found commit hash:', commitHash);
+        console.log('[CompleteTask] Using commit hash:', commitHash);
         const repoPath = '/home/chris/.openclaw/workspace/mission-clawtrol';
         const diff = await getLinesChanged(commitHash, repoPath);
         
@@ -312,7 +369,7 @@ async function completeTask(sessionKey: string) {
             total: totalLines,
           };
           
-          console.log('[CompleteTask] Calculated metrics:', {
+          console.log('[CompleteTask] ✅ Calculated metrics:', {
             commitHash,
             linesChanged,
             estimatedHumanMinutes,
@@ -322,7 +379,7 @@ async function completeTask(sessionKey: string) {
           console.log('[CompleteTask] No lines changed for commit:', commitHash);
         }
       } else {
-        console.log('[CompleteTask] No commit hash found in accumulated text');
+        console.log('[CompleteTask] ⚠️ No commit hash found (neither explicit nor via fallback)');
       }
       
       const updatedTask = await updateTask(task.id, {
