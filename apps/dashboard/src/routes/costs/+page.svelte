@@ -140,7 +140,8 @@
     });
   }
 
-  function truncateId(id: string): string {
+  function truncateId(id: string | null | undefined): string {
+    if (!id) return 'N/A';
     return id.slice(0, 8);
   }
 
