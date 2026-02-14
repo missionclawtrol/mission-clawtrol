@@ -10,6 +10,7 @@
     { name: 'Tasks', href: '/tasks', icon: '📋' },
     { name: 'Approvals', href: '/approvals', icon: '✅' },
     { name: 'Projects', href: '/projects', icon: '📁' },
+    { name: 'Costs', href: '/costs', icon: '💰' },
     { name: 'Settings', href: '/settings', icon: '⚙️' },
   ];
   
