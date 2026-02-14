@@ -1,53 +1,21 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fetchAgents, fetchProjects, fetchActivity, checkHealth, deleteAgent, type Agent, type Project, type ActivityEvent } from '$lib/api';
+  import { fetchAgents, fetchTasks, checkHealth, type Agent, type Task } from '$lib/api';
   import { connectWebSocket, wsConnected, wsMessages } from '$lib/websocket';
   
   let agents: Agent[] = [];
-  let projects: Project[] = [];
-  let activity: ActivityEvent[] = [];
+  let tasks: Task[] = [];
   let backendConnected = false;
   let loading = true;
-  let deletingAgent: Agent | null = null;
   
-  async function handleDeleteAgent() {
-    if (!deletingAgent) return;
-    const result = await deleteAgent(deletingAgent.id);
-    if (result.success) {
-      agents = agents.filter(a => a.id !== deletingAgent?.id);
-    }
-    deletingAgent = null;
-  }
+  // Filtered task lists
+  let needsAttention: Task[] = [];
+  let recentCompleted: Task[] = [];
   
-  const statusIcons: Record<string, string> = {
-    idle: '🟢',
-    working: '🟡',
-    error: '🔴',
-    waiting: '⏳',
-    offline: '⚫',
-  };
-  
-  async function loadData() {
-    loading = true;
-    
-    // Check backend health
-    backendConnected = await checkHealth();
-    
-    if (backendConnected) {
-      // Fetch data in parallel
-      const [agentsData, projectsData, activityData] = await Promise.all([
-        fetchAgents(),
-        fetchProjects(),
-        fetchActivity(10),
-      ]);
-      
-      agents = agentsData;
-      projects = projectsData;
-      activity = activityData;
-    }
-    
-    loading = false;
-  }
+  // Quick stats
+  let tasksToday = 0;
+  let completedThisWeek = 0;
+  let activeAgents = 0;
   
   function formatTime(timestamp: string): string {
     const date = new Date(timestamp);
@@ -68,6 +36,117 @@
     return `${diffDays}d ago`;
   }
   
+  function getStatusColor(status: string): string {
+    switch (status) {
+      case 'online':
+      case 'working':
+        return 'bg-green-500';
+      case 'idle':
+        return 'bg-yellow-500';
+      case 'offline':
+      default:
+        return 'bg-gray-500';
+    }
+  }
+  
+  function getStatusDisplay(status: string): string {
+    switch (status) {
+      case 'online':
+      case 'working':
+        return 'Online';
+      case 'idle':
+        return 'Idle';
+      case 'offline':
+      default:
+        return 'Offline';
+    }
+  }
+  
+  function filterNeedsAttention(allTasks: Task[]): Task[] {
+    const now = new Date();
+    const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+    
+    return allTasks.filter(task => {
+      // Status = 'review' AND updatedAt > 2 hours ago
+      if (task.status === 'review' && task.updatedAt) {
+        const updatedAt = new Date(task.updatedAt);
+        if (updatedAt > twoHoursAgo) return true;
+      }
+      
+      // Status = 'todo' or 'in_progress' AND agentId is null
+      if ((task.status === 'todo' || task.status === 'in_progress') && !task.agentId) {
+        return true;
+      }
+      
+      // Priority = 'P0' or 'P1' AND status not 'done'
+      if ((task.priority === 'P0' || task.priority === 'P1') && task.status !== 'done') {
+        return true;
+      }
+      
+      return false;
+    });
+  }
+  
+  function calculateStats(allTasks: Task[], allAgents: Agent[]) {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    
+    // Tasks today
+    tasksToday = allTasks.filter(t => {
+      if (!t.createdAt) return false;
+      const created = new Date(t.createdAt);
+      return created >= today;
+    }).length;
+    
+    // Completed this week
+    completedThisWeek = allTasks.filter(t => {
+      if (t.status !== 'done' || !t.updatedAt) return false;
+      const updated = new Date(t.updatedAt);
+      return updated >= weekAgo;
+    }).length;
+    
+    // Active agents
+    activeAgents = allAgents.filter(a => a.status === 'working' || a.status === 'online').length;
+  }
+  
+  async function loadData() {
+    loading = true;
+    
+    // Check backend health
+    backendConnected = await checkHealth();
+    
+    if (backendConnected) {
+      try {
+        // Fetch data in parallel
+        const [agentsData, tasksData] = await Promise.all([
+          fetchAgents(),
+          fetchTasks(),
+        ]);
+        
+        agents = agentsData;
+        tasks = tasksData;
+        
+        // Filter and calculate
+        needsAttention = filterNeedsAttention(tasks);
+        recentCompleted = tasks
+          .filter(t => t.status === 'done')
+          .sort((a, b) => {
+            const aDate = new Date(a.updatedAt || 0).getTime();
+            const bDate = new Date(b.updatedAt || 0).getTime();
+            return bDate - aDate;
+          })
+          .slice(0, 5);
+        
+        calculateStats(tasks, agents);
+      } catch (error) {
+        console.error('Failed to load data:', error);
+      }
+    }
+    
+    loading = false;
+  }
+  
   onMount(() => {
     loadData();
     connectWebSocket();
@@ -83,14 +162,7 @@
   // React to WebSocket messages
   $: if ($wsMessages.length > 0) {
     const lastMsg = $wsMessages[0];
-    if (lastMsg.type === 'agent_status') {
-      loadData();
-    } else if (lastMsg.type === 'activity' && lastMsg.payload) {
-      // Insert new activity event at the top without full reload
-      const newEvent = lastMsg.payload as ActivityEvent;
-      activity = [newEvent, ...activity.slice(0, 9)]; // Keep max 10 items
-    } else if (lastMsg.type === 'approval-requested' || lastMsg.type === 'approval-resolved') {
-      // Refresh data on approval events
+    if (lastMsg.type === 'agent_status' || lastMsg.type === 'task_update' || lastMsg.type === 'activity') {
       loadData();
     }
   }
@@ -108,81 +180,38 @@
     </div>
   {/if}
   
-  <!-- Stats Row -->
-  <div class="grid grid-cols-4 gap-4">
-    <div class="bg-slate-800 rounded-lg p-4 border border-slate-700">
-      <div class="text-3xl font-bold">{loading ? '...' : agents.length}</div>
-      <div class="text-sm text-slate-400">Total Agents</div>
-    </div>
-    <div class="bg-slate-800 rounded-lg p-4 border border-slate-700">
-      <div class="text-3xl font-bold">{loading ? '...' : agents.filter(a => a.status === 'working').length}</div>
-      <div class="text-sm text-slate-400">Active</div>
-    </div>
-    <div class="bg-slate-800 rounded-lg p-4 border border-slate-700">
-      <div class="text-3xl font-bold">{loading ? '...' : projects.length}</div>
-      <div class="text-sm text-slate-400">Projects</div>
-    </div>
-    <div class="bg-slate-800 rounded-lg p-4 border border-slate-700">
-      <div class="text-3xl font-bold text-yellow-400">0</div>
-      <div class="text-sm text-slate-400">Pending Approvals</div>
-    </div>
-  </div>
-  
-  <!-- Main Grid -->
-  <div class="grid grid-cols-2 gap-6">
-    <!-- Agents Panel -->
-    <div class="bg-slate-800 rounded-lg border border-slate-700">
-      <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
-        <h2 class="font-semibold">Agents</h2>
-        <div class="flex items-center gap-2">
-          {#if $wsConnected}
-            <span class="w-2 h-2 bg-green-500 rounded-full"></span>
-            <span class="text-xs text-slate-500">Live</span>
-          {:else}
-            <span class="w-2 h-2 bg-slate-500 rounded-full"></span>
-            <span class="text-xs text-slate-500">Polling</span>
-          {/if}
-        </div>
+  <!-- Main Grid: 2-column on desktop, stack on mobile -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- 1. Needs Attention -->
+    <div class="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+      <div class="px-4 py-3 border-b border-slate-700 bg-slate-700/50">
+        <h2 class="font-semibold text-slate-100 flex items-center gap-2">
+          <span>🚨</span> Needs Attention
+        </h2>
       </div>
-      <div class="p-4 space-y-3">
+      <div class="p-4 space-y-3 min-h-[200px]">
         {#if loading}
-          <div class="text-center py-8 text-slate-500">Loading agents...</div>
-        {:else if agents.length === 0}
-          <div class="text-center py-8 text-slate-500">No agents found</div>
+          <div class="text-center py-8 text-slate-500">Loading...</div>
+        {:else if needsAttention.length === 0}
+          <div class="text-center py-8 text-slate-500">All tasks on track ✅</div>
         {:else}
-          {#each agents as agent}
-            <div class="flex items-center justify-between p-3 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors">
-              <div class="flex items-center gap-3">
-                <div class="relative">
-                  <span class="text-2xl">{agent.emoji || '🤖'}</span>
-                  <span class="absolute -bottom-0.5 -right-0.5 text-xs">{statusIcons[agent.status] || '⚫'}</span>
+          {#each needsAttention as task}
+            <div class="p-3 bg-slate-700/50 rounded-lg border-l-2 border-orange-500 hover:bg-slate-700 transition-colors cursor-pointer">
+              <div class="flex items-start justify-between gap-2 mb-1">
+                <div class="flex-1">
+                  <div class="font-medium text-slate-100">{task.title}</div>
+                  <div class="text-xs text-slate-500">{task.projectName || 'Unknown project'}</div>
                 </div>
-                <div>
-                  <div class="font-medium">{agent.name}</div>
-                  <div class="text-xs text-slate-500">{agent.role || agent.id}</div>
-                  {#if agent.model}
-                    <div class="text-xs text-blue-400/70 mt-0.5">🧠 {agent.model.split('/').pop()}</div>
-                  {/if}
-                </div>
+                <span class="inline-block px-2 py-1 rounded text-xs font-medium {task.priority === 'P0' ? 'bg-red-500/20 text-red-300' : task.priority === 'P1' ? 'bg-orange-500/20 text-orange-300' : 'bg-slate-600 text-slate-300'}">
+                  {task.priority}
+                </span>
               </div>
-              <div class="flex items-center gap-3">
-                <div class="text-right">
-                  <div class="text-sm capitalize text-slate-300">{agent.status}</div>
-                  {#if agent.lastActive}
-                    <div class="text-xs text-slate-500">{formatRelativeTime(agent.lastActive)}</div>
-                  {/if}
-                  {#if agent.tokens}
-                    <div class="text-xs text-emerald-400/60">{agent.tokens.toLocaleString()} tokens</div>
-                  {/if}
-                </div>
-                {#if agent.id !== 'agent:main:main'}
-                  <button
-                    on:click|stopPropagation={() => deletingAgent = agent}
-                    class="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
-                    title="Delete agent"
-                  >
-                    🗑️
-                  </button>
+              <div class="flex items-center justify-between text-xs text-slate-400">
+                <span>Status: {task.status.replace('_', ' ')}</span>
+                {#if task.agentName}
+                  <span>{task.agentEmoji || '🤖'} {task.agentName}</span>
+                {:else}
+                  <span class="text-red-400">Unassigned</span>
                 {/if}
               </div>
             </div>
@@ -191,109 +220,127 @@
       </div>
     </div>
     
-    <!-- Projects Panel -->
-    <div class="bg-slate-800 rounded-lg border border-slate-700">
-      <div class="px-4 py-3 border-b border-slate-700">
-        <h2 class="font-semibold">Projects</h2>
+    <!-- 2. Quick Stats -->
+    <div class="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+      <div class="px-4 py-3 border-b border-slate-700 bg-slate-700/50">
+        <h2 class="font-semibold text-slate-100 flex items-center gap-2">
+          <span>📊</span> Quick Stats
+        </h2>
+      </div>
+      <div class="p-4 grid grid-cols-3 gap-3">
+        <div class="bg-slate-700/50 rounded-lg p-4 border border-slate-600 text-center">
+          <div class="text-3xl font-bold text-blue-400">{loading ? '...' : tasksToday}</div>
+          <div class="text-xs text-slate-400 mt-1">Tasks Today</div>
+        </div>
+        <div class="bg-slate-700/50 rounded-lg p-4 border border-slate-600 text-center">
+          <div class="text-3xl font-bold text-green-400">{loading ? '...' : completedThisWeek}</div>
+          <div class="text-xs text-slate-400 mt-1">Completed Week</div>
+        </div>
+        <div class="bg-slate-700/50 rounded-lg p-4 border border-slate-600 text-center">
+          <div class="text-3xl font-bold text-purple-400">{loading ? '...' : activeAgents}</div>
+          <div class="text-xs text-slate-400 mt-1">Active Agents</div>
+        </div>
+      </div>
+      
+      <!-- Additional Info -->
+      <div class="px-4 py-3 border-t border-slate-700">
+        <div class="space-y-2 text-sm">
+          <div class="flex justify-between">
+            <span class="text-slate-400">Total Tasks:</span>
+            <span class="text-slate-100 font-medium">{loading ? '...' : tasks.length}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-400">Total Agents:</span>
+            <span class="text-slate-100 font-medium">{loading ? '...' : agents.length}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-400">Issues to Address:</span>
+            <span class="text-slate-100 font-medium">{loading ? '...' : needsAttention.length}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Second Row: Agent Status + Recent Activity -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- 3. Agent Status Grid -->
+    <div class="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+      <div class="px-4 py-3 border-b border-slate-700 bg-slate-700/50">
+        <h2 class="font-semibold text-slate-100 flex items-center gap-2">
+          <span>🤖</span> Agent Status
+        </h2>
+      </div>
+      <div class="p-4">
+        {#if loading}
+          <div class="text-center py-8 text-slate-500">Loading agents...</div>
+        {:else if agents.length === 0}
+          <div class="text-center py-8 text-slate-500">No agents found</div>
+        {:else}
+          <div class="grid grid-cols-3 gap-3">
+            {#each agents as agent}
+              <div class="bg-slate-700/50 rounded-lg p-3 border border-slate-600 hover:border-slate-500 transition-colors cursor-pointer">
+                <div class="flex items-start gap-2 mb-2">
+                  <span class="text-2xl">{agent.emoji || '🤖'}</span>
+                  <div class="flex-1 min-w-0">
+                    <div class="text-sm font-medium text-slate-100 truncate">{agent.name}</div>
+                    <div class="text-xs text-slate-500 truncate">{agent.role || 'Agent'}</div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span class="w-2 h-2 rounded-full {getStatusColor(agent.status)}"></span>
+                  <span class="text-xs text-slate-400">{getStatusDisplay(agent.status)}</span>
+                </div>
+                {#if agent.lastActive}
+                  <div class="text-xs text-slate-500 mt-1">{formatRelativeTime(agent.lastActive)}</div>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    </div>
+    
+    <!-- 4. Recent Activity -->
+    <div class="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+      <div class="px-4 py-3 border-b border-slate-700 bg-slate-700/50">
+        <h2 class="font-semibold text-slate-100 flex items-center gap-2">
+          <span>📋</span> Recent Activity
+        </h2>
       </div>
       <div class="p-4 space-y-3">
         {#if loading}
-          <div class="text-center py-8 text-slate-500">Loading projects...</div>
-        {:else if projects.length === 0}
-          <div class="text-center py-8 text-slate-500">No projects found</div>
+          <div class="text-center py-8 text-slate-500">Loading...</div>
+        {:else if recentCompleted.length === 0}
+          <div class="text-center py-8 text-slate-500">No completed tasks</div>
         {:else}
-          {#each projects as project}
-            <div class="p-3 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors cursor-pointer">
-              <div class="flex items-center justify-between mb-2">
-                <div class="flex items-center gap-2">
-                  <span>📁</span>
-                  <span class="font-medium">{project.name}</span>
+          {#each recentCompleted as task}
+            <div class="p-3 bg-slate-700/50 rounded-lg border-l-2 border-green-500 hover:bg-slate-700 transition-colors">
+              <div class="flex items-start justify-between gap-2 mb-1">
+                <div class="flex-1 min-w-0">
+                  <div class="font-medium text-slate-100 truncate">{task.title}</div>
+                  <div class="text-xs text-slate-500">
+                    {task.projectName || 'Unknown project'}
+                  </div>
                 </div>
-                {#if project.updated}
-                  <span class="text-xs text-slate-500">{formatRelativeTime(project.updated)}</span>
-                {/if}
+                <span class="inline-block px-2 py-1 rounded text-xs bg-green-500/20 text-green-300 whitespace-nowrap">
+                  Done
+                </span>
               </div>
-              <div class="text-xs text-slate-500">{project.path}</div>
+              <div class="flex items-center justify-between text-xs text-slate-400">
+                <span>{formatRelativeTime(task.updatedAt || '')}</span>
+                <span>{task.agentEmoji || '🤖'} {task.agentName || 'Unknown'}</span>
+              </div>
             </div>
           {/each}
         {/if}
       </div>
     </div>
   </div>
-  
-  <!-- Recent Activity -->
-  <div class="bg-slate-800 rounded-lg border border-slate-700">
-    <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
-      <h2 class="font-semibold">Recent Activity</h2>
-      <button on:click={loadData} class="text-xs text-slate-500 hover:text-slate-300">Refresh</button>
-    </div>
-    <div class="p-4 space-y-2">
-      {#if loading}
-        <div class="text-center py-4 text-slate-500">Loading activity...</div>
-      {:else if activity.length === 0}
-        <div class="text-center py-4 text-slate-500">No recent activity</div>
-      {:else}
-        {#each activity as event}
-          <div class="flex items-center gap-4 text-sm">
-            <span class="text-slate-500 w-16">{formatTime(event.timestamp)}</span>
-            {#if event.type === 'message'}
-              <span class="text-blue-400">💬</span>
-              <span><span class="text-slate-300">{event.from || 'Unknown'}</span> → <span class="text-slate-300">{event.to || 'Unknown'}</span>: {event.message}</span>
-            {:else if event.type === 'status'}
-              <span class="text-yellow-400">🔄</span>
-              <span><span class="text-slate-300">{event.agent}</span>: {event.message}</span>
-            {:else if event.type === 'file'}
-              <span class="text-green-400">📄</span>
-              <span><span class="text-slate-300">{event.agent}</span>: {event.message}</span>
-            {:else if event.type === 'spawn'}
-              <span class="text-purple-400">🚀</span>
-              <span><span class="text-slate-300 font-medium">{event.agent}</span>: {event.message}</span>
-            {:else if event.type === 'error'}
-              <span class="text-red-400">❌</span>
-              <span class="text-red-300">{event.message}</span>
-            {:else if event.type === 'approval'}
-              <span class="text-orange-400">🔐</span>
-              <span>{event.message}</span>
-            {:else if event.type === 'project'}
-              <span class="text-cyan-400">📁</span>
-              <span>{event.message}</span>
-            {:else if event.type === 'complete'}
-              <span class="text-green-400">✅</span>
-              <span><span class="text-slate-300">{event.agent}</span>: {event.message}</span>
-            {:else}
-              <span class="text-slate-400">•</span>
-              <span>{event.message || 'Unknown event'}</span>
-            {/if}
-          </div>
-        {/each}
-      {/if}
-    </div>
-  </div>
 </div>
 
-<!-- Delete Confirmation Modal -->
-{#if deletingAgent}
-  <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" on:click={() => deletingAgent = null}>
-    <div class="bg-slate-800 rounded-lg p-6 max-w-md border border-slate-700" on:click|stopPropagation>
-      <h3 class="text-lg font-semibold mb-4">Delete Agent?</h3>
-      <p class="text-slate-400 mb-4">
-        Are you sure you want to delete <span class="text-white font-medium">{deletingAgent.name}</span>?
-        This will remove the session and cannot be undone.
-      </p>
-      <div class="flex gap-3 justify-end">
-        <button
-          on:click={() => deletingAgent = null}
-          class="px-4 py-2 text-slate-400 hover:text-white transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          on:click={handleDeleteAgent}
-          class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
-        >
-          Delete
-        </button>
-      </div>
-    </div>
-  </div>
-{/if}
+<style>
+  :global(body) {
+    @apply bg-slate-900;
+  }
+</style>
