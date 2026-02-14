@@ -393,7 +393,30 @@ gatewayClient.on('agent', async (payload: any) => {
     sessionLastActivity.set(sessionKey, Date.now());
 
     // Check if this is a NEW subagent session
+    // IMPORTANT: Check both the in-memory set AND the database to prevent duplicates
     if (!knownSubagentSessions.has(sessionKey)) {
+      // First check if task already exists in database
+      const existingTask = await findTaskBySessionKey(sessionKey);
+      if (existingTask) {
+        // Task already exists - just track it in memory and return
+        console.log('[SubagentHandler] Task already exists for session:', sessionKey, 'Task ID:', existingTask.id);
+        
+        // Register this session in memory
+        const parts = sessionKey.split(':');
+        const agentId = parts.length >= 2 ? parts[1] : 'unknown';
+        knownSubagentSessions.set(sessionKey, {
+          agentId,
+          title: existingTask.title,
+          startedAt: Date.now(),
+        });
+        
+        subagentTaskIds.set(sessionKey, existingTask.id);
+        subagentTextBuffers.set(sessionKey, '');
+        subagentTitleExtracted.set(sessionKey, existingTask.title !== 'Task in progress...');
+        
+        return; // Don't create duplicate
+      }
+
       // Extract agentId from sessionKey (format: "agent:senior-dev:subagent:...")
       const parts = sessionKey.split(':');
       const agentId = parts.length >= 2 ? parts[1] : 'unknown';
@@ -502,9 +525,29 @@ gatewayClient.on('subagent-started', async (payload: any) => {
       return;
     }
 
+    // CRITICAL: Check if task already exists for this sessionKey to prevent duplicates
+    const existingTask = await findTaskBySessionKey(sessionKey);
+    if (existingTask) {
+      console.log('[SubagentHandler] Task already exists for session:', sessionKey, 'Task ID:', existingTask.id);
+      return; // Don't create duplicate
+    }
+
+    // Also check the in-memory set
+    if (knownSubagentSessions.has(sessionKey)) {
+      console.log('[SubagentHandler] Session already being tracked:', sessionKey);
+      return; // Already tracking this session
+    }
+
     // Extract title from description (first line or first 60 chars)
     const titleLines = description.split('\n');
     const title = titleLines[0].substring(0, 100) || 'Subagent task';
+
+    // Mark session as known before creating task
+    knownSubagentSessions.set(sessionKey, {
+      agentId,
+      title,
+      startedAt: Date.now(),
+    });
 
     // Create a task for this subagent
     const task = await createTask({
@@ -517,6 +560,10 @@ gatewayClient.on('subagent-started', async (payload: any) => {
       sessionKey,
       handoffNotes: null,
     });
+
+    subagentTaskIds.set(sessionKey, task.id);
+    subagentTextBuffers.set(sessionKey, '');
+    subagentTitleExtracted.set(sessionKey, false);
 
     console.log('[SubagentHandler] Created task:', task.id, 'for session:', sessionKey);
 
