@@ -11,6 +11,7 @@ import { taskRoutes } from './routes/tasks.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { gatewayClient, ApprovalRequest, ApprovalResolved } from './gateway-client.js';
 import { loadAssociations } from './project-agents.js';
+import { createTask, updateTask, findTaskBySessionKey } from './task-store.js';
 
 const fastify = Fastify({
   logger: true,
@@ -130,6 +131,96 @@ gatewayClient.on('approval-resolved', (resolved: ApprovalResolved) => {
     decision: resolved.decision,
     resolvedBy: resolved.resolvedBy,
   });
+});
+
+// Handle subagent spawn events
+gatewayClient.on('subagent-started', async (payload: any) => {
+  try {
+    console.log('[SubagentHandler] Subagent started:', JSON.stringify(payload));
+    
+    // Extract relevant fields from the payload
+    const sessionKey = payload.sessionKey || payload.session || payload.id;
+    const agentId = payload.agentId || payload.agent || 'unknown';
+    const description = payload.description || payload.message || 'Subagent task';
+    
+    if (!sessionKey) {
+      console.warn('[SubagentHandler] No sessionKey in subagent-started event');
+      return;
+    }
+
+    // Extract title from description (first line or first 60 chars)
+    const titleLines = description.split('\n');
+    const title = titleLines[0].substring(0, 100) || 'Subagent task';
+
+    // Create a task for this subagent
+    const task = await createTask({
+      title,
+      description,
+      status: 'in-progress',
+      priority: 'P2',
+      projectId: 'mission-clawtrol',
+      agentId,
+      sessionKey,
+      handoffNotes: null,
+    });
+
+    console.log('[SubagentHandler] Created task:', task.id, 'for session:', sessionKey);
+
+    // Broadcast the new task
+    broadcast('task-created', {
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      priority: task.priority,
+      agentId: task.agentId,
+      sessionKey: task.sessionKey,
+    });
+  } catch (err) {
+    console.error('[SubagentHandler] Error handling subagent-started:', err);
+  }
+});
+
+// Handle subagent completion events
+gatewayClient.on('subagent-completed', async (payload: any) => {
+  try {
+    console.log('[SubagentHandler] Subagent completed:', JSON.stringify(payload));
+    
+    // Extract relevant fields from the payload
+    const sessionKey = payload.sessionKey || payload.session || payload.id;
+    const completionSummary = payload.summary || payload.result || payload.message || 'Completed';
+
+    if (!sessionKey) {
+      console.warn('[SubagentHandler] No sessionKey in subagent-completed event');
+      return;
+    }
+
+    // Find the task by sessionKey
+    const task = await findTaskBySessionKey(sessionKey);
+    if (!task) {
+      console.warn('[SubagentHandler] No task found for session:', sessionKey);
+      return;
+    }
+
+    // Update the task to done
+    const updatedTask = await updateTask(task.id, {
+      status: 'done',
+      handoffNotes: completionSummary,
+    });
+
+    console.log('[SubagentHandler] Updated task:', task.id, 'to done');
+
+    // Broadcast the task update
+    broadcast('task-updated', {
+      id: updatedTask!.id,
+      title: updatedTask!.title,
+      status: updatedTask!.status,
+      priority: updatedTask!.priority,
+      completedAt: updatedTask!.completedAt,
+      handoffNotes: updatedTask!.handoffNotes,
+    });
+  } catch (err) {
+    console.error('[SubagentHandler] Error handling subagent-completed:', err);
+  }
 });
 
 // Start server

@@ -84,6 +84,8 @@ export class GatewayClient extends EventEmitter {
           
           // Handle events
           else if (msg.type === 'event') {
+            // Log all events for debugging
+            console.log('[GatewayClient] Received event:', msg.event, JSON.stringify(msg.payload, null, 2));
             this.handleEvent(msg.event, msg.payload);
           }
           
@@ -163,6 +165,12 @@ export class GatewayClient extends EventEmitter {
     } else if (event === 'exec.approval.resolved') {
       console.log('[GatewayClient] Approval resolved:', (payload as ApprovalResolved).id);
       this.emit('approval-resolved', payload as ApprovalResolved);
+    } else if (event === 'sessions.spawn.started' || event === 'subagent-started' || event === 'session.started') {
+      console.log('[GatewayClient] Subagent started:', payload);
+      this.emit('subagent-started', payload);
+    } else if (event === 'sessions.spawn.completed' || event === 'subagent-completed' || event === 'session.completed') {
+      console.log('[GatewayClient] Subagent completed:', payload);
+      this.emit('subagent-completed', payload);
     }
   }
 

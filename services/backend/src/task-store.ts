@@ -174,3 +174,11 @@ export async function getProjectTaskStats(projectId: string): Promise<{
     completionPercent,
   };
 }
+
+/**
+ * Find task by session key (used to link subagent tasks)
+ */
+export async function findTaskBySessionKey(sessionKey: string): Promise<Task | null> {
+  const tasks = await loadTasks();
+  return tasks.find(t => t.sessionKey === sessionKey) || null;
+}
