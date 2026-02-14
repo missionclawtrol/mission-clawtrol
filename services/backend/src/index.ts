@@ -3,6 +3,8 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
 import { WebSocket } from 'ws';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import { agentRoutes } from './routes/agents.js';
 import { projectRoutes } from './routes/projects.js';
 import { activityRoutes, logApprovalEvent, setBroadcastFunction } from './routes/activity.js';
@@ -13,6 +15,8 @@ import { settingsRoutes } from './routes/settings.js';
 import { gatewayClient, ApprovalRequest, ApprovalResolved } from './gateway-client.js';
 import { loadAssociations } from './project-agents.js';
 import { createTask, updateTask, findTaskBySessionKey } from './task-store.js';
+
+const execAsync = promisify(exec);
 
 const fastify = Fastify({
   logger: true,
@@ -200,6 +204,49 @@ async function checkAndExtractTitle(sessionKey: string, taskId: string) {
 }
 
 /**
+ * Extract commit hash from streaming text using regex patterns
+ */
+function extractCommitHash(text: string): string | undefined {
+  if (!text || typeof text !== 'string') return undefined;
+  
+  // Try to find "Commit:" or "commit" pattern first
+  const commitMatch = text.match(/[Cc]ommit[:\s]+([a-f0-9]{7,40})/);
+  if (commitMatch) {
+    return commitMatch[1];
+  }
+  
+  // Fallback to raw hash pattern (7-40 hex chars)
+  const hashMatch = text.match(/([a-f0-9]{7,40})/);
+  if (hashMatch) {
+    return hashMatch[1];
+  }
+  
+  return undefined;
+}
+
+/**
+ * Calculate lines changed from a git commit
+ */
+async function getLinesChanged(
+  commitHash: string,
+  repoPath: string
+): Promise<{ added: number; removed: number }> {
+  try {
+    const { stdout } = await execAsync(
+      `git -C ${repoPath} diff --shortstat ${commitHash}^..${commitHash}`,
+      { timeout: 5000 }
+    );
+    // Parse: " 3 files changed, 47 insertions(+), 12 deletions(-)"
+    const added = parseInt(stdout.match(/(\d+) insertion/)?.[1] || '0');
+    const removed = parseInt(stdout.match(/(\d+) deletion/)?.[1] || '0');
+    return { added, removed };
+  } catch (err) {
+    console.error('[LinesChanged] Error getting diff for commit:', commitHash, err);
+    return { added: 0, removed: 0 };
+  }
+}
+
+/**
  * Complete a task and move it to review status
  * (CSO will review and mark as done)
  */
@@ -212,9 +259,53 @@ async function completeTask(sessionKey: string) {
     }
 
     if (task.status === 'in-progress') {
+      const accumulatedText = subagentTextBuffers.get(sessionKey) || '';
+      
+      // Extract commit hash from accumulated text
+      const commitHash = extractCommitHash(accumulatedText);
+      
+      // Calculate lines changed if we have a commit hash
+      let linesChanged: { added: number; removed: number; total: number } | undefined;
+      let estimatedHumanMinutes: number | undefined;
+      let humanCost: number | undefined;
+      
+      if (commitHash) {
+        console.log('[CompleteTask] Found commit hash:', commitHash);
+        const repoPath = '/home/chris/.openclaw/workspace/mission-clawtrol';
+        const diff = await getLinesChanged(commitHash, repoPath);
+        
+        if (diff.added > 0 || diff.removed > 0) {
+          const MINUTES_PER_LINE = 3; // Industry average for careful coding
+          const totalLines = diff.added + diff.removed;
+          estimatedHumanMinutes = totalLines * MINUTES_PER_LINE;
+          
+          // Get hourly rate from settings (default $100)
+          // TODO: fetch from settings endpoint if needed, for now using hardcoded default
+          const hourlyRate = 100;
+          humanCost = (estimatedHumanMinutes / 60) * hourlyRate;
+          
+          linesChanged = {
+            added: diff.added,
+            removed: diff.removed,
+            total: totalLines,
+          };
+          
+          console.log('[CompleteTask] Calculated metrics:', {
+            commitHash,
+            linesChanged,
+            estimatedHumanMinutes,
+            humanCost,
+          });
+        }
+      }
+      
       const updatedTask = await updateTask(task.id, {
         status: 'review', // Move to review, not done - CSO will review and mark done
         updatedAt: new Date().toISOString(),
+        commitHash,
+        linesChanged,
+        estimatedHumanMinutes,
+        humanCost,
       });
 
       console.log('[CompleteTask] Moved task to review:', task.id, 'for session:', sessionKey);
@@ -227,6 +318,10 @@ async function completeTask(sessionKey: string) {
         priority: updatedTask!.priority,
         updatedAt: updatedTask!.updatedAt,
         handoffNotes: updatedTask!.handoffNotes,
+        commitHash: updatedTask!.commitHash,
+        linesChanged: updatedTask!.linesChanged,
+        estimatedHumanMinutes: updatedTask!.estimatedHumanMinutes,
+        humanCost: updatedTask!.humanCost,
       });
 
       // Clean up
