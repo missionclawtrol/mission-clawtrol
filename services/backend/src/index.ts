@@ -860,6 +860,16 @@ gatewayClient.on('agent', async (payload: any) => {
       });
       await completeTask(sessionKey);
     }
+    
+    // Check for lifecycle end event (this is how OpenClaw signals completion)
+    if (stream === 'lifecycle' && data.phase === 'end') {
+      console.log('[SubagentHandler] ✅ Detected lifecycle end for subagent:', {
+        sessionKey,
+        phase: data.phase,
+        endedAt: data.endedAt,
+      });
+      await completeTask(sessionKey);
+    }
   } catch (err) {
     console.error('[SubagentHandler] Error handling agent event:', err);
   }
