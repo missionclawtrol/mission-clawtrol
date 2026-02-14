@@ -17,6 +17,7 @@
   let selectedTask: Task | null = null;
   let draggedTask: Task | null = null;
   let dragOverColumn: string | null = null;
+  let selectedProjectId: string = ''; // Empty = all projects
   
   // Form state
   let formError = '';
@@ -54,7 +55,13 @@
   }
   
   function getTasksForColumn(columnId: string): Task[] {
-    return tasks.filter(t => t.status === columnId);
+    return tasks.filter(t => {
+      // Filter by status
+      if (t.status !== columnId) return false;
+      // Filter by project if one is selected
+      if (selectedProjectId && t.projectId !== selectedProjectId) return false;
+      return true;
+    });
   }
   
   function getPriorityColor(priority: string): string {
@@ -433,11 +440,36 @@
 <!-- Main Content -->
 <div class="space-y-4">
   <!-- Header -->
-  <div class="flex items-center justify-between">
+  <div class="flex items-center justify-between gap-4">
     <h1 class="text-2xl font-semibold">📋 Tasks</h1>
+    
+    <!-- Project Selector -->
+    <div class="flex items-center gap-2 flex-1 max-w-md">
+      <label for="project-filter" class="text-sm text-slate-400 whitespace-nowrap">Project:</label>
+      <select 
+        id="project-filter"
+        bind:value={selectedProjectId}
+        class="flex-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-sm focus:outline-none focus:border-blue-500"
+      >
+        <option value="">All Projects</option>
+        {#each projects as project}
+          <option value={project.id}>{project.name}</option>
+        {/each}
+      </select>
+      {#if selectedProjectId}
+        <button 
+          on:click={() => selectedProjectId = ''}
+          class="px-2 py-1 text-xs text-slate-400 hover:text-slate-200"
+          title="Clear filter"
+        >
+          ✕
+        </button>
+      {/if}
+    </div>
+    
     <button 
       on:click={() => showNewTaskModal = true}
-      class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition-colors"
+      class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition-colors whitespace-nowrap"
     >
       + New Task
     </button>
