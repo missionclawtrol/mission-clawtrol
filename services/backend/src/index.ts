@@ -24,6 +24,11 @@ const dashboardClients = new Set<WebSocket>();
 const knownSubagentSessions = new Map<string, { agentId: string; title: string; startedAt: number }>();
 const subagentTaskIds = new Map<string, string>(); // sessionKey -> taskId
 
+// Track accumulated text and title extraction state for subagents
+const subagentTextBuffers = new Map<string, string>(); // sessionKey -> accumulated text
+const subagentTitleExtracted = new Map<string, boolean>(); // sessionKey -> title extracted
+const subagentTitleTimers = new Map<string, NodeJS.Timeout>(); // sessionKey -> extraction timer
+
 // Track last activity timestamp for each session (for timeout detection)
 const sessionLastActivity = new Map<string, number>(); // sessionKey -> timestamp
 
@@ -31,11 +36,166 @@ const sessionLastActivity = new Map<string, number>(); // sessionKey -> timestam
 const completionMarkers = ['✅', 'Task Complete', '## Summary', 'Commit:', 'Done:', 'completed', 'finished'];
 
 /**
+ * Extract a meaningful title from accumulated text
+ */
+function extractMeaningfulTitle(text: string): string {
+  if (!text || typeof text !== 'string') {
+    return 'Task in progress...';
+  }
+
+  // Try to find "YOUR TASK:" pattern
+  const taskMatch = text.match(/YOUR TASK[:\s]+([^\n]+)/i);
+  if (taskMatch) {
+    const extracted = taskMatch[1].trim().slice(0, 100);
+    if (extracted.length > 10) return extracted;
+  }
+
+  // Try to find bolded text (**...**)
+  const boldMatch = text.match(/\*\*([^*]+)\*\*/);
+  if (boldMatch) {
+    const extracted = boldMatch[1].trim().slice(0, 100);
+    if (extracted.length > 10) return extracted;
+  }
+
+  // Find first substantial line (> 20 chars and < 100 chars)
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 20 && l.length < 100);
+  if (lines.length > 0) {
+    // Skip common prefixes/headers
+    const line = lines[0];
+    if (!line.match(/^#+\s/) && !line.startsWith('[') && !line.startsWith('{')) {
+      return line;
+    }
+  }
+
+  // Fallback: use any substantial first line
+  const firstNonEmptyLine = text.split('\n').find(l => l.trim().length > 0);
+  if (firstNonEmptyLine && firstNonEmptyLine.trim().length > 10) {
+    return firstNonEmptyLine.trim().slice(0, 100);
+  }
+
+  // Final fallback
+  return 'Task in progress...';
+}
+
+/**
  * Check if an event text contains any completion markers
  */
 function hasCompletionMarker(text: string | undefined): boolean {
   if (!text || typeof text !== 'string') return false;
   return completionMarkers.some(marker => text.includes(marker));
+}
+
+/**
+ * Schedule title extraction for a subagent session
+ * Waits for accumulated text to reach 500 chars or 5 seconds, then extracts and updates title
+ */
+async function scheduleTitleExtraction(sessionKey: string, taskId: string) {
+  // Skip if already extracted
+  if (subagentTitleExtracted.get(sessionKey)) {
+    return;
+  }
+
+  // Clear any existing timer
+  const existingTimer = subagentTitleTimers.get(sessionKey);
+  if (existingTimer) {
+    clearTimeout(existingTimer);
+  }
+
+  // Set new timer for 5 seconds
+  const timer = setTimeout(async () => {
+    try {
+      const accumulatedText = subagentTextBuffers.get(sessionKey) || '';
+      
+      // Only extract if we have enough text
+      if (accumulatedText.length >= 50) {
+        const betterTitle = extractMeaningfulTitle(accumulatedText);
+        
+        if (betterTitle !== 'Task in progress...') {
+          const updatedTask = await updateTask(taskId, {
+            title: betterTitle,
+            updatedAt: new Date().toISOString(),
+          });
+
+          console.log('[TitleExtraction] Updated task title:', {
+            taskId,
+            sessionKey,
+            oldTitle: 'Task in progress...',
+            newTitle: betterTitle,
+            textLength: accumulatedText.length,
+          });
+
+          // Broadcast the update
+          broadcast('task-updated', {
+            id: updatedTask!.id,
+            title: updatedTask!.title,
+            status: updatedTask!.status,
+            priority: updatedTask!.priority,
+            updatedAt: updatedTask!.updatedAt,
+          });
+
+          subagentTitleExtracted.set(sessionKey, true);
+        }
+      }
+    } catch (err) {
+      console.error('[TitleExtraction] Error extracting title:', err);
+    } finally {
+      subagentTitleTimers.delete(sessionKey);
+    }
+  }, 5000); // 5 second delay
+
+  subagentTitleTimers.set(sessionKey, timer);
+}
+
+/**
+ * Check if we should extract title (500 chars accumulated or title hasn't been extracted yet)
+ */
+async function checkAndExtractTitle(sessionKey: string, taskId: string) {
+  if (subagentTitleExtracted.get(sessionKey)) {
+    return; // Already extracted
+  }
+
+  const accumulatedText = subagentTextBuffers.get(sessionKey) || '';
+  
+  // Extract if we have 500+ chars of accumulated text
+  if (accumulatedText.length >= 500) {
+    try {
+      const betterTitle = extractMeaningfulTitle(accumulatedText);
+      
+      if (betterTitle !== 'Task in progress...') {
+        const updatedTask = await updateTask(taskId, {
+          title: betterTitle,
+          updatedAt: new Date().toISOString(),
+        });
+
+        console.log('[TitleExtraction] Updated task title (500 chars threshold):', {
+          taskId,
+          sessionKey,
+          newTitle: betterTitle,
+          textLength: accumulatedText.length,
+        });
+
+        // Broadcast the update
+        broadcast('task-updated', {
+          id: updatedTask!.id,
+          title: updatedTask!.title,
+          status: updatedTask!.status,
+          priority: updatedTask!.priority,
+          updatedAt: updatedTask!.updatedAt,
+        });
+
+        subagentTitleExtracted.set(sessionKey, true);
+
+        // Clear the timer since we're done
+        const timer = subagentTitleTimers.get(sessionKey);
+        if (timer) {
+          clearTimeout(timer);
+          subagentTitleTimers.delete(sessionKey);
+        }
+      }
+    } catch (err) {
+      console.error('[TitleExtraction] Error extracting title:', err);
+    }
+  }
 }
 
 /**
@@ -72,6 +232,15 @@ async function completeTask(sessionKey: string) {
       sessionLastActivity.delete(sessionKey);
       knownSubagentSessions.delete(sessionKey);
       subagentTaskIds.delete(sessionKey);
+      subagentTextBuffers.delete(sessionKey);
+      subagentTitleExtracted.delete(sessionKey);
+      
+      // Clear any pending title extraction timer
+      const timer = subagentTitleTimers.get(sessionKey);
+      if (timer) {
+        clearTimeout(timer);
+        subagentTitleTimers.delete(sessionKey);
+      }
     }
   } catch (err) {
     console.error('[CompleteTask] Error completing task:', err);
@@ -227,14 +396,8 @@ gatewayClient.on('agent', async (payload: any) => {
       const parts = sessionKey.split(':');
       const agentId = parts.length >= 2 ? parts[1] : 'unknown';
 
-      // Generate a title from the first part of the text, or use a generic one
-      let title = 'Subagent task';
-      if (data.text && typeof data.text === 'string') {
-        const firstLine = data.text.split('\n')[0].trim();
-        if (firstLine) {
-          title = firstLine.substring(0, 100);
-        }
-      }
+      // Start with a placeholder title - we'll extract a better one later
+      const title = 'Task in progress...';
 
       console.log('[SubagentHandler] Detected new subagent session:', {
         sessionKey,
@@ -249,7 +412,11 @@ gatewayClient.on('agent', async (payload: any) => {
         startedAt: Date.now(),
       });
 
-      // Create a task for this subagent
+      // Initialize text buffer for this session
+      subagentTextBuffers.set(sessionKey, '');
+      subagentTitleExtracted.set(sessionKey, false);
+
+      // Create a task for this subagent with placeholder title
       try {
         const task = await createTask({
           title,
@@ -275,8 +442,23 @@ gatewayClient.on('agent', async (payload: any) => {
           agentId: task.agentId,
           sessionKey: task.sessionKey,
         });
+
+        // Schedule title extraction (will extract after 5 seconds or when 500+ chars accumulate)
+        await scheduleTitleExtraction(sessionKey, task.id);
       } catch (err) {
         console.error('[SubagentHandler] Error creating task:', err);
+      }
+    }
+
+    // Accumulate text for title extraction
+    if (data.text && typeof data.text === 'string') {
+      const currentBuffer = subagentTextBuffers.get(sessionKey) || '';
+      subagentTextBuffers.set(sessionKey, currentBuffer + data.text);
+
+      // Check if we should extract title now (500+ chars accumulated)
+      const taskId = subagentTaskIds.get(sessionKey);
+      if (taskId) {
+        await checkAndExtractTitle(sessionKey, taskId);
       }
     }
 
@@ -503,6 +685,15 @@ gatewayClient.on('subagent-completed', async (payload: any) => {
     sessionLastActivity.delete(sessionKey);
     knownSubagentSessions.delete(sessionKey);
     subagentTaskIds.delete(sessionKey);
+    subagentTextBuffers.delete(sessionKey);
+    subagentTitleExtracted.delete(sessionKey);
+    
+    // Clear any pending title extraction timer
+    const timer = subagentTitleTimers.get(sessionKey);
+    if (timer) {
+      clearTimeout(timer);
+      subagentTitleTimers.delete(sessionKey);
+    }
   } catch (err) {
     console.error('[SubagentHandler] Error handling subagent-completed:', err);
   }
