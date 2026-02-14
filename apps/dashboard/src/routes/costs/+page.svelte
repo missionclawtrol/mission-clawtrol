@@ -309,6 +309,7 @@
                 <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Task</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Agent</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Model</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Completed</th>
                 <th class="px-4 py-3 text-right text-xs font-medium text-slate-400 uppercase">AI Cost</th>
                 <th class="px-4 py-3 text-right text-xs font-medium text-slate-400 uppercase">Human Cost</th>
                 <th class="px-4 py-3 text-right text-xs font-medium text-slate-400 uppercase">Savings</th>
@@ -324,6 +325,12 @@
                   </td>
                   <td class="px-4 py-3 text-slate-400 text-sm font-mono">{truncateId(task.agentId)}</td>
                   <td class="px-4 py-3 text-slate-400 text-sm">{task.model || '-'}</td>
+                  <td class="px-4 py-3 text-slate-400 text-sm" title={task.completedAt}>
+                    {new Date(task.completedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    <span class="text-slate-500 ml-1">
+                      {new Date(task.completedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </td>
                   <td class="px-4 py-3 text-right text-slate-300">{formatCurrency(task.cost)}</td>
                   <td class="px-4 py-3 text-right text-slate-300">{formatCurrency(task.humanCost)}</td>
                   <td class="px-4 py-3 text-right text-green-400 font-medium">{formatCurrency(task.savings)}</td>

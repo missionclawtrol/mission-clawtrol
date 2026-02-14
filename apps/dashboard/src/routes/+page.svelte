@@ -164,8 +164,9 @@
         recentCompleted = tasks
           .filter(t => t.status === 'done')
           .sort((a, b) => {
-            const aDate = new Date(a.updatedAt || 0).getTime();
-            const bDate = new Date(b.updatedAt || 0).getTime();
+            // Sort by completedAt first, fall back to updatedAt
+            const aDate = new Date(a.completedAt || a.updatedAt || 0).getTime();
+            const bDate = new Date(b.completedAt || b.updatedAt || 0).getTime();
             return bDate - aDate;
           })
           .slice(0, 5);
@@ -360,7 +361,12 @@
                 </span>
               </div>
               <div class="flex items-center justify-between text-xs text-slate-400 mb-1">
-                <span>{formatRelativeTime(task.updatedAt || '')}</span>
+                <span title={task.completedAt || task.updatedAt || ''}>
+                  {formatRelativeTime(task.completedAt || task.updatedAt || '')}
+                  <span class="text-slate-500 ml-1">
+                    ({new Date(task.completedAt || task.updatedAt || '').toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })})
+                  </span>
+                </span>
                 <span>{task.agentEmoji || '🤖'} {task.agentName || 'Unknown'}</span>
               </div>
               {#if task.tokens || task.cost}
