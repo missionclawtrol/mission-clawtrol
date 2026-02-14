@@ -1,8 +1,9 @@
 import { FastifyInstance } from 'fastify';
-import { readFile, readdir, writeFile } from 'fs/promises';
+import { readFile, readdir, writeFile, stat } from 'fs/promises';
 import { join } from 'path';
 import { gatewayClient } from '../gateway-client.js';
 import { addAssociation, getProjectAgents, getAllAssociations, updateAssociation, removeAssociation, type AgentAssociation } from '../project-agents.js';
+import { getAgentDefinitions, type AgentDefinition } from '../config-reader.js';
 
 // Helper to update model in sessions.json
 async function updateSessionModel(sessionKey: string, model: string): Promise<boolean> {
@@ -76,16 +77,20 @@ interface SessionData {
   updatedAt: number;
   model?: string;
   modelProvider?: string;
+  modelOverride?: string;
+  providerOverride?: string;
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
   lastChannel?: string;
   chatType?: string;
+  label?: string;
 }
 
 interface Agent {
   id: string;
   name: string;
+  label?: string;
   status: 'idle' | 'working' | 'error' | 'offline';
   role?: string;
   task?: string;
@@ -144,6 +149,61 @@ function determineStatus(session: SessionData): 'idle' | 'working' | 'error' | '
 }
 
 export async function agentRoutes(fastify: FastifyInstance) {
+  // Get agent roster from config with session status
+  fastify.get('/roster', async (request, reply) => {
+    try {
+      const agentDefs = await getAgentDefinitions();
+      const OPENCLAW_DIR = join(process.env.HOME || '', '.openclaw');
+      
+      const roster = await Promise.all(
+        agentDefs.map(async (def) => {
+          const sessionsPath = join(OPENCLAW_DIR, 'agents', def.id, 'sessions', 'sessions.json');
+          
+          let status: 'online' | 'idle' | 'offline' = 'offline';
+          let lastActive: string | null = null;
+          let activeSession: string | null = null;
+          
+          try {
+            const sessionsData = await readFile(sessionsPath, 'utf-8');
+            const sessions = JSON.parse(sessionsData) as Record<string, SessionData>;
+            
+            // Find the main session for this agent
+            const mainSessionKey = `agent:${def.id}:main`;
+            const session = sessions[mainSessionKey];
+            
+            if (session) {
+              const sessionStatus = determineStatus(session);
+              status = sessionStatus === 'working' ? 'online' : sessionStatus === 'idle' ? 'idle' : 'offline';
+              lastActive = new Date(session.updatedAt).toISOString();
+              activeSession = mainSessionKey;
+            }
+          } catch (err) {
+            // No sessions file or error reading it - agent is offline
+          }
+          
+          return {
+            id: def.id,
+            name: def.identity.name,
+            emoji: def.identity.emoji,
+            fullName: def.name,
+            model: def.model,
+            workspace: def.workspace,
+            agentDir: def.agentDir,
+            status,
+            lastActive,
+            activeSession,
+            mentionPatterns: def.groupChat.mentionPatterns,
+          };
+        })
+      );
+      
+      return { agents: roster };
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({ agents: [], error: 'Failed to read roster' });
+    }
+  });
+  
   // Get all agents from OpenClaw sessions
   fastify.get('/', async (request, reply) => {
     try {

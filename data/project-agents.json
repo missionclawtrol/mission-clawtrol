@@ -1,5 +1,14 @@
 [
   {
+    "sessionKey": "agent:main:subagent:e0f89329-ab6b-45b6-be7e-452ae5353b1f",
+    "projectId": "aba-therapy-business",
+    "task": "Research starting an ABA therapy practice in NC",
+    "label": "aba-research",
+    "model": "ollama/qwen3-coder",
+    "status": "completed",
+    "spawnedAt": 1770917845007
+  },
+  {
     "sessionKey": "agent:main:subagent:626e8a92-7c2b-4310-9d7b-a331649d67a1",
     "projectId": "mission-clawtrol",
     "task": "Coding agent focused on mission-clawtrol folder",
@@ -16,5 +25,23 @@
     "model": "anthropic/claude-sonnet-4-5",
     "status": "running",
     "spawnedAt": 1739271794000
+  },
+  {
+    "sessionKey": "agent:main:subagent:74b6fab6-0c6a-447f-9a6a-882c97e822ec",
+    "projectId": "stocks",
+    "task": "Build MVP stock screener using Python + yfinance",
+    "label": "stocks-mvp",
+    "model": "ollama/qwen3-coder",
+    "status": "running",
+    "spawnedAt": 1770813022224
+  },
+  {
+    "sessionKey": "agent:main:subagent:3096a545-b319-4102-bf80-dd22d27f692d",
+    "projectId": "stocks",
+    "task": "Build backtest comparing Model A (absolute P/E) vs Model B (relative P/E)",
+    "label": "stocks-backtest",
+    "model": "ollama/qwen3-coder",
+    "status": "running",
+    "spawnedAt": 1770820710027
   }
 ]

@@ -153,10 +153,13 @@
           {#each agents as agent}
             <div class="flex items-center justify-between p-3 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors">
               <div class="flex items-center gap-3">
-                <span>{statusIcons[agent.status] || '⚫'}</span>
+                <div class="relative">
+                  <span class="text-2xl">{agent.emoji || '🤖'}</span>
+                  <span class="absolute -bottom-0.5 -right-0.5 text-xs">{statusIcons[agent.status] || '⚫'}</span>
+                </div>
                 <div>
                   <div class="font-medium">{agent.name}</div>
-                  <div class="text-xs text-slate-500 font-mono">{agent.id.slice(-8)}</div>
+                  <div class="text-xs text-slate-500">{agent.role || agent.id}</div>
                   {#if agent.model}
                     <div class="text-xs text-blue-400/70 mt-0.5">🧠 {agent.model.split('/').pop()}</div>
                   {/if}

@@ -1,10 +1,10 @@
 # Status
 
-**Last Updated:** February 10, 2026 18:13 EST
+**Last Updated:** February 12, 2026 16:50 EST
 
 ## Current Phase
 
-Phase 4: Real-Time Enhancements ✅ COMPLETE
+Phase 5: Multi-Agent Support 🚧 IN PROGRESS
 
 ## Progress
 
@@ -37,25 +37,39 @@ Phase 4: Real-Time Enhancements ✅ COMPLETE
 - [x] **Bug fix: Error logging** - Added logErrorEvent calls to background spawn error handlers
 - [x] **Bug fix: Token fallback** - Added consistent GATEWAY_TOKEN fallback in spawn route (matches gateway-client.ts)
 
+### Phase 5: Multi-Agent Support (Feb 12, 2026)
+- [x] **P0: Config reader** - Read agent definitions from `~/.openclaw/openclaw.json`
+- [x] **P0: Roster API** - New `/api/agents/roster` endpoint with status per agent
+- [x] **P0: Roster view** - New tab showing all 8 agents with emoji, model, status
+- [x] **P1: AGENTS.md parser** - Parse project agent tracking from AGENTS.md files
+- [x] **P1: Project agents endpoint** - GET `/api/projects/:id/agents` reads AGENTS.md
+- [x] **P1: Agent count in projects** - Show active agent count and emojis in project list
+- [ ] **P1: Session aggregation** - Scan all agent session directories (not just main)
+- [ ] **P2: Hierarchy view** - Org chart visualization with team structure
+
 ## What's Built
 
 ### Frontend (`apps/dashboard/`)
 - SvelteKit + TypeScript + Tailwind CSS
-- 5 tabs with full UI:
+- 6 tabs with full UI:
   - **Overview:** Stats, agent list, project list, activity feed
-  - **Monitor:** Agent tree, task list, event log
+  - **Roster:** All 8 agents with status, model, and technical info
   - **Approvals:** Approval queue with approve/reject actions
-  - **Projects:** Project list with detail view
+  - **Projects:** Project list with detail view (includes agent counts)
   - **Settings:** Alert preferences, display settings
 
 ### Backend (`services/backend/`)
 - Fastify + TypeScript
 - REST API routes:
   - GET /api/agents
+  - GET /api/agents/roster (NEW: reads from openclaw.json)
   - GET /api/projects
+  - GET /api/projects/:id/agents (NEW: reads AGENTS.md)
   - GET /api/activity
   - GET /api/health
 - WebSocket endpoint at /ws
+- Config reader for multi-agent support
+- AGENTS.md parser for project tracking
 
 ## Next Steps
 

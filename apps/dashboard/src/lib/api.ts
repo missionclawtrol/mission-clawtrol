@@ -1,6 +1,9 @@
 // API client for Mission Clawtrol backend
 
-const API_BASE = 'http://localhost:3001/api';
+// Use same hostname as frontend, but port 3001 for backend
+const API_BASE = typeof window !== 'undefined' 
+  ? `http://${window.location.hostname}:3001/api`
+  : 'http://localhost:3001/api';
 
 export interface Agent {
   id: string;
@@ -11,6 +14,7 @@ export interface Agent {
   lastActive?: string;
   model?: string;
   tokens?: number;
+  emoji?: string;
 }
 
 export interface Project {
@@ -41,12 +45,22 @@ export interface ActivityEvent {
   severity?: 'info' | 'warning' | 'error' | 'success';
 }
 
-// Agents
+// Agents - use roster endpoint for full agent list from config
 export async function fetchAgents(): Promise<Agent[]> {
   try {
-    const res = await fetch(`${API_BASE}/agents`);
+    const res = await fetch(`${API_BASE}/agents/roster`);
     const data = await res.json();
-    return data.agents || [];
+    // Map roster format to Agent interface
+    return (data.agents || []).map((a: any) => ({
+      id: a.id,
+      name: a.name,
+      status: a.status === 'online' ? 'working' : a.status === 'idle' ? 'idle' : 'offline',
+      role: a.fullName,
+      lastActive: a.lastActive,
+      model: a.model,
+      tokens: 0,
+      emoji: a.emoji,
+    }));
   } catch (error) {
     console.error('Failed to fetch agents:', error);
     return [];
@@ -274,3 +288,117 @@ export async function checkHealth(): Promise<boolean> {
     return false;
   }
 }
+
+// Tasks
+export interface Task {
+  id: string;
+  title: string;
+  description?: string;
+  projectId: string;
+  projectName?: string;
+  agentId?: string;
+  agentName?: string;
+  agentEmoji?: string;
+  priority: 'P0' | 'P1' | 'P2' | 'P3';
+  status: 'backlog' | 'todo' | 'in_progress' | 'review' | 'done';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export async function fetchTasks(): Promise<Task[]> {
+  try {
+    const res = await fetch(`${API_BASE}/tasks`);
+    const data = await res.json();
+    return data.tasks || [];
+  } catch (error) {
+    console.error('Failed to fetch tasks:', error);
+    return [];
+  }
+}
+
+export interface CreateTaskParams {
+  title: string;
+  description?: string;
+  projectId: string;
+  agentId?: string;
+  priority: 'P0' | 'P1' | 'P2' | 'P3';
+  status?: 'backlog' | 'todo' | 'in_progress' | 'review' | 'done';
+}
+
+export async function createTask(params: CreateTaskParams): Promise<{ success: boolean; task?: Task; error?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.error || 'Failed to create task' };
+    }
+    return { success: true, task: data.task };
+  } catch (error) {
+    console.error('Failed to create task:', error);
+    return { success: false, error: 'Network error' };
+  }
+}
+
+export interface UpdateTaskParams {
+  title?: string;
+  description?: string;
+  agentId?: string;
+  priority?: 'P0' | 'P1' | 'P2' | 'P3';
+  status?: 'backlog' | 'todo' | 'in_progress' | 'review' | 'done';
+}
+
+export async function updateTask(id: string, params: UpdateTaskParams): Promise<{ success: boolean; task?: Task; error?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/tasks/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.error || 'Failed to update task' };
+    }
+    return { success: true, task: data.task };
+  } catch (error) {
+    console.error('Failed to update task:', error);
+    return { success: false, error: 'Network error' };
+  }
+}
+
+export async function deleteTask(id: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${API_BASE}/tasks/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      return { success: false, error: data.error || 'Failed to delete task' };
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to delete task:', error);
+    return { success: false, error: 'Network error' };
+  }
+}
+
+// Generic API helper for custom endpoints
+export const api = {
+  get: async (path: string) => {
+    const res = await fetch(`${API_BASE}${path}`);
+    if (!res.ok) throw new Error(`API error: ${res.status}`);
+    return res.json();
+  },
+  post: async (path: string, body: any) => {
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`API error: ${res.status}`);
+    return res.json();
+  },
+};

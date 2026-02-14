@@ -7,6 +7,7 @@ import { agentRoutes } from './routes/agents.js';
 import { projectRoutes } from './routes/projects.js';
 import { activityRoutes, logApprovalEvent, setBroadcastFunction } from './routes/activity.js';
 import { approvalRoutes } from './routes/approvals.js';
+import { taskRoutes } from './routes/tasks.js';
 import { gatewayClient, ApprovalRequest, ApprovalResolved } from './gateway-client.js';
 import { loadAssociations } from './project-agents.js';
 
@@ -29,6 +30,7 @@ await fastify.register(agentRoutes, { prefix: '/api/agents' });
 await fastify.register(projectRoutes, { prefix: '/api/projects' });
 await fastify.register(activityRoutes, { prefix: '/api/activity' });
 await fastify.register(approvalRoutes, { prefix: '/api/approvals' });
+await fastify.register(taskRoutes, { prefix: '/api/tasks' });
 
 // Health check
 fastify.get('/api/health', async () => {

@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { readFile, readdir, stat, mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { logProjectEvent } from './activity.js';
+import { parseAgentsMd, type ProjectAgent } from '../agents-md-parser.js';
 
 // Path to OpenClaw workspace
 const WORKSPACE_PATH = join(process.env.HOME || '', '.openclaw/workspace');
@@ -88,6 +89,8 @@ interface Project {
   handoffMd?: string;
   files?: string[];
   updated: string;
+  agentCount?: number;
+  agentEmojis?: string[];
 }
 
 function formatProjectName(folderName: string): string {
@@ -141,6 +144,18 @@ export async function projectRoutes(fastify: FastifyInstance) {
           continue;
         }
         
+        // Check for AGENTS.md and get agent count
+        let agentCount = 0;
+        let agentEmojis: string[] = [];
+        try {
+          const agentsMdPath = join(projectPath, 'AGENTS.md');
+          const parsed = await parseAgentsMd(agentsMdPath);
+          agentCount = parsed.active.length;
+          agentEmojis = parsed.active.map(a => a.emoji).slice(0, 5); // First 5 emojis
+        } catch {
+          // No AGENTS.md or error reading it
+        }
+        
         projects.push({
           id: entry.name,
           name: formatProjectName(entry.name),
@@ -150,6 +165,8 @@ export async function projectRoutes(fastify: FastifyInstance) {
           hasHandoffMd,
           statusMd: statusMdPreview,
           updated: stats.mtime.toISOString(),
+          agentCount,
+          agentEmojis,
         });
       }
       
@@ -236,6 +253,28 @@ export async function projectRoutes(fastify: FastifyInstance) {
       return { content };
     } catch (error) {
       return reply.status(404).send({ error: 'PROJECT.md not found' });
+    }
+  });
+
+  // Get agents working on a project (from AGENTS.md)
+  fastify.get('/:id/agents', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const agentsMdPath = join(WORKSPACE_PATH, id, 'AGENTS.md');
+    
+    try {
+      const parsed = await parseAgentsMd(agentsMdPath);
+      return {
+        active: parsed.active,
+        completed: parsed.completed,
+        total: parsed.active.length + parsed.completed.length,
+      };
+    } catch (error) {
+      // If AGENTS.md doesn't exist, return empty lists
+      return {
+        active: [],
+        completed: [],
+        total: 0,
+      };
     }
   });
 

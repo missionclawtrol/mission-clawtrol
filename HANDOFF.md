@@ -1,6 +1,6 @@
 # Handoff
 
-**Last Updated:** February 10, 2026 18:13 EST
+**Last Updated:** February 12, 2026 16:50 EST
 
 ## Project Conventions
 
@@ -12,10 +12,27 @@ When working on this project:
 
 ## Current Assignments
 
-### Jarvis (Coordinator)
-- Oversees project direction
-- Spawns task-specific agents
-- Reviews and integrates work
+### Senior Dev (@srdev) - Multi-Agent Update (Feb 12, 2026)
+Implementing multi-agent support per spec in `docs/multi-agent-spec.md`.
+
+**Completed (P0):**
+- ✅ Created `config-reader.ts` - reads agent definitions from `~/.openclaw/openclaw.json`
+- ✅ Added `/api/agents/roster` endpoint with status for all 8 agents
+- ✅ Created `/routes/roster/+page.svelte` - new tab showing all agents
+- ✅ Added Roster tab to navigation
+
+**Completed (P1):**
+- ✅ Created `agents-md-parser.ts` - parses AGENTS.md format
+- ✅ Added `/api/projects/:id/agents` endpoint - reads AGENTS.md from project
+- ✅ Updated project list to show agent count and emojis
+
+**Remaining:**
+- [ ] P1: Session aggregation - update `/api/agents` to scan all agent dirs (not just main)
+- [ ] P2: Hierarchy view - org chart visualization
+
+**Files changed:**
+- Backend: `config-reader.ts` (NEW), `agents-md-parser.ts` (NEW), `routes/agents.ts`, `routes/projects.ts`
+- Frontend: `routes/roster/+page.svelte` (NEW), `+layout.svelte`, `lib/api.ts`
 
 ### Completed Tasks
 
