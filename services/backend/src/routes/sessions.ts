@@ -29,7 +29,7 @@ interface SessionsIndex {
 }
 
 // Helper to read JSONL file line by line
-async function parseJsonlFile(filePath: string, limit?: number): Promise<any[]> {
+async function parseJsonlFile(filePath: string): Promise<any[]> {
   return new Promise((resolve, reject) => {
     const lines: any[] = [];
     const fileStream = createReadStream(filePath);
@@ -38,19 +38,11 @@ async function parseJsonlFile(filePath: string, limit?: number): Promise<any[]> 
       crlfDelay: Infinity,
     });
 
-    let lineCount = 0;
     rl.on('line', (line) => {
-      if (limit && lineCount >= limit) {
-        rl.close();
-        fileStream.destroy();
-        return;
-      }
-
       try {
         if (line.trim()) {
           const parsed = JSON.parse(line);
           lines.push(parsed);
-          lineCount++;
         }
       } catch (err) {
         console.error(`Error parsing JSONL line: ${err}`);
@@ -245,16 +237,18 @@ export async function sessionRoutes(fastify: FastifyInstance) {
         return reply.status(404).send({ error: `Session ${sessionId} not found for agent ${agentId}` });
       }
 
-      // Parse the JSONL file
+      // Parse the JSONL file - read ALL lines, don't limit at read time
       fastify.log.info(`Parsing JSONL file: ${sessionFile}`);
-      const rawMessages = await parseJsonlFile(sessionFile, limit);
-      fastify.log.info(`Parsed ${rawMessages.length} raw messages`);
+      const rawMessages = await parseJsonlFile(sessionFile);
+      fastify.log.info(`Parsed ${rawMessages.length} raw lines from JSONL`);
 
-      // Convert to transcript format
+      // Convert to transcript format and apply limit only to actual messages
       const messages: TranscriptMessage[] = rawMessages
         .map((msg) => convertMessageToTranscript(msg))
-        .filter((msg): msg is TranscriptMessage => msg !== null);
-      fastify.log.info(`Converted to ${messages.length} transcript messages`);
+        .filter((msg): msg is TranscriptMessage => msg !== null)
+        .slice(0, limit);
+      
+      fastify.log.info(`Converted to ${messages.length} transcript messages (requested limit: ${limit})`);
 
       return {
         sessionId: sessionId,
