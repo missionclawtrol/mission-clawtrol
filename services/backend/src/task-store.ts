@@ -15,6 +15,14 @@ export interface Task {
   updatedAt: string;
   completedAt: string | null;
   handoffNotes: string | null;
+  tokens?: {
+    input: number;
+    output: number;
+    total: number;
+  };
+  cost?: number; // estimated USD
+  model?: string; // which model was used
+  runtime?: number; // milliseconds
 }
 
 const TASKS_FILE = join(process.env.HOME || '', '.openclaw/tasks.json');

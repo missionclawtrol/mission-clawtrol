@@ -180,6 +180,54 @@ gatewayClient.on('subagent-started', async (payload: any) => {
   }
 });
 
+// Helper function to calculate cost based on model and token usage
+function calculateCost(model: string, inputTokens: number, outputTokens: number): number {
+  // Price per 1M tokens
+  const priceMap: Record<string, { input: number; output: number }> = {
+    'minimax/MiniMax-M2.5': { input: 0.30, output: 1.20 },
+    'MiniMax-M2.5': { input: 0.30, output: 1.20 },
+    'm2.5': { input: 0.30, output: 1.20 },
+    'anthropic/claude-opus': { input: 5.00, output: 25.00 },
+    'claude-opus': { input: 5.00, output: 25.00 },
+    'opus': { input: 5.00, output: 25.00 },
+    'anthropic/claude-sonnet': { input: 3.00, output: 15.00 },
+    'claude-sonnet': { input: 3.00, output: 15.00 },
+    'sonnet': { input: 3.00, output: 15.00 },
+  };
+  
+  const normalizedModel = model.toLowerCase();
+  let prices = { input: 0, output: 0 };
+  
+  // Try exact match first
+  for (const [key, price] of Object.entries(priceMap)) {
+    if (normalizedModel === key.toLowerCase()) {
+      prices = price;
+      break;
+    }
+  }
+  
+  // Fall back to partial match if no exact match
+  if (prices.input === 0) {
+    for (const [key, price] of Object.entries(priceMap)) {
+      if (normalizedModel.includes(key.toLowerCase())) {
+        prices = price;
+        break;
+      }
+    }
+  }
+  
+  // If still no match, default to MiniMax M2.5
+  if (prices.input === 0) {
+    prices = { input: 0.30, output: 1.20 };
+  }
+  
+  // Calculate cost in USD
+  const inputCost = (inputTokens / 1_000_000) * prices.input;
+  const outputCost = (outputTokens / 1_000_000) * prices.output;
+  
+  return inputCost + outputCost;
+}
+
 // Handle subagent completion events
 gatewayClient.on('subagent-completed', async (payload: any) => {
   try {
@@ -188,6 +236,55 @@ gatewayClient.on('subagent-completed', async (payload: any) => {
     // Extract relevant fields from the payload
     const sessionKey = payload.sessionKey || payload.session || payload.id;
     const completionSummary = payload.summary || payload.result || payload.message || 'Completed';
+    
+    // Extract token stats from the payload
+    let tokens: { input: number; output: number; total: number } | undefined;
+    let cost: number | undefined;
+    let model: string | undefined;
+    let runtime: number | undefined;
+    
+    // Look for tokens in various possible locations
+    if (payload.tokens) {
+      tokens = {
+        input: payload.tokens.input || payload.tokens.prompt_tokens || 0,
+        output: payload.tokens.output || payload.tokens.completion_tokens || 0,
+        total: payload.tokens.total || payload.tokens.input + payload.tokens.output || 0,
+      };
+    } else if (payload.usage) {
+      tokens = {
+        input: payload.usage.input_tokens || payload.usage.prompt_tokens || 0,
+        output: payload.usage.output_tokens || payload.usage.completion_tokens || 0,
+        total: payload.usage.total_tokens || 0,
+      };
+    } else if (payload.stats) {
+      tokens = {
+        input: payload.stats.input_tokens || 0,
+        output: payload.stats.output_tokens || 0,
+        total: payload.stats.total_tokens || 0,
+      };
+    }
+    
+    // Ensure total is calculated if we have input/output
+    if (tokens && tokens.total === 0) {
+      tokens.total = tokens.input + tokens.output;
+    }
+    
+    // Extract model if available
+    model = payload.model || payload.aiModel || undefined;
+    
+    // Calculate cost if we have tokens and model
+    if (tokens && model) {
+      cost = calculateCost(model, tokens.input, tokens.output);
+    }
+    
+    // Extract runtime if available (convert to milliseconds if necessary)
+    if (payload.runtime !== undefined) {
+      runtime = typeof payload.runtime === 'number' ? payload.runtime : parseInt(payload.runtime);
+    } else if (payload.executionTime !== undefined) {
+      runtime = payload.executionTime;
+    } else if (payload.duration !== undefined) {
+      runtime = payload.duration;
+    }
 
     if (!sessionKey) {
       console.warn('[SubagentHandler] No sessionKey in subagent-completed event');
@@ -201,13 +298,22 @@ gatewayClient.on('subagent-completed', async (payload: any) => {
       return;
     }
 
-    // Update the task to done
+    // Update the task to done with token/cost info
     const updatedTask = await updateTask(task.id, {
       status: 'done',
       handoffNotes: completionSummary,
+      tokens,
+      cost,
+      model,
+      runtime,
     });
 
-    console.log('[SubagentHandler] Updated task:', task.id, 'to done');
+    console.log('[SubagentHandler] Updated task:', task.id, 'to done', {
+      tokens,
+      cost,
+      model,
+      runtime,
+    });
 
     // Broadcast the task update
     broadcast('task-updated', {
@@ -217,6 +323,10 @@ gatewayClient.on('subagent-completed', async (payload: any) => {
       priority: updatedTask!.priority,
       completedAt: updatedTask!.completedAt,
       handoffNotes: updatedTask!.handoffNotes,
+      tokens: updatedTask!.tokens,
+      cost: updatedTask!.cost,
+      model: updatedTask!.model,
+      runtime: updatedTask!.runtime,
     });
   } catch (err) {
     console.error('[SubagentHandler] Error handling subagent-completed:', err);

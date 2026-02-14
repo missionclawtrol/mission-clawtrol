@@ -62,6 +62,28 @@
     }
   }
   
+  function formatTokens(total: number): string {
+    if (total >= 1_000_000) {
+      return `${(total / 1_000_000).toFixed(1)}M`;
+    } else if (total >= 1_000) {
+      return `${(total / 1_000).toFixed(0)}K`;
+    }
+    return total.toString();
+  }
+  
+  function formatRuntime(ms: number): string {
+    if (ms < 1000) {
+      return `${Math.round(ms)}ms`;
+    }
+    const seconds = Math.round(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (minutes > 0) {
+      return `${minutes}m ${secs}s`;
+    }
+    return `${seconds}s`;
+  }
+  
   function getProjectName(projectId: string): string {
     return projects.find(p => p.id === projectId)?.name || 'Unknown';
   }
@@ -388,6 +410,21 @@
                 
                 <!-- Project Name -->
                 <p class="text-xs text-slate-400 mb-2">{task.projectName || getProjectName(task.projectId)}</p>
+                
+                <!-- Token/Cost Info (for completed tasks) -->
+                {#if task.status === 'done' && (task.tokens || task.cost)}
+                  <div class="mb-2 pb-2 border-b border-slate-700 flex gap-2 text-xs text-slate-500">
+                    {#if task.tokens}
+                      <span>📊 {formatTokens(task.tokens.total)} tokens</span>
+                    {/if}
+                    {#if task.cost}
+                      <span>💰 ${task.cost.toFixed(2)}</span>
+                    {/if}
+                    {#if task.runtime}
+                      <span>⏱️ {formatRuntime(task.runtime)}</span>
+                    {/if}
+                  </div>
+                {/if}
                 
                 <!-- Agent + Priority -->
                 <div class="flex items-center justify-between">

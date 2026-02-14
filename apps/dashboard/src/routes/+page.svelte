@@ -36,6 +36,15 @@
     return `${diffDays}d ago`;
   }
   
+  function formatTokens(total: number): string {
+    if (total >= 1_000_000) {
+      return `${(total / 1_000_000).toFixed(1)}M`;
+    } else if (total >= 1_000) {
+      return `${(total / 1_000).toFixed(0)}K`;
+    }
+    return total.toString();
+  }
+  
   function getStatusColor(status: string): string {
     switch (status) {
       case 'online':
@@ -327,10 +336,20 @@
                   Done
                 </span>
               </div>
-              <div class="flex items-center justify-between text-xs text-slate-400">
+              <div class="flex items-center justify-between text-xs text-slate-400 mb-1">
                 <span>{formatRelativeTime(task.updatedAt || '')}</span>
                 <span>{task.agentEmoji || '🤖'} {task.agentName || 'Unknown'}</span>
               </div>
+              {#if task.tokens || task.cost}
+                <div class="flex gap-3 text-xs text-slate-500 pt-1 border-t border-slate-600">
+                  {#if task.tokens}
+                    <span>📊 {formatTokens(task.tokens.total)} tokens</span>
+                  {/if}
+                  {#if task.cost}
+                    <span>💰 ${task.cost.toFixed(2)}</span>
+                  {/if}
+                </div>
+              {/if}
             </div>
           {/each}
         {/if}

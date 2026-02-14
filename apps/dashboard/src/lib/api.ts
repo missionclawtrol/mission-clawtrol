@@ -303,6 +303,14 @@ export interface Task {
   status: 'backlog' | 'todo' | 'in-progress' | 'review' | 'done';
   createdAt?: string;
   updatedAt?: string;
+  tokens?: {
+    input: number;
+    output: number;
+    total: number;
+  };
+  cost?: number; // estimated USD
+  model?: string; // which model was used
+  runtime?: number; // milliseconds
 }
 
 export async function fetchTasks(): Promise<Task[]> {
