@@ -12,6 +12,7 @@ import { approvalRoutes } from './routes/approvals.js';
 import { taskRoutes } from './routes/tasks.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { settingsRoutes } from './routes/settings.js';
+import { costRoutes } from './routes/costs.js';
 import { gatewayClient, ApprovalRequest, ApprovalResolved } from './gateway-client.js';
 import { loadAssociations } from './project-agents.js';
 import { createTask, updateTask, findTaskBySessionKey } from './task-store.js';
@@ -123,24 +124,28 @@ async function scheduleTitleExtraction(sessionKey: string, taskId: string) {
             updatedAt: new Date().toISOString(),
           });
 
-          console.log('[TitleExtraction] Updated task title:', {
-            taskId,
-            sessionKey,
-            oldTitle: 'Task in progress...',
-            newTitle: betterTitle,
-            textLength: accumulatedText.length,
-          });
+          if (updatedTask) {
+            console.log('[TitleExtraction] Updated task title:', {
+              taskId,
+              sessionKey,
+              oldTitle: 'Task in progress...',
+              newTitle: betterTitle,
+              textLength: accumulatedText.length,
+            });
 
-          // Broadcast the update
-          broadcast('task-updated', {
-            id: updatedTask!.id,
-            title: updatedTask!.title,
-            status: updatedTask!.status,
-            priority: updatedTask!.priority,
-            updatedAt: updatedTask!.updatedAt,
-          });
+            // Broadcast the update
+            broadcast('task-updated', {
+              id: updatedTask.id,
+              title: updatedTask.title,
+              status: updatedTask.status,
+              priority: updatedTask.priority,
+              updatedAt: updatedTask.updatedAt,
+            });
 
-          subagentTitleExtracted.set(sessionKey, true);
+            subagentTitleExtracted.set(sessionKey, true);
+          } else {
+            console.warn('[TitleExtraction] updateTask returned null (timer) for taskId:', taskId);
+          }
         }
       }
     } catch (err) {
@@ -174,23 +179,27 @@ async function checkAndExtractTitle(sessionKey: string, taskId: string) {
           updatedAt: new Date().toISOString(),
         });
 
-        console.log('[TitleExtraction] Updated task title (500 chars threshold):', {
-          taskId,
-          sessionKey,
-          newTitle: betterTitle,
-          textLength: accumulatedText.length,
-        });
+        if (updatedTask) {
+          console.log('[TitleExtraction] Updated task title (500 chars threshold):', {
+            taskId,
+            sessionKey,
+            newTitle: betterTitle,
+            textLength: accumulatedText.length,
+          });
 
-        // Broadcast the update
-        broadcast('task-updated', {
-          id: updatedTask!.id,
-          title: updatedTask!.title,
-          status: updatedTask!.status,
-          priority: updatedTask!.priority,
-          updatedAt: updatedTask!.updatedAt,
-        });
+          // Broadcast the update
+          broadcast('task-updated', {
+            id: updatedTask.id,
+            title: updatedTask.title,
+            status: updatedTask.status,
+            priority: updatedTask.priority,
+            updatedAt: updatedTask.updatedAt,
+          });
 
-        subagentTitleExtracted.set(sessionKey, true);
+          subagentTitleExtracted.set(sessionKey, true);
+        } else {
+          console.warn('[TitleExtraction] updateTask returned null for taskId:', taskId);
+        }
 
         // Clear the timer since we're done
         const timer = subagentTitleTimers.get(sessionKey);
@@ -452,6 +461,7 @@ await fastify.register(approvalRoutes, { prefix: '/api/approvals' });
 await fastify.register(taskRoutes, { prefix: '/api/tasks' });
 await fastify.register(sessionRoutes, { prefix: '/api/sessions' });
 await fastify.register(settingsRoutes, { prefix: '/api/settings' });
+await fastify.register(costRoutes, { prefix: '/api/costs' });
 
 // Health check
 fastify.get('/api/health', async () => {
