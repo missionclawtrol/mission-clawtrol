@@ -19,6 +19,27 @@
   let dragOverColumn: string | null = null;
   let selectedProjectId: string = ''; // Empty = all projects
   
+  // Persist project filter to localStorage
+  const PROJECT_FILTER_KEY = 'mission-clawtrol-project-filter';
+  
+  function saveProjectFilter(projectId: string) {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(PROJECT_FILTER_KEY, projectId);
+    }
+  }
+  
+  function loadProjectFilter(): string {
+    if (typeof localStorage !== 'undefined') {
+      return localStorage.getItem(PROJECT_FILTER_KEY) || '';
+    }
+    return '';
+  }
+  
+  // Watch for project filter changes and save
+  $: if (typeof localStorage !== 'undefined') {
+    saveProjectFilter(selectedProjectId);
+  }
+  
   // Form state
   let formError = '';
   let formLoading = false;
@@ -206,7 +227,16 @@
   }
   
   onMount(() => {
+    // Load saved project filter
+    selectedProjectId = loadProjectFilter();
+    
+    // Initial load
     loadData();
+    
+    // Periodic refresh every 30 seconds (preserves filter)
+    const interval = setInterval(loadData, 30000);
+    
+    return () => clearInterval(interval);
   });
 </script>
 
