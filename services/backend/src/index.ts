@@ -207,20 +207,26 @@ async function checkAndExtractTitle(sessionKey: string, taskId: string) {
  * Extract commit hash from streaming text using regex patterns
  */
 function extractCommitHash(text: string): string | undefined {
-  if (!text || typeof text !== 'string') return undefined;
+  if (!text || typeof text !== 'string') {
+    console.log('[ExtractCommitHash] No text provided');
+    return undefined;
+  }
   
   // Try to find "Commit:" or "commit" pattern first
   const commitMatch = text.match(/[Cc]ommit[:\s]+([a-f0-9]{7,40})/);
   if (commitMatch) {
+    console.log('[ExtractCommitHash] Found commit via pattern match:', commitMatch[1]);
     return commitMatch[1];
   }
   
   // Fallback to raw hash pattern (7-40 hex chars)
   const hashMatch = text.match(/([a-f0-9]{7,40})/);
   if (hashMatch) {
+    console.log('[ExtractCommitHash] Found hash via raw pattern:', hashMatch[1]);
     return hashMatch[1];
   }
   
+  console.log('[ExtractCommitHash] No commit hash found in text, text length:', text.length);
   return undefined;
 }
 
@@ -232,13 +238,18 @@ async function getLinesChanged(
   repoPath: string
 ): Promise<{ added: number; removed: number }> {
   try {
-    const { stdout } = await execAsync(
-      `git -C ${repoPath} diff --shortstat ${commitHash}^..${commitHash}`,
-      { timeout: 5000 }
-    );
+    console.log('[LinesChanged] Getting diff for commit:', commitHash);
+    const command = `git -C ${repoPath} diff --shortstat ${commitHash}^..${commitHash}`;
+    console.log('[LinesChanged] Running command:', command);
+    
+    const { stdout } = await execAsync(command, { timeout: 5000 });
+    console.log('[LinesChanged] Git diff output:', stdout);
+    
     // Parse: " 3 files changed, 47 insertions(+), 12 deletions(-)"
     const added = parseInt(stdout.match(/(\d+) insertion/)?.[1] || '0');
     const removed = parseInt(stdout.match(/(\d+) deletion/)?.[1] || '0');
+    
+    console.log('[LinesChanged] Parsed result:', { added, removed });
     return { added, removed };
   } catch (err) {
     console.error('[LinesChanged] Error getting diff for commit:', commitHash, err);
@@ -252,14 +263,25 @@ async function getLinesChanged(
  */
 async function completeTask(sessionKey: string) {
   try {
+    console.log('[CompleteTask] Starting completion for session:', sessionKey);
+    
     const task = await findTaskBySessionKey(sessionKey);
     if (!task) {
       console.log('[CompleteTask] Task not found for session:', sessionKey);
       return;
     }
 
+    console.log('[CompleteTask] Found task:', {
+      taskId: task.id,
+      title: task.title,
+      status: task.status,
+      sessionKey,
+    });
+
     if (task.status === 'in-progress') {
       const accumulatedText = subagentTextBuffers.get(sessionKey) || '';
+      console.log('[CompleteTask] Accumulated text length:', accumulatedText.length);
+      console.log('[CompleteTask] First 500 chars of accumulated text:', accumulatedText.substring(0, 500));
       
       // Extract commit hash from accumulated text
       const commitHash = extractCommitHash(accumulatedText);
@@ -296,7 +318,11 @@ async function completeTask(sessionKey: string) {
             estimatedHumanMinutes,
             humanCost,
           });
+        } else {
+          console.log('[CompleteTask] No lines changed for commit:', commitHash);
         }
+      } else {
+        console.log('[CompleteTask] No commit hash found in accumulated text');
       }
       
       const updatedTask = await updateTask(task.id, {
@@ -308,7 +334,12 @@ async function completeTask(sessionKey: string) {
         humanCost,
       });
 
-      console.log('[CompleteTask] Moved task to review:', task.id, 'for session:', sessionKey);
+      console.log('[CompleteTask] Successfully updated task:', {
+        taskId: updatedTask!.id,
+        status: updatedTask!.status,
+        commitHash: updatedTask!.commitHash,
+        linesChanged: updatedTask!.linesChanged,
+      });
 
       // Broadcast the update
       broadcast('task-updated', {
@@ -337,6 +368,10 @@ async function completeTask(sessionKey: string) {
         clearTimeout(timer);
         subagentTitleTimers.delete(sessionKey);
       }
+    } else {
+      console.log('[CompleteTask] Task not in in-progress status, skipping completion:', {
+        currentStatus: task.status,
+      });
     }
   } catch (err) {
     console.error('[CompleteTask] Error completing task:', err);
@@ -386,10 +421,22 @@ setBroadcastFunction(broadcast);
 // Start a timer to check for stale sessions (30 seconds of inactivity = completion)
 const completionCheckInterval = setInterval(() => {
   const now = Date.now();
+  
+  // Log all tracked sessions for debugging
+  if (sessionLastActivity.size > 0) {
+    console.log('[CompletionCheck] Currently tracking', sessionLastActivity.size, 'sessions');
+  }
+  
   for (const [sessionKey, lastActivity] of sessionLastActivity.entries()) {
     const inactivityTime = now - lastActivity;
+    console.log('[CompletionCheck] Checking session:', {
+      sessionKey,
+      inactivityMs: inactivityTime,
+      isSubagent: sessionKey.includes(':subagent:'),
+    });
+    
     if (inactivityTime > 30000) { // 30 seconds of inactivity
-      console.log('[CompletionCheck] Session inactive for 30s, marking as complete:', {
+      console.log('[CompletionCheck] ✅ Session inactive for 30s, triggering completion:', {
         sessionKey,
         inactivityMs: inactivityTime,
       });
@@ -484,6 +531,14 @@ gatewayClient.on('agent', async (payload: any) => {
       return;
     }
 
+    console.log('[SubagentHandler] Received agent event for subagent:', {
+      sessionKey,
+      stream,
+      dataKeys: Object.keys(data),
+      hasText: !!data.text,
+      textLength: data.text?.length || 0,
+    });
+
     // Update activity timestamp for this session
     sessionLastActivity.set(sessionKey, Date.now());
 
@@ -494,7 +549,7 @@ gatewayClient.on('agent', async (payload: any) => {
       const existingTask = await findTaskBySessionKey(sessionKey);
       if (existingTask) {
         // Task already exists - just track it in memory and return
-        console.log('[SubagentHandler] Task already exists for session:', sessionKey, 'Task ID:', existingTask.id);
+        console.log('[SubagentHandler] ✅ Task already exists for session:', sessionKey, 'Task ID:', existingTask.id);
         
         // Register this session in memory
         const parts = sessionKey.split(':');
@@ -508,6 +563,12 @@ gatewayClient.on('agent', async (payload: any) => {
         subagentTaskIds.set(sessionKey, existingTask.id);
         subagentTextBuffers.set(sessionKey, '');
         subagentTitleExtracted.set(sessionKey, existingTask.title !== 'Task in progress...');
+        
+        // CRITICAL: Make sure we're tracking activity for existing task!
+        console.log('[SubagentHandler] 🔔 Activity timestamp updated for existing task:', {
+          sessionKey,
+          timestamp: Date.now(),
+        });
         
         return; // Don't create duplicate
       }
@@ -573,7 +634,15 @@ gatewayClient.on('agent', async (payload: any) => {
     // Accumulate text for title extraction
     if (data.text && typeof data.text === 'string') {
       const currentBuffer = subagentTextBuffers.get(sessionKey) || '';
-      subagentTextBuffers.set(sessionKey, currentBuffer + data.text);
+      const newBuffer = currentBuffer + data.text;
+      subagentTextBuffers.set(sessionKey, newBuffer);
+
+      console.log('[SubagentHandler] Accumulated text:', {
+        sessionKey,
+        addedLength: data.text.length,
+        totalBufferLength: newBuffer.length,
+        firstCharOfNew: data.text.substring(0, 30),
+      });
 
       // Check if we should extract title now (500+ chars accumulated)
       const taskId = subagentTaskIds.get(sessionKey);
@@ -583,8 +652,16 @@ gatewayClient.on('agent', async (payload: any) => {
     }
 
     // Check for completion markers in the event text
-    if (hasCompletionMarker(data.text)) {
-      console.log('[SubagentHandler] Detected completion marker in agent event:', {
+    const hasMarker = hasCompletionMarker(data.text);
+    console.log('[SubagentHandler] Checking for completion markers:', {
+      sessionKey,
+      textLength: data.text?.length || 0,
+      hasMarker,
+      markers: hasMarker ? [completionMarkers.find(m => data.text?.includes(m))] : [],
+    });
+    
+    if (hasMarker) {
+      console.log('[SubagentHandler] ✅ Detected completion marker in agent event:', {
         sessionKey,
         marker: completionMarkers.find(m => data.text.includes(m)),
       });
@@ -594,7 +671,7 @@ gatewayClient.on('agent', async (payload: any) => {
 
     // Check for stream completion indicators
     if (stream === 'complete' || stream === 'done') {
-      console.log('[SubagentHandler] Detected subagent completion (stream event):', {
+      console.log('[SubagentHandler] ✅ Detected subagent completion (stream event):', {
         sessionKey,
         stream,
       });
