@@ -362,7 +362,14 @@
           </div>
         </div>
         
-        <div class="mt-6 flex justify-end">
+        <div class="mt-6 flex justify-end gap-3">
+          <a
+            href="/sessions/{selectedAgent.id}"
+            class="px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100"
+            on:click={closeDetails}
+          >
+            View Sessions
+          </a>
           <button
             on:click={closeDetails}
             class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
