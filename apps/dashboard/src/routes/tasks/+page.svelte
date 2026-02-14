@@ -1,3 +1,5 @@
+// Mission Clawtrol - Task Kanban Board
+
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fetchTasks, createTask, updateTask, deleteTask, fetchProjects, fetchAgents, type Task, type Project, type Agent } from '$lib/api';
