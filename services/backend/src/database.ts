@@ -1,3 +1,4 @@
+// Mission Clawtrol Database - SQLite storage layer
 import Database from 'better-sqlite3';
 import { join } from 'path';
 import { existsSync } from 'fs';
