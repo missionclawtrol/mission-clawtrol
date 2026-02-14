@@ -136,6 +136,29 @@
         agents = agentsData;
         tasks = tasksData;
         
+        // Agent display info mapping
+        const agentInfo: Record<string, { name: string; emoji: string }> = {
+          'senior-dev': { name: 'Senior Dev', emoji: '👨‍💻' },
+          'junior-dev': { name: 'Junior Dev', emoji: '👩‍💻' },
+          'senior-researcher': { name: 'Sr Researcher', emoji: '🔬' },
+          'junior-researcher': { name: 'Jr Researcher', emoji: '📚' },
+          'editor': { name: 'Editor', emoji: '✍️' },
+          'sysadmin': { name: 'SysAdmin', emoji: '🖥️' },
+          'security': { name: 'Security', emoji: '🔒' },
+          'cso': { name: 'CSO', emoji: '🎯' },
+        };
+        
+        // Enrich tasks with agent info
+        tasks = tasks.map(t => {
+          const agent = agentInfo[t.agentId] || { name: t.agentId || 'Unassigned', emoji: '🤖' };
+          return {
+            ...t,
+            agentName: agent.name,
+            agentEmoji: agent.emoji,
+            projectName: t.projectId || 'No project'
+          };
+        });
+        
         // Filter and calculate
         needsAttention = filterNeedsAttention(tasks);
         recentCompleted = tasks
