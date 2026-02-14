@@ -73,8 +73,8 @@
         if (updatedAt > twoHoursAgo) return true;
       }
       
-      // Status = 'todo' or 'in_progress' AND agentId is null
-      if ((task.status === 'todo' || task.status === 'in_progress') && !task.agentId) {
+      // Status = 'todo' or 'in-progress' AND agentId is null
+      if ((task.status === 'todo' || task.status === 'in-progress') && !task.agentId) {
         return true;
       }
       
@@ -339,8 +339,4 @@
   </div>
 </div>
 
-<style>
-  :global(body) {
-    @apply bg-slate-900;
-  }
-</style>
+<!-- Background set in app.css -->

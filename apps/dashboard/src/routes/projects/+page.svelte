@@ -1,10 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fetchProjects, fetchProject, createProject, deleteProject, spawnAgent, fetchProjectAgents, sendMessageToAgent, deleteAgent, changeAgentModel, type Project, type AgentAssociation } from '$lib/api';
+  import { goto } from '$app/navigation';
+  import { fetchProjects, fetchProject, createProject, deleteProject, spawnAgent, fetchProjectAgents, sendMessageToAgent, deleteAgent, changeAgentModel, fetchTasks, type Project, type AgentAssociation, type Task } from '$lib/api';
   
   let projects: Project[] = [];
   let selectedProject: Project | null = null;
   let projectAgents: AgentAssociation[] = [];
+  let allTasks: Task[] = [];
   let loading = true;
   let loadingDetail = false;
   
@@ -33,12 +35,21 @@
   async function loadProjects() {
     loading = true;
     projects = await fetchProjects();
+    allTasks = await fetchTasks();
     
     // Select first project by default
     if (projects.length > 0 && !selectedProject) {
       await selectProject(projects[0].id);
     }
     loading = false;
+  }
+  
+  function getProjectStats(projectId: string) {
+    const projectTasks = allTasks.filter(t => t.projectId === projectId);
+    const total = projectTasks.length;
+    const completed = projectTasks.filter(t => t.status === 'done').length;
+    const percentage = total === 0 ? 0 : Math.round((completed / total) * 100);
+    return { total, completed, percentage };
   }
   
   async function selectProject(id: string) {
@@ -579,7 +590,9 @@
       {:else}
         {#each projects as project}
           <button
-            on:click={() => selectProject(project.id)}
+            on:click={() => {
+              selectProject(project.id);
+            }}
             class="w-full text-left p-3 rounded-lg transition-colors
               {selectedProject?.id === project.id ? 'bg-blue-600/20 border border-blue-500/50' : 'bg-slate-700/50 hover:bg-slate-700 border border-transparent'}"
           >
@@ -601,6 +614,7 @@
               </div>
             </div>
             <div class="text-xs text-slate-500">{project.path}</div>
+            <div class="text-xs text-slate-400 mt-1">{getProjectStats(project.id).completed}/{getProjectStats(project.id).total} tasks</div>
             {#if project.updated}
               <div class="text-xs text-slate-500 mt-1">Updated {formatRelativeTime(project.updated)}</div>
             {/if}
@@ -638,6 +652,12 @@
           {#if selectedProject.updated}
             <span class="text-xs text-slate-500">Updated {formatRelativeTime(selectedProject.updated)}</span>
           {/if}
+          <button 
+            on:click={() => goto(`/projects/${selectedProject.id}`)}
+            class="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs font-medium transition-colors"
+          >
+            View Full →
+          </button>
           <button 
             on:click={() => showDeleteConfirm = true}
             class="px-2 py-1 text-red-400 hover:bg-red-500/20 rounded text-xs transition-colors"

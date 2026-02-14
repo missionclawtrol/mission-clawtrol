@@ -246,12 +246,15 @@ export async function sessionRoutes(fastify: FastifyInstance) {
       }
 
       // Parse the JSONL file
+      fastify.log.info(`Parsing JSONL file: ${sessionFile}`);
       const rawMessages = await parseJsonlFile(sessionFile, limit);
+      fastify.log.info(`Parsed ${rawMessages.length} raw messages`);
 
       // Convert to transcript format
       const messages: TranscriptMessage[] = rawMessages
         .map((msg) => convertMessageToTranscript(msg))
         .filter((msg): msg is TranscriptMessage => msg !== null);
+      fastify.log.info(`Converted to ${messages.length} transcript messages`);
 
       return {
         sessionId: sessionId,

@@ -289,7 +289,7 @@
 <!-- Details Modal -->
 {#if showDetailsModal && selectedAgent}
   <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" on:click={closeDetails}>
-    <div class="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto" on:click|stopPropagation>
+    <div class="bg-white text-gray-900 rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto" on:click|stopPropagation>
       <div class="p-6">
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center space-x-3">
@@ -316,37 +316,37 @@
             </div>
             <div class="p-3 bg-gray-50 rounded-lg">
               <div class="text-xs text-gray-500 mb-1">Model</div>
-              <div class="font-mono text-sm">{selectedAgent.model}</div>
+              <div class="font-mono text-sm text-gray-900">{selectedAgent.model}</div>
             </div>
           </div>
           
           <div class="p-3 bg-gray-50 rounded-lg">
             <div class="text-xs text-gray-500 mb-1">Last Active</div>
-            <div class="text-sm">{formatTime(selectedAgent.lastActive)}</div>
+            <div class="text-sm text-gray-900">{formatTime(selectedAgent.lastActive)}</div>
             {#if selectedAgent.lastActive}
-              <div class="text-xs text-gray-400 mt-1">{new Date(selectedAgent.lastActive).toLocaleString()}</div>
+              <div class="text-xs text-gray-500 mt-1">{new Date(selectedAgent.lastActive).toLocaleString()}</div>
             {/if}
           </div>
           
           <div class="p-3 bg-gray-50 rounded-lg">
             <div class="text-xs text-gray-500 mb-1">Agent ID</div>
-            <div class="font-mono text-sm">{selectedAgent.id}</div>
+            <div class="font-mono text-sm text-gray-900">{selectedAgent.id}</div>
           </div>
           
           <div class="p-3 bg-gray-50 rounded-lg">
             <div class="text-xs text-gray-500 mb-1">Workspace</div>
-            <div class="font-mono text-sm break-all">{selectedAgent.workspace}</div>
+            <div class="font-mono text-sm text-gray-900 break-all">{selectedAgent.workspace}</div>
           </div>
           
           <div class="p-3 bg-gray-50 rounded-lg">
             <div class="text-xs text-gray-500 mb-1">Agent Directory</div>
-            <div class="font-mono text-sm break-all">{selectedAgent.agentDir}</div>
+            <div class="font-mono text-sm text-gray-900 break-all">{selectedAgent.agentDir}</div>
           </div>
           
           {#if selectedAgent.activeSession}
             <div class="p-3 bg-gray-50 rounded-lg">
               <div class="text-xs text-gray-500 mb-1">Active Session</div>
-              <div class="font-mono text-sm break-all">{selectedAgent.activeSession}</div>
+              <div class="font-mono text-sm text-gray-900 break-all">{selectedAgent.activeSession}</div>
             </div>
           {/if}
           
@@ -354,7 +354,7 @@
             <div class="text-xs text-gray-500 mb-2">Mention Patterns</div>
             <div class="flex flex-wrap gap-2">
               {#each selectedAgent.mentionPatterns as pattern}
-                <span class="inline-block px-2 py-1 text-sm font-mono bg-white border border-gray-200 rounded">
+                <span class="inline-block px-2 py-1 text-sm font-mono bg-white text-gray-900 border border-gray-200 rounded">
                   {pattern}
                 </span>
               {/each}
@@ -385,7 +385,7 @@
 <!-- Message Modal -->
 {#if showMessageModal && selectedAgent}
   <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" on:click={closeMessage}>
-    <div class="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4" on:click|stopPropagation>
+    <div class="bg-white text-gray-900 rounded-lg shadow-xl max-w-lg w-full mx-4" on:click|stopPropagation>
       <div class="p-6">
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center space-x-3">

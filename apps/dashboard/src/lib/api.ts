@@ -300,7 +300,7 @@ export interface Task {
   agentName?: string;
   agentEmoji?: string;
   priority: 'P0' | 'P1' | 'P2' | 'P3';
-  status: 'backlog' | 'todo' | 'in_progress' | 'review' | 'done';
+  status: 'backlog' | 'todo' | 'in-progress' | 'review' | 'done';
   createdAt?: string;
   updatedAt?: string;
 }
