@@ -71,7 +71,7 @@ export async function costRoutes(fastify: FastifyInstance) {
           COALESCE(SUM(humanCost), 0) as totalHumanCost,
           COALESCE(SUM(runtime), 0) as totalAiSeconds
         FROM tasks 
-        WHERE status = 'done' AND cost IS NOT NULL
+        WHERE status = 'done' AND (humanCost IS NOT NULL OR linesAdded IS NOT NULL)
       `).get() as any;
 
       const totalAiSeconds = rows?.totalAiSeconds || 0;
@@ -116,7 +116,7 @@ export async function costRoutes(fastify: FastifyInstance) {
           COALESCE(SUM(cost), 0) as aiCost,
           COALESCE(SUM(humanCost), 0) as humanCost
         FROM tasks 
-        WHERE status = 'done' AND cost IS NOT NULL AND agentId IS NOT NULL
+        WHERE status = 'done' AND (humanCost IS NOT NULL OR linesAdded IS NOT NULL) AND agentId IS NOT NULL
         GROUP BY agentId
       `).all() as any[];
 
@@ -147,7 +147,7 @@ export async function costRoutes(fastify: FastifyInstance) {
           COALESCE(SUM(cost), 0) as aiCost,
           COALESCE(SUM(humanCost), 0) as humanCost
         FROM tasks 
-        WHERE status = 'done' AND cost IS NOT NULL AND projectId IS NOT NULL
+        WHERE status = 'done' AND (humanCost IS NOT NULL OR linesAdded IS NOT NULL) AND projectId IS NOT NULL
         GROUP BY projectId
       `).all() as any[];
 
@@ -203,7 +203,7 @@ export async function costRoutes(fastify: FastifyInstance) {
           COALESCE(SUM(humanCost), 0) as humanCost
         FROM tasks 
         WHERE status = 'done' 
-          AND cost IS NOT NULL 
+          AND (humanCost IS NOT NULL OR linesAdded IS NOT NULL) 
           AND completedAt IS NOT NULL
           AND completedAt >= date('now', '-7 days')
         GROUP BY strftime('${dateFormat}', completedAt)
@@ -249,7 +249,7 @@ export async function costRoutes(fastify: FastifyInstance) {
           linesTotal,
           completedAt
         FROM tasks 
-        WHERE status = 'done' AND cost IS NOT NULL
+        WHERE status = 'done' AND (humanCost IS NOT NULL OR linesAdded IS NOT NULL)
         ORDER BY completedAt DESC
         LIMIT ?
       `).all(limit) as any[];
