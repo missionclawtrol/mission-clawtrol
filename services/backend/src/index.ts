@@ -15,6 +15,8 @@ import { settingsRoutes } from './routes/settings.js';
 import { gatewayClient, ApprovalRequest, ApprovalResolved } from './gateway-client.js';
 import { loadAssociations } from './project-agents.js';
 import { createTask, updateTask, findTaskBySessionKey } from './task-store.js';
+import { initializeDatabase } from './database.js';
+import { migrateFromJSON } from './migrate.js';
 
 const execAsync = promisify(exec);
 
@@ -980,6 +982,14 @@ gatewayClient.on('subagent-completed', async (payload: any) => {
 // Start server
 const start = async () => {
   try {
+    // Initialize SQLite database
+    console.log('🗄️  Initializing SQLite database...');
+    initializeDatabase();
+
+    // Run one-time migration from JSON to SQLite
+    console.log('📦 Running migration from JSON to SQLite...');
+    await migrateFromJSON();
+
     // Load project-agent associations
     await loadAssociations();
 
