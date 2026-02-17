@@ -28,6 +28,13 @@ export function setBroadcastFn(fn: (type: string, payload: unknown) => void) {
   broadcastFn = fn;
 }
 
+// Session cleanup function — called when a task's sessionKey changes (re-assignment)
+let sessionCleanupFn: ((oldSessionKey: string) => void) | null = null;
+
+export function setSessionCleanupFn(fn: (oldSessionKey: string) => void) {
+  sessionCleanupFn = fn;
+}
+
 const WORKSPACE_PATH = join(process.env.HOME || '', '.openclaw/workspace');
 const WORK_ORDER_TEMPLATE_PATH = join(WORKSPACE_PATH, 'workflow', 'WORK_ORDER_TEMPLATE.md');
 const execAsync = promisify(exec);
@@ -393,6 +400,14 @@ export async function taskRoutes(fastify: FastifyInstance) {
 
       // Capture old task for audit logging before update
       const oldTask = await findTaskById(id);
+
+      // Clean up old session tracking when task is reassigned to a new agent
+      if (oldTask && updates.sessionKey && oldTask.sessionKey && updates.sessionKey !== oldTask.sessionKey) {
+        console.log(`[Tasks] Session reassignment: cleaning up old session ${oldTask.sessionKey}`);
+        if (sessionCleanupFn) {
+          sessionCleanupFn(oldTask.sessionKey);
+        }
+      }
 
       const task = await updateTask(id, updates);
 

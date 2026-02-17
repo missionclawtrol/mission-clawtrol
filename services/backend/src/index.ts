@@ -11,7 +11,7 @@ import { agentRoutes } from './routes/agents.js';
 import { projectRoutes } from './routes/projects.js';
 import { activityRoutes, logApprovalEvent, setBroadcastFunction } from './routes/activity.js';
 import { approvalRoutes } from './routes/approvals.js';
-import { taskRoutes, setBroadcastFn } from './routes/tasks.js';
+import { taskRoutes, setBroadcastFn, setSessionCleanupFn } from './routes/tasks.js';
 import { auditRoutes } from './routes/audit.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { settingsRoutes } from './routes/settings.js';
@@ -729,6 +729,14 @@ setBroadcastFunction(broadcast);
 
 // Wire up broadcast function for task routes
 setBroadcastFn(broadcast);
+
+// Wire up session cleanup for task reassignment
+setSessionCleanupFn((oldSessionKey: string) => {
+  console.log(`[SessionCleanup] Removing stale session: ${oldSessionKey}`);
+  sessionLastActivity.delete(oldSessionKey);
+  knownSubagentSessions.delete(oldSessionKey);
+  subagentTextBuffers.delete(oldSessionKey);
+});
 
 // Start a timer to check for stale sessions (30 seconds of inactivity = completion)
 const completionCheckInterval = setInterval(() => {
