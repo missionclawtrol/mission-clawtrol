@@ -17,6 +17,7 @@ import { settingsRoutes } from './routes/settings.js';
 import { costRoutes } from './routes/costs.js';
 import { messageRoutes } from './routes/message.js';
 import { authRoutes } from './routes/auth.js';
+import { createAuthMiddleware } from './middleware/auth.js';
 import { gatewayClient, ApprovalRequest, ApprovalResolved } from './gateway-client.js';
 import { loadAssociations } from './project-agents.js';
 import { createTask, updateTask, findTaskBySessionKey, findTaskById } from './task-store.js';
@@ -611,6 +612,15 @@ await fastify.register(session, {
 });
 
 await fastify.register(websocket);
+
+// Auth middleware - protect all /api/* routes except health and auth
+const authMiddleware = createAuthMiddleware([
+  /^\/api\/health$/,           // Health check
+  /^\/api\/auth\//,             // Auth routes (login, callback, me, logout)
+  /^\/ws$/,                     // WebSocket endpoint (used by dashboard before login)
+]);
+
+fastify.addHook('preHandler', authMiddleware);
 
 // Routes
 await fastify.register(agentRoutes, { prefix: '/api/agents' });
