@@ -18,6 +18,7 @@ import {
 import { db, getRawDb } from '../database.js';
 import { logAudit } from '../audit-store.js';
 import { requireRole, canModifyTask } from '../middleware/auth.js';
+import { onTaskStatusChange } from '../stage-agents/index.js';
 
 const WORKSPACE_PATH = join(process.env.HOME || '', '.openclaw/workspace');
 const WORK_ORDER_TEMPLATE_PATH = join(WORKSPACE_PATH, 'workflow', 'WORK_ORDER_TEMPLATE.md');
@@ -435,7 +436,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
         return reply.status(404).send({ error: 'Task not found' });
       }
 
-      // Log status change
+      // Log status change and trigger stage agents
       if (oldTask && updates.status && oldTask.status !== updates.status) {
         await logAudit({
           userId: request.user?.id,
@@ -443,6 +444,11 @@ export async function taskRoutes(fastify: FastifyInstance) {
           entityType: 'task',
           entityId: task.id,
           details: { oldStatus: oldTask.status, newStatus: updates.status },
+        });
+
+        // Fire stage agent asynchronously (don't block the response)
+        onTaskStatusChange(task.id, oldTask.status, updates.status).catch(err => {
+          fastify.log.error(err, 'Stage agent error for task %s', task.id);
         });
       }
 
