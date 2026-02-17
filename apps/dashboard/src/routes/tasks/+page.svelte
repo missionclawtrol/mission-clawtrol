@@ -42,13 +42,16 @@
   
   // Update URL when filters change (debounced)
   function updateUrlParams() {
+    // Only update URL if we're still on the tasks page
+    if (!$page.url.pathname.startsWith('/tasks')) return;
+    
     const params = new URLSearchParams();
     if (searchQuery) params.set('q', searchQuery);
     if (selectedAssignee) params.set('assignee', selectedAssignee);
     if (selectedProjectId) params.set('project', selectedProjectId);
     
     const queryString = params.toString();
-    const newUrl = queryString ? `?${queryString}` : '/tasks';
+    const newUrl = queryString ? `/tasks?${queryString}` : '/tasks';
     goto(newUrl, { replaceState: true, noScroll: true, keepFocus: true });
   }
   
