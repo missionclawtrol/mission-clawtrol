@@ -258,12 +258,30 @@
       return true;
     });
     
-    // Sort Done column by completedAt descending (newest first)
+    // Sort by priority first (P0, P1, P2, P3), then by other criteria
     if (columnId === 'done') {
+      // Sort Done column by priority first, then by completedAt descending (newest first)
       filtered.sort((a, b) => {
+        // Priority sort (P0 < P1 < P2 < P3 alphabetically)
+        if (a.priority !== b.priority) {
+          return a.priority.localeCompare(b.priority);
+        }
+        // Then by completedAt descending
         const dateA = a.completedAt ? new Date(a.completedAt).getTime() : 0;
         const dateB = b.completedAt ? new Date(b.completedAt).getTime() : 0;
         return dateB - dateA;
+      });
+    } else {
+      // Sort other columns by priority first, then by createdAt (stable sort)
+      filtered.sort((a, b) => {
+        // Priority sort (P0 < P1 < P2 < P3 alphabetically)
+        if (a.priority !== b.priority) {
+          return a.priority.localeCompare(b.priority);
+        }
+        // Then by createdAt ascending (older tasks first for same priority)
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateA - dateB;
       });
     }
     
@@ -1104,7 +1122,7 @@
                       <span class="text-xs text-slate-500">Unassigned</span>
                     {/if}
                   </div>
-                  <span class={`px-1.5 py-0.5 rounded text-xs font-semibold text-white flex-shrink-0 ${getPriorityColor(task.priority)}`}>
+                  <span class={`px-1.5 py-0.5 rounded-full text-xs font-semibold text-white flex-shrink-0 ${getPriorityColor(task.priority)}`}>
                     {task.priority}
                   </span>
                 </div>
