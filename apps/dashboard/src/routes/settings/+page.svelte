@@ -22,13 +22,51 @@
     },
     theme: 'dark',
     refreshInterval: 2,
+    kanbanColumnWidth: 384,
   };
+
+  let saving = false;
+  let saveMessage = '';
 
   let gatewayStatus: 'connected' | 'pending' | 'error' = 'pending';
   let backendStatus: 'connected' | 'pending' | 'error' = 'pending';
   let wsStatus: 'connected' | 'pending' | 'error' = 'pending';
 
+  async function saveSettings() {
+    saving = true;
+    saveMessage = '';
+    try {
+      const res = await fetch(`${API_BASE}/api/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          kanbanColumnWidth: settings.kanbanColumnWidth,
+          humanHourlyRate: settings.alerts?.audioVolume, // preserve existing
+        }),
+      });
+      if (res.ok) {
+        saveMessage = '✅ Settings saved';
+      } else {
+        saveMessage = '❌ Failed to save';
+      }
+    } catch {
+      saveMessage = '❌ Failed to save';
+    }
+    saving = false;
+    setTimeout(() => saveMessage = '', 3000);
+  }
+
   onMount(async () => {
+    // Load persisted settings
+    try {
+      const res = await fetch(`${API_BASE}/api/settings`, { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.kanbanColumnWidth) settings.kanbanColumnWidth = data.kanbanColumnWidth;
+      }
+    } catch {}
+
     // Backend API health check
     try {
       const res = await fetch(`${API_BASE}/api/health`);
@@ -155,6 +193,20 @@
       </div>
       
       <div>
+        <label for="kanban-col-width" class="block text-sm font-medium mb-2">Work Order Column Width (px)</label>
+        <input 
+          id="kanban-col-width"
+          type="range" 
+          min="280" 
+          max="600"
+          step="20"
+          bind:value={settings.kanbanColumnWidth}
+          class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+        >
+        <div class="text-sm text-slate-400 mt-1">{settings.kanbanColumnWidth}px</div>
+      </div>
+      
+      <div>
         <label for="refresh-interval" class="block text-sm font-medium mb-2">Refresh Interval (seconds)</label>
         <input 
           id="refresh-interval"
@@ -196,9 +248,16 @@
   </div>
   
   <!-- Save Button -->
-  <div class="flex justify-end">
-    <button class="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded font-medium transition-colors">
-      Save Settings
+  <div class="flex items-center justify-end gap-3">
+    {#if saveMessage}
+      <span class="text-sm {saveMessage.startsWith('✅') ? 'text-green-400' : 'text-red-400'}">{saveMessage}</span>
+    {/if}
+    <button 
+      on:click={saveSettings}
+      disabled={saving}
+      class="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded font-medium transition-colors"
+    >
+      {saving ? 'Saving...' : 'Save Settings'}
     </button>
   </div>
 </div>

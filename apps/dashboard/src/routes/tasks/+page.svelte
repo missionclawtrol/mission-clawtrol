@@ -13,6 +13,7 @@
   let agents: Agent[] = [];
   let users: UserInfo[] = [];
   let settings: Settings = { humanHourlyRate: 100 };
+  let kanbanColumnWidth = 384; // default w-96
   let loading = true;
   
   // UI state
@@ -236,6 +237,7 @@
       agents = agentsData;
       users = usersData;
       settings = settingsData;
+      if (settingsData.kanbanColumnWidth) kanbanColumnWidth = settingsData.kanbanColumnWidth;
     } catch (err) {
       console.error('Failed to load tasks view data:', err);
     } finally {
@@ -966,7 +968,8 @@
     <div class="flex gap-4 overflow-x-auto pb-4">
       {#each columns as column}
         <div 
-          class="bg-slate-700/30 rounded-lg border border-slate-600 flex flex-col w-96 flex-shrink-0 max-h-[calc(100vh-200px)]"
+          class="bg-slate-700/30 rounded-lg border border-slate-600 flex flex-col flex-shrink-0 max-h-[calc(100vh-200px)]"
+          style="width: {kanbanColumnWidth}px"
           on:dragover={(e) => handleDragOver(column.id, e)}
           on:dragleave={handleDragLeave}
           on:drop={(e) => handleDrop(column.id, e)}
