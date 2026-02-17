@@ -12,9 +12,39 @@ async function fetchWithTimeout(input: RequestInfo, init?: RequestInit): Promise
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    return await fetch(input, { ...init, signal: controller.signal });
+    return await fetch(input, { 
+      ...init, 
+      signal: controller.signal,
+      credentials: 'include', // Required for cookie-based sessions
+    });
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+// Current user type
+export interface CurrentUser {
+  id: string;
+  username: string;
+  name?: string;
+  email?: string;
+  avatarUrl?: string;
+}
+
+// Fetch current authenticated user
+export async function fetchCurrentUser(): Promise<CurrentUser | null> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/auth/me`);
+    if (res.status === 401) {
+      return null;
+    }
+    if (!res.ok) {
+      return null;
+    }
+    return await res.json();
+  } catch (error) {
+    console.error('Failed to fetch current user:', error);
+    return null;
   }
 }
 
