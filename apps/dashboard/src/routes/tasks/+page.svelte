@@ -2,6 +2,8 @@
 
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { page } from '$app/stores';
+  import { goto } from '$app/navigation';
   import { fetchTasks, createTask, updateTask, deleteTask, spawnAgent, fetchProjects, fetchAgents, fetchSettings, fetchUsers, type Task, type Project, type Agent, type Settings, type UserInfo } from '$lib/api';
   import { onTaskUpdate } from '$lib/taskWebSocket';
   
@@ -19,9 +21,60 @@
   let selectedTask: Task | null = null;
   let draggedTask: Task | null = null;
   let dragOverColumn: string | null = null;
-  let selectedProjectId: string = ''; // Empty = all projects
   
-  // Persist project filter to localStorage
+  // Filter state - sync with URL query params
+  let searchQuery = '';
+  let selectedAssignee = '';
+  let selectedProjectId = ''; // Empty = all projects
+  
+  // Sync filters from URL on mount and when URL changes
+  $: {
+    searchQuery = $page.url.searchParams.get('q') || '';
+    selectedAssignee = $page.url.searchParams.get('assignee') || '';
+    selectedProjectId = $page.url.searchParams.get('project') || '';
+  }
+  
+  // Get unique assignees from tasks
+  $: uniqueAssignees = [...new Set(tasks.map(t => t.assignedTo).filter(Boolean))];
+  
+  // Get unique projects from tasks (fallback to projects list)
+  $: uniqueProjects = [...new Set([...tasks.map(t => t.projectId), ...projects.map(p => p.id)]).values()];
+  
+  // Update URL when filters change (debounced)
+  function updateUrlParams() {
+    const params = new URLSearchParams();
+    if (searchQuery) params.set('q', searchQuery);
+    if (selectedAssignee) params.set('assignee', selectedAssignee);
+    if (selectedProjectId) params.set('project', selectedProjectId);
+    
+    const queryString = params.toString();
+    const newUrl = queryString ? `?${queryString}` : '/tasks';
+    goto(newUrl, { replaceState: true, noScroll: true, keepFocus: true });
+  }
+  
+  // Watch filter changes and update URL (with debounce)
+  let filterTimeout: ReturnType<typeof setTimeout>;
+  $: {
+    // Clear existing timeout on changes
+    clearTimeout(filterTimeout);
+    // Only update URL if we're past initial mount (loading is false)
+    if (!loading && (searchQuery !== $page.url.searchParams.get('q') || selectedAssignee !== $page.url.searchParams.get('assignee') || selectedProjectId !== $page.url.searchParams.get('project'))) {
+      filterTimeout = setTimeout(updateUrlParams, 300);
+    }
+  }
+  
+  // Clear all filters
+  function clearAllFilters() {
+    searchQuery = '';
+    selectedAssignee = '';
+    selectedProjectId = '';
+    updateUrlParams();
+  }
+  
+  // Check if any filters are active
+  $: hasActiveFilters = searchQuery || selectedAssignee || selectedProjectId;
+  
+  // Persist project filter to localStorage (legacy - now mainly using URL)
   const PROJECT_FILTER_KEY = 'mission-clawtrol-project-filter';
   
   function saveProjectFilter(projectId: string) {
@@ -37,16 +90,34 @@
     return '';
   }
   
-  // Watch for project filter changes and save
+  // Watch for project filter changes and save (legacy)
   $: if (typeof localStorage !== 'undefined' && selectedProjectId !== undefined) {
     saveProjectFilter(selectedProjectId);
   }
   
-  // Reload tasks when project filter changes (debounced)
-  let previousProjectId = '';
-  $: if (selectedProjectId !== previousProjectId && !loading) {
-    previousProjectId = selectedProjectId;
-    loadData();
+  // Reload tasks when project filter changes (debounced) - disabled since we're doing client-side filtering now
+  // The data is already loaded; we just filter client-side
+  
+  // Check if task matches search query
+  function matchesSearch(task: Task): boolean {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      task.title.toLowerCase().includes(query) ||
+      (task.description && task.description.toLowerCase().includes(query))
+    );
+  }
+  
+  // Check if task matches assignee filter
+  function matchesAssignee(task: Task): boolean {
+    if (!selectedAssignee) return true;
+    return task.assignedTo === selectedAssignee;
+  }
+  
+  // Check if task matches project filter
+  function matchesProject(task: Task): boolean {
+    if (!selectedProjectId) return true;
+    return task.projectId === selectedProjectId;
   }
   
   // Form state
@@ -173,7 +244,11 @@
       // Filter by status
       if (t.status !== columnId) return false;
       // Filter by project if one is selected
-      if (selectedProjectId && t.projectId !== selectedProjectId) return false;
+      if (!matchesProject(t)) return false;
+      // Filter by assignee if one is selected
+      if (!matchesAssignee(t)) return false;
+      // Filter by search query
+      if (!matchesSearch(t)) return false;
       return true;
     });
     
@@ -448,9 +523,7 @@
   }
   
   onMount(() => {
-    // Load saved project filter
-    selectedProjectId = loadProjectFilter();
-    
+    // Filters are now loaded from URL query params via reactive statement
     // Initial load
     loadData();
     
@@ -458,11 +531,6 @@
     onTaskUpdate(() => {
       loadData();
     });
-    
-    // Periodic refresh every 30 seconds (preserves filter)
-    // Periodic refresh disabled - caused UX issues
-    
-    return () => clearInterval(interval);
   });
 </script>
 
@@ -825,29 +893,52 @@
 <!-- Main Content -->
 <div class="space-y-4">
   <!-- Header -->
-  <div class="flex items-center justify-between gap-4">
+  <div class="flex items-center justify-between gap-4 flex-wrap">
     <h1 class="text-2xl font-semibold">📋 Work Orders</h1>
     
-    <!-- Project Selector -->
-    <div class="flex items-center gap-2 flex-1 max-w-md">
-      <label for="project-filter" class="text-sm text-slate-400 whitespace-nowrap">Project:</label>
+    <!-- Filter Bar -->
+    <div class="flex items-center gap-2 flex-1 max-w-3xl flex-wrap">
+      <!-- Search Input -->
+      <div class="relative flex-1 min-w-[180px] max-w-xs">
+        <input
+          type="text"
+          bind:value={searchQuery}
+          placeholder="Search tasks..."
+          class="w-full px-3 py-2 pl-8 bg-slate-700 border border-slate-600 rounded text-sm focus:outline-none focus:border-blue-500 placeholder-slate-400"
+        />
+        <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
+      </div>
+      
+      <!-- Assignee Filter -->
       <select 
-        id="project-filter"
+        bind:value={selectedAssignee}
+        class="px-3 py-2 bg-slate-700 border border-slate-600 rounded text-sm focus:outline-none focus:border-blue-500 min-w-[140px]"
+      >
+        <option value="">All Assignees</option>
+        {#each uniqueAssignees as assignee}
+          <option value={assignee}>{getUserName(assignee) || assignee}</option>
+        {/each}
+      </select>
+      
+      <!-- Project Filter -->
+      <select 
         bind:value={selectedProjectId}
-        class="flex-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-sm focus:outline-none focus:border-blue-500"
+        class="px-3 py-2 bg-slate-700 border border-slate-600 rounded text-sm focus:outline-none focus:border-blue-500 min-w-[140px]"
       >
         <option value="">All Projects</option>
         {#each projects as project}
           <option value={project.id}>{project.name}</option>
         {/each}
       </select>
-      {#if selectedProjectId}
+      
+      <!-- Clear Filters Button -->
+      {#if hasActiveFilters}
         <button 
-          on:click={() => selectedProjectId = ''}
-          class="px-2 py-1 text-xs text-slate-400 hover:text-slate-200"
-          title="Clear filter"
+          on:click={clearAllFilters}
+          class="px-3 py-2 text-sm text-slate-400 hover:text-slate-200 hover:bg-slate-600 rounded transition-colors"
+          title="Clear all filters"
         >
-          ✕
+          ✕ Clear
         </button>
       {/if}
     </div>
