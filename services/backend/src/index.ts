@@ -657,44 +657,38 @@ await fastify.register(commentRoutes, { prefix: '/api/tasks' });
 
 // Health check with comprehensive system status
 fastify.get('/api/health', async () => {
-  const startTime = Date.now();
-  
   // 1. System uptime
   const uptime = process.uptime();
   
   // 2. Gateway WebSocket connection status
   const gatewayConnected = gatewayClient.isConnected();
   
-  // 3. DB connectivity check with response time
+  // 3. DB connectivity check with response time + task counts (single query)
   let dbConnected = false;
   let dbResponseMs = 0;
+  let taskCounts = { backlog: 0, todo: 0, 'in-progress': 0, review: 0, done: 0 };
+  
   try {
     const dbStart = Date.now();
-    await db.query('SELECT COUNT(*) as count FROM tasks');
+    const rows = await db.query<any>('SELECT status, COUNT(*) as count FROM tasks GROUP BY status');
     dbResponseMs = Date.now() - dbStart;
     dbConnected = true;
-  } catch (err) {
-    dbResponseMs = Date.now() - startTime;
-    dbConnected = false;
-  }
-  
-  // 4. Task counts by status
-  let taskCounts = { backlog: 0, todo: 0, 'in-progress': 0, review: 0, done: 0 };
-  try {
-    const rows = await db.query<any>('SELECT status, COUNT(*) as count FROM tasks GROUP BY status');
+    
+    // Parse task counts from query result
     for (const row of rows) {
       if (row.status in taskCounts) {
-        taskCounts[row.status as keyof typeof taskCounts] = row.count;
+        taskCounts[row.status as keyof typeof taskCounts] = parseInt(row.count);
       }
     }
   } catch (err) {
-    // Failed to get task counts
+    dbResponseMs = 0;
+    dbConnected = false;
   }
   
-  // 5. Active agent sessions count
+  // 4. Active agent sessions count
   const activeAgents = knownSubagentSessions.size;
   
-  // 6. Overall status calculation
+  // 5. Overall status calculation
   let overallStatus: 'healthy' | 'degraded' | 'unhealthy';
   if (!dbConnected) {
     overallStatus = 'unhealthy';
