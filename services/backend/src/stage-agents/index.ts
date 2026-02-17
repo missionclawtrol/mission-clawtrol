@@ -3,10 +3,8 @@
  * 
  * Triggers automated agents when tasks transition between stages.
  * Currently supports:
- *   - "review" → Spawns a dedicated QA agent via OpenClaw gateway to review the task
- * 
- * The QA agent reviews handoff notes, validates done criteria, checks the git diff,
- * posts findings as a comment, and moves the task to done or back to in-progress.
+ *   - "review" → Spawns a dedicated QA agent to review the task
+ *   - "done"   → Spawns a docs agent to update PROJECT.md if needed
  */
 
 import { Task, updateTask, findTaskById } from '../task-store.js';
@@ -36,14 +34,17 @@ export async function onTaskStatusChange(
   }
 
   // Only act on transitions we handle
-  if (newStatus !== 'review') return;
+  if (newStatus !== 'review' && newStatus !== 'done') return;
 
   try {
     processingTasks.add(taskId);
-    await handleReviewStage(taskId);
+    if (newStatus === 'review') {
+      await handleReviewStage(taskId);
+    } else if (newStatus === 'done') {
+      await handleDoneStage(taskId);
+    }
   } finally {
     // Keep the task in processingTasks for a bit to prevent re-entry
-    // from the QA agent's own status updates
     setTimeout(() => processingTasks.delete(taskId), 30_000);
   }
 }
@@ -210,4 +211,131 @@ Use this format for your comment:
 \`\`\`
 
 IMPORTANT: You MUST make the API calls. Do not just analyze — take action.`;
+}
+
+/**
+ * Done stage handler — spawns docs agent to update PROJECT.md if needed
+ */
+async function handleDoneStage(taskId: string): Promise<void> {
+  const task = await findTaskById(taskId);
+  if (!task) return;
+
+  // Skip non-mission-clawtrol tasks
+  if (task.projectId !== 'mission-clawtrol') {
+    console.log(`[StageAgent] Skipping docs update for non-MC task ${taskId}`);
+    return;
+  }
+
+  // Skip if no commit (nothing changed in the codebase)
+  if (!task.commitHash) {
+    console.log(`[StageAgent] Skipping docs update for task ${taskId}: no commit hash`);
+    return;
+  }
+
+  console.log(`[StageAgent] Spawning docs agent for task ${taskId}: ${task.title}`);
+
+  const gatewayUrl = process.env.GATEWAY_URL || 'ws://127.0.0.1:18789';
+  const GATEWAY_PORT = new URL(gatewayUrl.replace('ws://', 'http://').replace('wss://', 'https://')).port || '18789';
+  const GATEWAY_TOKEN = process.env.GATEWAY_TOKEN || '';
+
+  try {
+    const docsPrompt = buildDocsPrompt(task);
+
+    const response = await fetch(`http://127.0.0.1:${GATEWAY_PORT}/tools/invoke`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${GATEWAY_TOKEN}`,
+      },
+      body: JSON.stringify({
+        tool: 'sessions_spawn',
+        args: {
+          agentId: 'editor',
+          task: docsPrompt,
+          model: 'anthropic/claude-sonnet-4-5',
+          cleanup: 'delete',
+          runTimeoutSeconds: 120,
+        },
+      }),
+    });
+
+    const result = await response.json() as any;
+
+    if (!response.ok || !result.ok) {
+      console.error('[StageAgent] Failed to spawn docs agent:', JSON.stringify(result));
+      return;
+    }
+
+    const spawnResult = result.result?.details || result.result || result;
+    console.log(`[StageAgent] Docs agent spawned: ${spawnResult.childSessionKey || spawnResult.sessionKey}`);
+
+    await logAudit({
+      userId: 'docs-agent',
+      action: 'task.docs_update_started',
+      entityType: 'task',
+      entityId: taskId,
+      details: {
+        sessionKey: spawnResult.childSessionKey || spawnResult.sessionKey,
+        runId: spawnResult.runId,
+      },
+    });
+
+  } catch (err: any) {
+    console.error(`[StageAgent] Error spawning docs agent for task ${taskId}:`, err.message);
+  }
+}
+
+/**
+ * Build the prompt for the docs agent
+ */
+function buildDocsPrompt(task: Task): string {
+  return `## Documentation Update Check
+
+You are a docs agent. A task just completed in Mission Clawtrol. Your job is to check if PROJECT.md needs updating.
+
+### Completed Task
+- **Title:** ${task.title}
+- **Description:** ${task.description || 'N/A'}
+- **Commit Hash:** ${task.commitHash}
+
+### Instructions
+
+1. Read the current PROJECT.md:
+\`\`\`bash
+cat ~/.openclaw/workspace/mission-clawtrol/PROJECT.md
+\`\`\`
+
+2. Check what changed in this commit:
+\`\`\`bash
+git -C ~/.openclaw/workspace/mission-clawtrol diff --stat ${task.commitHash}^..${task.commitHash}
+git -C ~/.openclaw/workspace/mission-clawtrol log --oneline -1 ${task.commitHash}
+\`\`\`
+
+3. Determine if PROJECT.md needs updating. It needs an update if the task:
+   - Added a new user-facing feature (new page, new API endpoint, new capability)
+   - Changed the tech stack or architecture
+   - Added new configuration or environment variables
+   - Changed the project structure significantly
+
+   It does NOT need an update for:
+   - Bug fixes
+   - Internal refactors
+   - Style/CSS changes
+   - Test additions
+   - Minor tweaks
+
+4. If PROJECT.md needs updating:
+   - Edit the file to reflect the new feature/change
+   - Keep the existing structure and style
+   - Be concise — one or two lines per feature
+   - Commit the change:
+   \`\`\`bash
+   cd ~/.openclaw/workspace/mission-clawtrol
+   git add PROJECT.md
+   git commit -m "docs: update PROJECT.md for ${task.title}"
+   \`\`\`
+
+5. If no update is needed, do nothing. Just say "No docs update needed."
+
+IMPORTANT: Only update PROJECT.md. Do not modify any other files.`;
 }
