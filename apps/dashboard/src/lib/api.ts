@@ -390,6 +390,7 @@ export interface Task {
   assignedTo?: string | null;
   createdByName?: string | null; // Populated client-side
   assignedToName?: string | null; // Populated client-side
+  dueDate?: string | null; // ISO timestamp for when task is due
 }
 
 export interface UserInfo {
@@ -430,6 +431,8 @@ export interface CreateTaskParams {
   agentId?: string;
   priority: 'P0' | 'P1' | 'P2' | 'P3';
   status?: 'backlog' | 'todo' | 'in_progress' | 'review' | 'done';
+  dueDate?: string;
+  assignedTo?: string;
 }
 
 export async function createTask(params: CreateTaskParams): Promise<{ success: boolean; task?: Task; error?: string }> {
@@ -459,6 +462,8 @@ export interface UpdateTaskParams {
   estimatedHumanMinutes?: number;
   humanHourlyRate?: number;
   complexity?: 'simple' | 'medium' | 'complex';
+  dueDate?: string | null;
+  assignedTo?: string | null;
 }
 
 export async function updateTask(id: string, params: UpdateTaskParams): Promise<{ success: boolean; task?: Task; error?: string }> {

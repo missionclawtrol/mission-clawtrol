@@ -134,6 +134,7 @@
     agentId: '',
     assignedTo: '',
     priority: 'P2' as const,
+    dueDate: '',
   };
   
   // Comments state
@@ -412,6 +413,31 @@
     }
   }
   
+  function formatDueDate(dateStr: string | undefined | null): { text: string; color: string; icon: string } | null {
+    if (!dateStr) return null;
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = date.getTime() - now.getTime();
+    const diffHours = diffMs / (1000 * 60 * 60);
+    
+    // Format date as "Due Mon Feb 17"
+    const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+    const monthDay = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const text = `Due ${dayName} ${monthDay}`;
+    
+    // Color coding
+    if (diffHours < 0) {
+      // Overdue
+      return { text, color: 'text-red-400', icon: '⚠️' };
+    } else if (diffHours < 24) {
+      // Due within 24h
+      return { text, color: 'text-orange-400', icon: '' };
+    } else {
+      // Future
+      return { text, color: 'text-slate-400', icon: '' };
+    }
+  }
+  
   function getProjectName(projectId: string): string {
     return projects.find(p => p.id === projectId)?.name || 'Unknown';
   }
@@ -470,13 +496,14 @@
       assignedTo: newTask.assignedTo || undefined,
       priority: newTask.priority,
       status: 'backlog',
+      dueDate: newTask.dueDate ? new Date(newTask.dueDate).toISOString() : undefined,
     });
     
     formLoading = false;
     
     if (result.success) {
       showNewTaskModal = false;
-      newTask = { title: '', description: '', projectId: '', agentId: '', assignedTo: '', priority: 'P2' };
+      newTask = { title: '', description: '', projectId: '', agentId: '', assignedTo: '', priority: 'P2', dueDate: '' };
       await loadData();
     } else {
       formError = result.error || 'Failed to create task';
@@ -687,6 +714,16 @@
             <option value="P3">P3 - Low</option>
           </select>
         </div>
+        
+        <div>
+          <label for="task-due-date" class="block text-sm text-slate-400 mb-1">Due Date (Optional)</label>
+          <input 
+            id="task-due-date"
+            type="date"
+            bind:value={newTask.dueDate}
+            class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-blue-500 focus:outline-none"
+          />
+        </div>
       </div>
       <div class="px-4 py-3 border-t border-slate-700 flex justify-end gap-2">
         <button 
@@ -774,6 +811,37 @@
               <option value={user.id}>{user.name || user.githubLogin}</option>
             {/each}
           </select>
+        </div>
+
+        <div>
+          <h4 class="text-sm text-slate-400 mb-1">Due Date</h4>
+          <div class="flex gap-2">
+            <input 
+              type="date"
+              value={selectedTask.dueDate ? new Date(selectedTask.dueDate).toISOString().split('T')[0] : ''}
+              on:change={async (e) => {
+                const val = e.currentTarget.value;
+                const isoDate = val ? new Date(val).toISOString() : null;
+                await updateTask(selectedTask.id, { dueDate: isoDate });
+                await loadData();
+                if (selectedTask) selectedTask = { ...selectedTask, dueDate: isoDate };
+              }}
+              class="flex-1 bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white"
+            />
+            {#if selectedTask.dueDate}
+              <button
+                on:click={async () => {
+                  await updateTask(selectedTask.id, { dueDate: null });
+                  await loadData();
+                  if (selectedTask) selectedTask = { ...selectedTask, dueDate: null };
+                }}
+                class="px-3 py-2 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded text-sm transition-colors"
+                title="Clear due date"
+              >
+                Clear
+              </button>
+            {/if}
+          </div>
         </div>
 
         {#if selectedTask.createdBy}
@@ -1098,6 +1166,21 @@
                     <div class="mb-2 pb-2 border-b border-slate-700 flex flex-col gap-1 text-xs">
                       <span class="text-green-400 font-semibold">✨ Saved {formatMinutes(timeSaved)}</span>
                       <span class="text-green-400 font-semibold">💚 ${moneySaved.toFixed(0)}</span>
+                    </div>
+                  {/if}
+                {/if}
+                
+                <!-- Due Date -->
+                {#if task.dueDate}
+                  {@const dueDateInfo = formatDueDate(task.dueDate)}
+                  {#if dueDateInfo}
+                    <div class="mb-2 pb-2 border-b border-slate-700">
+                      <div class="text-xs {dueDateInfo.color} flex items-center gap-1">
+                        {#if dueDateInfo.icon}
+                          <span>{dueDateInfo.icon}</span>
+                        {/if}
+                        <span>{dueDateInfo.text}</span>
+                      </div>
                     </div>
                   {/if}
                 {/if}

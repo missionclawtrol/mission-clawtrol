@@ -129,6 +129,7 @@ export class SqliteDatabase implements IDatabase {
     addColumnIfMissing('tasks', 'userId', 'TEXT');
     addColumnIfMissing('tasks', 'createdBy', 'TEXT');
     addColumnIfMissing('tasks', 'assignedTo', 'TEXT');
+    addColumnIfMissing('tasks', 'dueDate', 'TEXT');
 
     // Insert default settings if not exist
     this.db

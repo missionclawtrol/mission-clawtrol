@@ -221,6 +221,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
       agentId?: string | null;
       sessionKey?: string | null;
       handoffNotes?: string | null;
+      dueDate?: string | null;
     };
   }>('/', async (request, reply) => {
     try {
@@ -233,6 +234,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
         agentId = null,
         sessionKey = null,
         handoffNotes = null,
+        dueDate = null,
       } = request.body;
 
       // Viewers cannot create tasks
@@ -272,6 +274,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
         agentId: agentId || null,
         sessionKey: sessionKey || null,
         handoffNotes: handoffNotes || null,
+        dueDate: dueDate || null,
         createdBy,
         assignedTo,
       });
