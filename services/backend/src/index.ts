@@ -20,6 +20,7 @@ import { messageRoutes } from './routes/message.js';
 import { authRoutes } from './routes/auth.js';
 import { userRoutes } from './routes/users.js';
 import { commentRoutes } from './routes/comments.js';
+import { webhookRoutes } from './routes/webhooks.js';
 import { createAuthMiddleware } from './middleware/auth.js';
 import { gatewayClient, ApprovalRequest, ApprovalResolved } from './gateway-client.js';
 import { loadAssociations } from './project-agents.js';
@@ -504,6 +505,7 @@ await fastify.register(messageRoutes, { prefix: '/api/message' });
 await fastify.register(authRoutes, { prefix: '/api/auth' });
 await fastify.register(userRoutes, { prefix: '/api/users' });
 await fastify.register(commentRoutes, { prefix: '/api/tasks' });
+await fastify.register(webhookRoutes, { prefix: '/api/webhooks' });
 
 // Health check with comprehensive system status
 fastify.get('/api/health', async () => {

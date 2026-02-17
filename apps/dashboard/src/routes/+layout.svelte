@@ -15,6 +15,7 @@
     { name: 'Projects', href: '/projects', icon: '📁' },
     { name: 'Costs', href: '/costs', icon: '💰' },
     { name: 'Team', href: '/team', icon: '🔐' },
+    { name: 'Webhooks', href: '/webhooks', icon: '🔔' },
     { name: 'Settings', href: '/settings', icon: '⚙️' },
   ];
   

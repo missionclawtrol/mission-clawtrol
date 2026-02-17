@@ -20,6 +20,7 @@ import { logAudit } from '../audit-store.js';
 import { requireRole, canModifyTask } from '../middleware/auth.js';
 import { onTaskStatusChange } from '../stage-agents/index.js';
 import { enrichDoneTransition } from '../enrichment.js';
+import { dispatchWebhookEvent } from '../webhook-dispatcher.js';
 
 // Broadcast function will be injected from index.ts
 let broadcastFn: ((type: string, payload: unknown) => void) | null = null;
@@ -297,6 +298,11 @@ export async function taskRoutes(fastify: FastifyInstance) {
         details: { title: task.title, priority: task.priority, projectId: task.projectId },
       });
 
+      // Dispatch webhook event for task creation
+      dispatchWebhookEvent('task.created', { task }).catch(err => {
+        fastify.log.error(err, 'Webhook dispatch error for task.created');
+      });
+
       // Broadcast task creation to connected clients
       if (broadcastFn) {
         broadcastFn('task.created', {
@@ -428,9 +434,37 @@ export async function taskRoutes(fastify: FastifyInstance) {
           details: { oldStatus: oldTask.status, newStatus: updates.status },
         });
 
+        // Dispatch webhook event for status change
+        dispatchWebhookEvent('task.status_changed', {
+          task,
+          oldStatus: oldTask.status,
+          newStatus: updates.status,
+        }).catch(err => {
+          fastify.log.error(err, 'Webhook dispatch error for task.status_changed');
+        });
+
         // Fire stage agent asynchronously (don't block the response)
         onTaskStatusChange(task.id, oldTask.status, updates.status).catch(err => {
           fastify.log.error(err, 'Stage agent error for task %s', task.id);
+        });
+      }
+
+      // Log assignment change
+      if (oldTask && updates.assignedTo !== undefined && oldTask.assignedTo !== updates.assignedTo) {
+        await logAudit({
+          userId: request.user?.id,
+          action: 'task.assigned',
+          entityType: 'task',
+          entityId: task.id,
+          details: { assignedTo: updates.assignedTo },
+        });
+
+        // Dispatch webhook event for assignment
+        dispatchWebhookEvent('task.assigned', {
+          task,
+          assignedTo: updates.assignedTo,
+        }).catch(err => {
+          fastify.log.error(err, 'Webhook dispatch error for task.assigned');
         });
       }
 

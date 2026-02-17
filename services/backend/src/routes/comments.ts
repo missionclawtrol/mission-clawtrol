@@ -6,6 +6,7 @@ import { FastifyInstance } from 'fastify';
 import { getCommentsByTask, createComment, updateComment, deleteComment, getComment } from '../comment-store.js';
 import { findTaskById } from '../task-store.js';
 import { logAudit } from '../audit-store.js';
+import { dispatchWebhookEvent } from '../webhook-dispatcher.js';
 
 export async function commentRoutes(fastify: FastifyInstance) {
   /**
@@ -62,6 +63,14 @@ export async function commentRoutes(fastify: FastifyInstance) {
         entityType: 'task',
         entityId: taskId,
         details: { commentId: comment.id },
+      });
+
+      // Dispatch webhook event for comment added
+      dispatchWebhookEvent('task.comment_added', {
+        taskId,
+        comment,
+      }).catch(err => {
+        console.error('Webhook dispatch error for task.comment_added:', err);
       });
 
       return reply.status(201).send(comment);

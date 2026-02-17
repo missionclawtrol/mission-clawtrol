@@ -1,25 +1,52 @@
 # Mission Clawtrol 🦞
 
-> Command center for your OpenClaw agents
+> AI-powered task management for multi-agent teams
 
-Mission Clawtrol is a multi-agent management dashboard for [OpenClaw](https://github.com/openclaw/openclaw). Monitor agents, track projects, manage approvals, and coordinate your AI workforce from a single interface.
+Mission Clawtrol is a kanban-style task management platform for teams using AI agents alongside human developers. Built on [OpenClaw](https://github.com/openclaw/openclaw), it orchestrates AI workflows — assigning tasks, tracking progress, and automating QA.
 
-![Status](https://img.shields.io/badge/status-in%20development-yellow)
+![Status](https://img.shields.io/badge/status-beta-green)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ## Features
 
-- 🤖 **Agent Monitoring** — Real-time status of all agents
-- 📁 **Project Management** — Track agent assignments per project
-- 📊 **Task Tracking** — Parallel and sequential task visualization
-- ✅ **Approval Queue** — Human-in-the-loop for sensitive actions
-- 🔔 **Alerts** — Browser/audio notifications when agents need attention
-- 💬 **Activity Feed** — Live cross-agent communication log
-- 🌳 **Agent Tree** — Hierarchical view grouped by project
+- 📋 **Kanban Board** — Drag-and-drop tasks across Backlog → Todo → In Progress → Review → Done
+- 🤖 **Agent Orchestration** — Spawn AI agents to work on tasks, track by session
+- 🔍 **Automated QA** — QA agent auto-reviews every task entering Review
+- 👥 **Team Management** — GitHub OAuth with role-based access (Admin/Member/Viewer)
+- 📊 **Analytics** — Cost tracking, LOC metrics, human-equivalent savings
+- 🔔 **Real-time** — WebSocket toasts, live board refresh
+- 🔗 **Webhooks** — Signed notifications for Slack, Discord, email
+- 📅 **Due Dates** — Color-coded deadlines (overdue, due soon, future)
+- 🎯 **Priority Sorting** — P0–P3 with colored badges, auto-sorted in columns
 
-## Screenshots
+## Quick Start
 
-*Coming soon*
+```bash
+# Clone
+git clone https://github.com/cgmartin0310/mission-clawtrol.git
+cd mission-clawtrol
+
+# Backend (port 3001)
+cd services/backend && npm install
+echo "DISABLE_AUTH=true" > .env
+npm run dev
+
+# Dashboard (port 5173) — new terminal
+cd apps/dashboard && npm install
+npm run dev
+```
+
+Open http://localhost:5173
+
+## Production Deployment
+
+```bash
+cp .env.production.example .env.production
+# Configure your environment variables
+docker compose -f docker-compose.production.yml up -d
+```
+
+See [PROJECT.md](PROJECT.md) for full architecture, API docs, and configuration details.
 
 ## Tech Stack
 
@@ -27,77 +54,14 @@ Mission Clawtrol is a multi-agent management dashboard for [OpenClaw](https://gi
 |-------|------------|
 | Frontend | SvelteKit + TypeScript + Tailwind CSS |
 | Backend | Fastify + TypeScript |
+| Database | SQLite (dev) / PostgreSQL (prod) |
 | Real-time | WebSocket |
-| Data | OpenClaw sessions + workspace files |
+| Auth | GitHub OAuth |
+| CI/CD | GitHub Actions → ghcr.io |
 
-## Quick Start
+## Screenshots
 
-### Prerequisites
-
-- Node.js 20+
-- OpenClaw installed and running
-- npm or pnpm
-
-### Installation
-
-```bash
-git clone https://github.com/cgmartin0310/mission-clawtrol.git
-cd mission-clawtrol
-
-# Install frontend dependencies
-cd apps/dashboard && npm install
-
-# Install backend dependencies
-cd ../services/backend && npm install
-```
-
-### Running
-
-```bash
-# Terminal 1 - Frontend (port 5173)
-cd apps/dashboard
-npm run dev
-
-# Terminal 2 - Backend (port 3001)
-cd services/backend
-npm run dev
-```
-
-Open http://localhost:5173
-
-## Project Structure
-
-```
-mission-clawtrol/
-├── apps/
-│   └── dashboard/          # SvelteKit frontend
-│       └── src/
-│           └── routes/     # Pages (Overview, Monitor, Approvals, etc.)
-├── services/
-│   └── backend/            # Fastify API server
-│       └── src/
-│           └── routes/     # API endpoints
-├── docs/                   # Documentation
-├── PROJECT.md              # Project goals and context
-├── STATUS.md               # Current status
-└── HANDOFF.md              # Task assignments
-```
-
-## Roadmap
-
-- [x] Project scaffold
-- [x] Frontend UI (all tabs)
-- [x] Backend API structure
-- [ ] Connect to OpenClaw sessions
-- [ ] Real-time WebSocket updates
-- [ ] Approval workflow
-- [ ] Alert system
-- [ ] Multi-host support
-
-## Inspiration
-
-- [agent-commander](https://github.com/cvsloane/agent-commander) — Session management patterns
-- [multi-agent-verse](https://github.com/diegopacheco/multi-agent-verse) — Task orchestration UI
+*Coming soon*
 
 ## License
 
@@ -105,4 +69,4 @@ MIT
 
 ---
 
-*Built with 🦞 by OpenClaw agents*
+*Built by agents, for agents.* 🦞

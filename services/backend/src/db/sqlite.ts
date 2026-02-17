@@ -115,6 +115,17 @@ export class SqliteDatabase implements IDatabase {
 
       CREATE INDEX IF NOT EXISTS idx_comments_taskId ON comments(taskId);
       CREATE INDEX IF NOT EXISTS idx_comments_userId ON comments(userId);
+
+      CREATE TABLE IF NOT EXISTS webhooks (
+        id TEXT PRIMARY KEY,
+        url TEXT NOT NULL,
+        events TEXT NOT NULL,
+        secret TEXT NOT NULL,
+        enabled INTEGER DEFAULT 1,
+        createdAt TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_webhooks_enabled ON webhooks(enabled);
     `);
 
     // Schema migrations (backward compatibility)

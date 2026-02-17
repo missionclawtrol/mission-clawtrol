@@ -644,3 +644,101 @@ export const api = {
     return res.json();
   },
 };
+
+// Webhook types
+export interface Webhook {
+  id: string;
+  url: string;
+  events: string[];
+  secret: string;
+  enabled: boolean;
+  createdAt: string;
+}
+
+// Fetch all webhooks
+export async function fetchWebhooks(): Promise<Webhook[]> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/webhooks`);
+    if (!res.ok) throw new Error('Failed to fetch webhooks');
+    const data = await res.json();
+    return data.webhooks || [];
+  } catch (err) {
+    console.error('fetchWebhooks error:', err);
+    throw err;
+  }
+}
+
+// Create a new webhook
+export async function createWebhook(webhook: {
+  url: string;
+  events: string[];
+  secret?: string;
+  enabled?: boolean;
+}): Promise<Webhook> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/webhooks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(webhook),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to create webhook');
+    }
+    return res.json();
+  } catch (err) {
+    console.error('createWebhook error:', err);
+    throw err;
+  }
+}
+
+// Update a webhook
+export async function updateWebhook(id: string, updates: Partial<Webhook>): Promise<Webhook> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/webhooks/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to update webhook');
+    }
+    return res.json();
+  } catch (err) {
+    console.error('updateWebhook error:', err);
+    throw err;
+  }
+}
+
+// Delete a webhook
+export async function deleteWebhook(id: string): Promise<void> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/webhooks/${id}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to delete webhook');
+    }
+  } catch (err) {
+    console.error('deleteWebhook error:', err);
+    throw err;
+  }
+}
+
+// Test a webhook
+export async function testWebhook(id: string): Promise<void> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/webhooks/${id}/test`, {
+      method: 'POST',
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Failed to test webhook');
+    }
+  } catch (err) {
+    console.error('testWebhook error:', err);
+    throw err;
+  }
+}
