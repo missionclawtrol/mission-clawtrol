@@ -870,7 +870,7 @@
     <div class="flex gap-4 overflow-x-auto pb-4">
       {#each columns as column}
         <div 
-          class="bg-slate-700/30 rounded-lg border border-slate-600 flex flex-col w-80 flex-shrink-0 max-h-[calc(100vh-200px)]"
+          class="bg-slate-700/30 rounded-lg border border-slate-600 flex flex-col w-96 flex-shrink-0 max-h-[calc(100vh-200px)]"
           on:dragover={(e) => handleDragOver(column.id, e)}
           on:dragleave={handleDragLeave}
           on:drop={(e) => handleDrop(column.id, e)}
