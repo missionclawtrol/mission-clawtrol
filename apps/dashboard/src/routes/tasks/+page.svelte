@@ -532,6 +532,7 @@
     
     // Register WebSocket callback for real-time updates
     onTaskUpdate(() => {
+      console.log('[Tasks] WebSocket task update received, refreshing...');
       loadData();
     });
   });

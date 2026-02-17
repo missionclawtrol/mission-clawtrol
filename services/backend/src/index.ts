@@ -157,7 +157,7 @@ async function scheduleTitleExtraction(sessionKey: string, taskId: string) {
             });
 
             // Broadcast the update
-            broadcast('task-updated', {
+            broadcast('task.updated', {
               id: updatedTask.id,
               title: updatedTask.title,
               status: updatedTask.status,
@@ -211,7 +211,7 @@ async function checkAndExtractTitle(sessionKey: string, taskId: string) {
           });
 
           // Broadcast the update
-          broadcast('task-updated', {
+          broadcast('task.updated', {
             id: updatedTask.id,
             title: updatedTask.title,
             status: updatedTask.status,
@@ -569,7 +569,7 @@ async function completeTask(sessionKey: string) {
       }
 
       // Broadcast the update
-      broadcast('task-updated', {
+      broadcast('task.updated', {
         id: updatedTask!.id,
         title: updatedTask!.title,
         status: updatedTask!.status,
@@ -1052,7 +1052,7 @@ gatewayClient.on('subagent-completed', async (payload: any) => {
     });
 
     // Broadcast the task update
-    broadcast('task-updated', {
+    broadcast('task.updated', {
       id: updatedTask!.id,
       title: updatedTask!.title,
       status: updatedTask!.status,
