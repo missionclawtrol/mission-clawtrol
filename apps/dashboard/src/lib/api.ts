@@ -574,7 +574,32 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`API error: ${res.status}`);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `API error: ${res.status}`);
+    }
+    return res.json();
+  },
+  patch: async (path: string, body: any) => {
+    const res = await fetchWithTimeout(`${API_BASE}${path}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `API error: ${res.status}`);
+    }
+    return res.json();
+  },
+  delete: async (path: string) => {
+    const res = await fetchWithTimeout(`${API_BASE}${path}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `API error: ${res.status}`);
+    }
     return res.json();
   },
 };

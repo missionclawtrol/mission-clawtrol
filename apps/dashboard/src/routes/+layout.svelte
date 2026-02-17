@@ -12,6 +12,7 @@
     { name: 'Work Orders', href: '/tasks', icon: '📋' },
     { name: 'Projects', href: '/projects', icon: '📁' },
     { name: 'Costs', href: '/costs', icon: '💰' },
+    { name: 'Team', href: '/team', icon: '🔐' },
     { name: 'Settings', href: '/settings', icon: '⚙️' },
   ];
   
