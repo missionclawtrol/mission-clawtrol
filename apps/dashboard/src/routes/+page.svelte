@@ -1,26 +1,47 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fetchAgents, fetchTasks, checkHealth, type Agent, type Task } from '$lib/api';
+  import { 
+    fetchAgents, 
+    fetchTasks, 
+    fetchAuditLog, 
+    checkHealth, 
+    type Agent, 
+    type Task,
+    type AuditEntry 
+  } from '$lib/api';
   import { connectWebSocket, wsConnected, wsMessages } from '$lib/websocket';
-  //   
+  import DonutChart from '$lib/components/DonutChart.svelte';
+  import BarChart from '$lib/components/BarChart.svelte';
+  
   let agents: Agent[] = [];
   let tasks: Task[] = [];
+  let auditLog: AuditEntry[] = [];
   let backendConnected = false;
   let loading = true;
   
-  // Filtered task lists
-  let needsAttention: Task[] = [];
-  let recentCompleted: Task[] = [];
-  
-  // Quick stats
-  let tasksToday = 0;
+  // Summary stats
+  let totalTasks = 0;
   let completedThisWeek = 0;
+  let totalSavings = 0;
   let activeAgents = 0;
   
-  function formatTime(timestamp: string): string {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-  }
+  // Chart data
+  let statusLabels: string[] = [];
+  let statusData: number[] = [];
+  let statusColors: string[] = [];
+  
+  let assigneeLabels: string[] = [];
+  let assigneeData: number[] = [];
+  let assigneeColors: string[] = [];
+  
+  // Status color mapping (matching kanban columns)
+  const STATUS_COLORS: Record<string, string> = {
+    'backlog': '#64748b', // slate-500
+    'todo': '#3b82f6', // blue-500
+    'in-progress': '#f59e0b', // amber-500
+    'review': '#a855f7', // purple-500
+    'done': '#10b981', // emerald-500
+  };
   
   function formatRelativeTime(timestamp: string): string {
     const now = new Date();
@@ -33,90 +54,125 @@
     if (diffMins < 1) return 'Just now';
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
-    return `${diffDays}d ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return then.toLocaleDateString();
   }
   
-  function formatTokens(total: number): string {
-    if (total >= 1_000_000) {
-      return `${(total / 1_000_000).toFixed(1)}M`;
-    } else if (total >= 1_000) {
-      return `${(total / 1_000).toFixed(0)}K`;
-    }
-    return total.toString();
+  function formatCurrency(amount: number): string {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+    }).format(amount);
   }
   
-  function getStatusColor(status: string): string {
-    switch (status) {
-      case 'online':
-      case 'working':
-        return 'bg-green-500';
-      case 'idle':
-        return 'bg-yellow-500';
-      case 'offline':
-      default:
-        return 'bg-gray-500';
-    }
-  }
-  
-  function getStatusDisplay(status: string): string {
-    switch (status) {
-      case 'online':
-      case 'working':
-        return 'Online';
-      case 'idle':
-        return 'Idle';
-      case 'offline':
-      default:
-        return 'Offline';
-    }
-  }
-  
-  function filterNeedsAttention(allTasks: Task[]): Task[] {
-    const now = new Date();
-    const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+  function getActionLabel(entry: AuditEntry): string {
+    const details = entry.details || {};
     
-    return allTasks.filter(task => {
-      // Status = 'review' AND updatedAt > 2 hours ago
-      if (task.status === 'review' && task.updatedAt) {
-        const updatedAt = new Date(task.updatedAt);
-        if (updatedAt > twoHoursAgo) return true;
-      }
-      
-      // Status = 'todo' or 'in-progress' AND agentId is null
-      if ((task.status === 'todo' || task.status === 'in-progress') && !task.agentId) {
-        return true;
-      }
-      
-      // Priority = 'P0' or 'P1' AND status not 'done'
-      if ((task.priority === 'P0' || task.priority === 'P1') && task.status !== 'done') {
-        return true;
-      }
-      
-      return false;
-    });
+    // Map action types to human-readable labels
+    switch (entry.action) {
+      case 'task.created':
+        return `created task "${details.title || 'Untitled'}"`;
+      case 'task.updated':
+        if (details.status) {
+          const oldStatus = details.oldStatus || 'unknown';
+          const newStatus = details.status || 'unknown';
+          return `moved "${details.title || 'task'}" from ${oldStatus} to ${newStatus}`;
+        }
+        return `updated task "${details.title || 'Untitled'}"`;
+      case 'task.status_changed':
+        const oldStatus = (details.oldStatus || 'unknown').replace(/-/g, ' ');
+        const newStatus = (details.newStatus || 'unknown').replace(/-/g, ' ');
+        return `moved task from ${oldStatus} to ${newStatus}`;
+      case 'task.deleted':
+        return `deleted task "${details.title || 'Untitled'}"`;
+      case 'task.assigned':
+        return `assigned "${details.title || 'task'}" to ${details.agentId || 'agent'}`;
+      case 'project.created':
+        return `created project "${details.name || 'Untitled'}"`;
+      case 'project.updated':
+        return `updated project "${details.name || 'Untitled'}"`;
+      case 'project.deleted':
+        return `deleted project "${details.name || 'Untitled'}"`;
+      case 'agent.spawned':
+        return `spawned agent for "${details.task || 'task'}"`;
+      default:
+        return entry.action.replace(/[._]/g, ' ');
+    }
   }
   
-  function calculateStats(allTasks: Task[], allAgents: Agent[]) {
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-    
-    // Tasks today
-    tasksToday = allTasks.filter(t => {
-      if (!t.createdAt) return false;
-      const created = new Date(t.createdAt);
-      return created >= today;
-    }).length;
+  function calculateStats() {
+    // Total tasks
+    totalTasks = tasks.length;
     
     // Completed this week
-    completedThisWeek = allTasks.filter(t => {
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    completedThisWeek = tasks.filter(t => {
       if (t.status !== 'done' || !t.updatedAt) return false;
       const updated = new Date(t.updatedAt);
       return updated >= weekAgo;
     }).length;
     
-    // Active agents
-    activeAgents = allAgents.filter(a => a.status === 'working' || a.status === 'online').length;
+    // Total savings (sum of humanCost for done tasks)
+    totalSavings = tasks
+      .filter(t => t.status === 'done' && t.humanCost)
+      .reduce((sum, t) => sum + (t.humanCost || 0), 0);
+    
+    // Active agents (distinct agentId values on in-progress tasks)
+    const activeAgentIds = new Set(
+      tasks
+        .filter(t => t.status === 'in-progress' && t.agentId)
+        .map(t => t.agentId)
+    );
+    activeAgents = activeAgentIds.size;
+  }
+  
+  function prepareStatusChart() {
+    // Count tasks by status
+    const statusCounts: Record<string, number> = {
+      'backlog': 0,
+      'todo': 0,
+      'in-progress': 0,
+      'review': 0,
+      'done': 0,
+    };
+    
+    tasks.forEach(task => {
+      if (statusCounts[task.status] !== undefined) {
+        statusCounts[task.status]++;
+      }
+    });
+    
+    // Prepare chart data
+    statusLabels = Object.keys(statusCounts).map(s => 
+      s.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+    );
+    statusData = Object.values(statusCounts);
+    statusColors = Object.keys(statusCounts).map(s => STATUS_COLORS[s] || '#64748b');
+  }
+  
+  function prepareAssigneeChart() {
+    // Count tasks by assignee
+    const assigneeCounts: Record<string, number> = {};
+    
+    tasks.forEach(task => {
+      const assignee = task.agentName || 'Unassigned';
+      assigneeCounts[assignee] = (assigneeCounts[assignee] || 0) + 1;
+    });
+    
+    // Sort by count descending
+    const sorted = Object.entries(assigneeCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10); // Top 10 assignees
+    
+    assigneeLabels = sorted.map(([name]) => name);
+    assigneeData = sorted.map(([, count]) => count);
+    
+    // Generate colors (alternating shades of blue)
+    assigneeColors = assigneeLabels.map((_, i) => {
+      const colors = ['#3b82f6', '#60a5fa', '#93c5fd', '#2563eb', '#1d4ed8'];
+      return colors[i % colors.length];
+    });
   }
   
   async function loadData() {
@@ -128,13 +184,15 @@
     if (backendConnected) {
       try {
         // Fetch data in parallel
-        const [agentsData, tasksData] = await Promise.all([
+        const [agentsData, tasksData, auditData] = await Promise.all([
           fetchAgents(),
           fetchTasks(),
+          fetchAuditLog({ limit: 30 }),
         ]);
         
         agents = agentsData;
         tasks = tasksData;
+        auditLog = auditData;
         
         // Agent display info mapping
         const agentInfo: Record<string, { name: string; emoji: string }> = {
@@ -150,28 +208,19 @@
         
         // Enrich tasks with agent info
         tasks = tasks.map(t => {
-          const agent = agentInfo[t.agentId] || { name: t.agentId || 'Unassigned', emoji: '🤖' };
+          const agentId = t.agentId || '';
+          const agent = agentInfo[agentId] || { name: agentId || 'Unassigned', emoji: '🤖' };
           return {
             ...t,
             agentName: agent.name,
             agentEmoji: agent.emoji,
-            projectName: t.projectId || 'No project'
           };
         });
         
-        // Filter and calculate
-        needsAttention = filterNeedsAttention(tasks);
-        recentCompleted = tasks
-          .filter(t => t.status === 'done')
-          .sort((a, b) => {
-            // Sort by completedAt first, fall back to updatedAt
-            const aDate = new Date(a.completedAt || a.updatedAt || 0).getTime();
-            const bDate = new Date(b.completedAt || b.updatedAt || 0).getTime();
-            return bDate - aDate;
-          })
-          .slice(0, 5);
-        
-        calculateStats(tasks, agents);
+        // Calculate stats and prepare charts
+        calculateStats();
+        prepareStatusChart();
+        prepareAssigneeChart();
       } catch (error) {
         console.error('Failed to load data:', error);
       }
@@ -213,178 +262,132 @@
     </div>
   {/if}
   
-  <!-- Main Grid: 2-column on desktop, stack on mobile -->
+  <!-- Summary Stats Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <!-- Total Tasks -->
+    <div class="bg-slate-800 rounded-lg border border-slate-700 p-6">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-2xl">📋</span>
+        <div class="text-3xl font-bold text-blue-400">{loading ? '...' : totalTasks}</div>
+      </div>
+      <div class="text-sm text-slate-400">Total Tasks</div>
+    </div>
+    
+    <!-- Completed This Week -->
+    <div class="bg-slate-800 rounded-lg border border-slate-700 p-6">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-2xl">✅</span>
+        <div class="text-3xl font-bold text-green-400">{loading ? '...' : completedThisWeek}</div>
+      </div>
+      <div class="text-sm text-slate-400">Completed This Week</div>
+    </div>
+    
+    <!-- Total Savings -->
+    <div class="bg-slate-800 rounded-lg border border-slate-700 p-6">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-2xl">💰</span>
+        <div class="text-3xl font-bold text-emerald-400">{loading ? '...' : formatCurrency(totalSavings)}</div>
+      </div>
+      <div class="text-sm text-slate-400">Total Savings</div>
+    </div>
+    
+    <!-- Active Agents -->
+    <div class="bg-slate-800 rounded-lg border border-slate-700 p-6">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-2xl">🤖</span>
+        <div class="text-3xl font-bold text-purple-400">{loading ? '...' : activeAgents}</div>
+      </div>
+      <div class="text-sm text-slate-400">Active Agents</div>
+    </div>
+  </div>
+  
+  <!-- Charts Row -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-    <!-- 1. Needs Attention -->
+    <!-- Task Status Breakdown Chart -->
     <div class="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
       <div class="px-4 py-3 border-b border-slate-700 bg-slate-700/50">
         <h2 class="font-semibold text-slate-100 flex items-center gap-2">
-          <span>🚨</span> Needs Attention
+          <span>📊</span> Task Status Breakdown
         </h2>
       </div>
-      <div class="p-4 space-y-3 min-h-[200px]">
+      <div class="p-6">
         {#if loading}
-          <div class="text-center py-8 text-slate-500">Loading...</div>
-        {:else if needsAttention.length === 0}
-          <div class="text-center py-8 text-slate-500">All tasks on track ✅</div>
+          <div class="text-center py-12 text-slate-500">Loading...</div>
+        {:else if tasks.length === 0}
+          <div class="text-center py-12 text-slate-500">No tasks yet</div>
         {:else}
-          {#each needsAttention as task}
-            <div class="p-3 bg-slate-700/50 rounded-lg border-l-2 border-orange-500 hover:bg-slate-700 transition-colors cursor-pointer">
-              <div class="flex items-start justify-between gap-2 mb-1">
-                <div class="flex-1">
-                  <div class="font-medium text-slate-100">{task.title}</div>
-                  <div class="text-xs text-slate-500">{task.projectName || 'Unknown project'}</div>
-                </div>
-                <span class="inline-block px-2 py-1 rounded text-xs font-medium {task.priority === 'P0' ? 'bg-red-500/20 text-red-300' : task.priority === 'P1' ? 'bg-orange-500/20 text-orange-300' : 'bg-slate-600 text-slate-300'}">
-                  {task.priority}
-                </span>
-              </div>
-              <div class="flex items-center justify-between text-xs text-slate-400">
-                <span>Status: {task.status.replace('_', ' ')}</span>
-                {#if task.agentName}
-                  <span>{task.agentEmoji || '🤖'} {task.agentName}</span>
-                {:else}
-                  <span class="text-red-400">Unassigned</span>
-                {/if}
-              </div>
-            </div>
-          {/each}
+          <DonutChart 
+            labels={statusLabels}
+            data={statusData}
+            colors={statusColors}
+          />
         {/if}
       </div>
     </div>
     
-    <!-- 2. Quick Stats -->
+    <!-- Tasks by Assignee Bar Chart -->
     <div class="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
       <div class="px-4 py-3 border-b border-slate-700 bg-slate-700/50">
         <h2 class="font-semibold text-slate-100 flex items-center gap-2">
-          <span>📊</span> Quick Stats
+          <span>👥</span> Tasks by Assignee
         </h2>
       </div>
-      <div class="p-4 grid grid-cols-3 gap-3">
-        <div class="bg-slate-700/50 rounded-lg p-4 border border-slate-600 text-center">
-          <div class="text-3xl font-bold text-blue-400">{loading ? '...' : tasksToday}</div>
-          <div class="text-xs text-slate-400 mt-1">Tasks Today</div>
-        </div>
-        <div class="bg-slate-700/50 rounded-lg p-4 border border-slate-600 text-center">
-          <div class="text-3xl font-bold text-green-400">{loading ? '...' : completedThisWeek}</div>
-          <div class="text-xs text-slate-400 mt-1">Completed Week</div>
-        </div>
-        <div class="bg-slate-700/50 rounded-lg p-4 border border-slate-600 text-center">
-          <div class="text-3xl font-bold text-purple-400">{loading ? '...' : activeAgents}</div>
-          <div class="text-xs text-slate-400 mt-1">Active Agents</div>
-        </div>
-      </div>
-      
-      <!-- Additional Info -->
-      <div class="px-4 py-3 border-t border-slate-700">
-        <div class="space-y-2 text-sm">
-          <div class="flex justify-between">
-            <span class="text-slate-400">Total Tasks:</span>
-            <span class="text-slate-100 font-medium">{loading ? '...' : tasks.length}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-slate-400">Total Agents:</span>
-            <span class="text-slate-100 font-medium">{loading ? '...' : agents.length}</span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-slate-400">Issues to Address:</span>
-            <span class="text-slate-100 font-medium">{loading ? '...' : needsAttention.length}</span>
-          </div>
-        </div>
+      <div class="p-6">
+        {#if loading}
+          <div class="text-center py-12 text-slate-500">Loading...</div>
+        {:else if tasks.length === 0}
+          <div class="text-center py-12 text-slate-500">No tasks yet</div>
+        {:else}
+          <BarChart 
+            labels={assigneeLabels}
+            data={assigneeData}
+            colors={assigneeColors}
+            horizontal={true}
+          />
+        {/if}
       </div>
     </div>
   </div>
   
-  <!-- Second Row: Agent Status + Recent Activity -->
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-    <!-- 3. Agent Status Grid -->
-    <div class="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
-      <div class="px-4 py-3 border-b border-slate-700 bg-slate-700/50">
-        <h2 class="font-semibold text-slate-100 flex items-center gap-2">
-          <span>🤖</span> Agent Status
-        </h2>
-      </div>
-      <div class="p-4">
-        {#if loading}
-          <div class="text-center py-8 text-slate-500">Loading agents...</div>
-        {:else if agents.length === 0}
-          <div class="text-center py-8 text-slate-500">No agents found</div>
-        {:else}
-          <div class="grid grid-cols-3 gap-3">
-            {#each agents as agent}
-              <div class="bg-slate-700/50 rounded-lg p-3 border border-slate-600 hover:border-slate-500 transition-colors cursor-pointer">
-                <div class="flex items-start gap-2 mb-2">
-                  <span class="text-2xl">{agent.emoji || '🤖'}</span>
-                  <div class="flex-1 min-w-0">
-                    <div class="text-sm font-medium text-slate-100 truncate">{agent.name}</div>
-                    <div class="text-xs text-slate-500 truncate">{agent.role || 'Agent'}</div>
-                  </div>
-                </div>
-                <div class="flex items-center gap-1.5">
-                  <span class="w-2 h-2 rounded-full {getStatusColor(agent.status)}"></span>
-                  <span class="text-xs text-slate-400">{getStatusDisplay(agent.status)}</span>
-                </div>
-                {#if agent.lastActive}
-                  <div class="text-xs text-slate-500 mt-1">{formatRelativeTime(agent.lastActive)}</div>
+  <!-- Recent Activity Timeline -->
+  <div class="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+    <div class="px-4 py-3 border-b border-slate-700 bg-slate-700/50">
+      <h2 class="font-semibold text-slate-100 flex items-center gap-2">
+        <span>🕐</span> Recent Activity
+      </h2>
+    </div>
+    <div class="p-4">
+      {#if loading}
+        <div class="text-center py-8 text-slate-500">Loading...</div>
+      {:else if auditLog.length === 0}
+        <div class="text-center py-8 text-slate-500">No recent activity</div>
+      {:else}
+        <div class="space-y-3">
+          {#each auditLog as entry (entry.id)}
+            <div class="flex gap-3 p-3 bg-slate-700/30 rounded-lg hover:bg-slate-700/50 transition-colors">
+              <!-- Timeline dot -->
+              <div class="flex flex-col items-center mt-1">
+                <div class="w-2 h-2 rounded-full bg-blue-400"></div>
+                {#if entry !== auditLog[auditLog.length - 1]}
+                  <div class="w-0.5 h-full bg-slate-700 mt-1"></div>
                 {/if}
               </div>
-            {/each}
-          </div>
-        {/if}
-      </div>
-    </div>
-    
-    <!-- 4. Recent Activity -->
-    <div class="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
-      <div class="px-4 py-3 border-b border-slate-700 bg-slate-700/50">
-        <h2 class="font-semibold text-slate-100 flex items-center gap-2">
-          <span>📋</span> Recent Activity
-        </h2>
-      </div>
-      <div class="p-4 space-y-3">
-        {#if loading}
-          <div class="text-center py-8 text-slate-500">Loading...</div>
-        {:else if recentCompleted.length === 0}
-          <div class="text-center py-8 text-slate-500">No completed tasks</div>
-        {:else}
-          {#each recentCompleted as task}
-            <div class="p-3 bg-slate-700/50 rounded-lg border-l-2 border-green-500 hover:bg-slate-700 transition-colors">
-              <div class="flex items-start justify-between gap-2 mb-1">
-                <div class="flex-1 min-w-0">
-                  <div class="font-medium text-slate-100 truncate">{task.title}</div>
-                  <div class="text-xs text-slate-500">
-                    {task.projectName || 'Unknown project'}
-                  </div>
+              
+              <!-- Event content -->
+              <div class="flex-1 min-w-0">
+                <div class="text-sm text-slate-300">
+                  <span class="font-medium text-slate-100">{entry.userId || 'System'}</span>
+                  {' '}
+                  {getActionLabel(entry)}
                 </div>
-                <span class="inline-block px-2 py-1 rounded text-xs bg-green-500/20 text-green-300 whitespace-nowrap">
-                  Done
-                </span>
-              </div>
-              <div class="flex items-center justify-between text-xs text-slate-400 mb-1">
-                <span title={task.completedAt || task.updatedAt || ''}>
-                  {formatRelativeTime(task.completedAt || task.updatedAt || '')}
-                  <span class="text-slate-500 ml-1">
-                    ({new Date(task.completedAt || task.updatedAt || '').toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })})
-                  </span>
-                </span>
-                <span>{task.agentEmoji || '🤖'} {task.agentName || 'Unknown'}</span>
-              </div>
-              {#if task.tokens || task.cost}
-                <div class="flex gap-3 text-xs text-slate-500 pt-1 border-t border-slate-600">
-                  {#if task.tokens}
-                    <span>📊 {formatTokens(task.tokens.total)} tokens</span>
-                  {/if}
-                  {#if task.cost}
-                    <span>💰 ${task.cost.toFixed(2)}</span>
-                  {/if}
+                <div class="text-xs text-slate-500 mt-1">
+                  {formatRelativeTime(entry.createdAt)}
                 </div>
-              {/if}
+              </div>
             </div>
           {/each}
-        {/if}
-      </div>
+        </div>
+      {/if}
     </div>
   </div>
 </div>
-
-<!-- Background set in app.css -->

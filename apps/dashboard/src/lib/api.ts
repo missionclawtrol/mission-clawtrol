@@ -561,6 +561,42 @@ export async function fetchMessageHistory(limit = 20): Promise<{ messages?: Arra
   }
 }
 
+// Audit Log
+export interface AuditEntry {
+  id: string;
+  userId: string | null;
+  action: string;
+  entityType: string | null;
+  entityId: string | null;
+  details: any;
+  createdAt: string;
+}
+
+export interface FetchAuditParams {
+  entityType?: string;
+  entityId?: string;
+  userId?: string;
+  limit?: number;
+}
+
+export async function fetchAuditLog(params?: FetchAuditParams): Promise<AuditEntry[]> {
+  try {
+    const queryParams = new URLSearchParams();
+    if (params?.entityType) queryParams.set('entityType', params.entityType);
+    if (params?.entityId) queryParams.set('entityId', params.entityId);
+    if (params?.userId) queryParams.set('userId', params.userId);
+    if (params?.limit) queryParams.set('limit', params.limit.toString());
+    
+    const url = `${API_BASE}/audit${queryParams.toString() ? `?${queryParams}` : ''}`;
+    const res = await fetchWithTimeout(url);
+    const data = await res.json();
+    return data.auditLog || [];
+  } catch (error) {
+    console.error('Failed to fetch audit log:', error);
+    return [];
+  }
+}
+
 // Generic API helper for custom endpoints
 export const api = {
   get: async (path: string) => {
