@@ -602,7 +602,7 @@ await fastify.register(cors, {
 
 await fastify.register(cookie);
 await fastify.register(session, {
-  secret: process.env.SESSION_SECRET || 'dev-secret-change-in-production',
+  secret: process.env.SESSION_SECRET || 'dev-secret-change-in-production!',
   cookie: {
     httpOnly: true,
     sameSite: 'lax',
