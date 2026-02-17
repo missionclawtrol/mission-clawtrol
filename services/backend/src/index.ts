@@ -23,7 +23,7 @@ import { commentRoutes } from './routes/comments.js';
 import { createAuthMiddleware } from './middleware/auth.js';
 import { gatewayClient, ApprovalRequest, ApprovalResolved } from './gateway-client.js';
 import { loadAssociations } from './project-agents.js';
-import { onTaskStatusChange } from './stage-agents/index.js';
+// onTaskStatusChange is called from routes/tasks.ts — not needed in index.ts
 import { createTask, updateTask, findTaskBySessionKey, findTaskById } from './task-store.js';
 import { initializeDatabase } from './database.js';
 import { migrateFromJSON } from './migrate.js';
@@ -453,158 +453,8 @@ async function getSessionCostFromTranscript(sessionKey: string): Promise<{
  * Complete a task and move it to review status
  * (CSO will review and mark as done)
  */
-async function completeTask(sessionKey: string) {
-  try {
-    console.log('[CompleteTask] Starting completion for session:', sessionKey);
-    
-    const task = await findTaskBySessionKey(sessionKey);
-    if (!task) {
-      console.log('[CompleteTask] Task not found for session:', sessionKey);
-      return;
-    }
-
-    console.log('[CompleteTask] Found task:', {
-      taskId: task.id,
-      title: task.title,
-      status: task.status,
-      sessionKey,
-    });
-
-    if (task.status === 'in-progress') {
-      const accumulatedText = subagentTextBuffers.get(sessionKey) || '';
-      console.log('[CompleteTask] Accumulated text length:', accumulatedText.length);
-      console.log('[CompleteTask] First 500 chars of accumulated text:', accumulatedText.substring(0, 500));
-      
-      // Extract commit hash from accumulated text
-      let commitHash = extractCommitHash(accumulatedText);
-      
-      // Fallback: if no explicit hash found, query git log for recent commits
-      if (!commitHash && task.createdAt) {
-        console.log('[CompleteTask] No explicit commit hash found, trying git log fallback');
-        const repoPath = '/home/chris/.openclaw/workspace/mission-clawtrol';
-        const taskStartTime = new Date(task.createdAt);
-        // Add a small buffer to catch commits made right at task start
-        taskStartTime.setSeconds(taskStartTime.getSeconds() - 5);
-        commitHash = await getMostRecentCommitHash(repoPath, taskStartTime);
-      }
-      
-      // Calculate lines changed if we have a commit hash
-      let linesChanged: { added: number; removed: number; total: number } | undefined;
-      let estimatedHumanMinutes: number | undefined;
-      let humanCost: number | undefined;
-      
-      if (commitHash) {
-        console.log('[CompleteTask] Using commit hash:', commitHash);
-        const repoPath = '/home/chris/.openclaw/workspace/mission-clawtrol';
-        const diff = await getLinesChanged(commitHash, repoPath);
-        
-        if (diff.added > 0 || diff.removed > 0) {
-          const MINUTES_PER_LINE = 3; // Industry average for careful coding
-          const totalLines = diff.added + diff.removed;
-          estimatedHumanMinutes = totalLines * MINUTES_PER_LINE;
-          
-          // Get hourly rate from settings (default $100)
-          // TODO: fetch from settings endpoint if needed, for now using hardcoded default
-          const hourlyRate = 100;
-          humanCost = (estimatedHumanMinutes / 60) * hourlyRate;
-          
-          linesChanged = {
-            added: diff.added,
-            removed: diff.removed,
-            total: totalLines,
-          };
-          
-          console.log('[CompleteTask] ✅ Calculated metrics:', {
-            commitHash,
-            linesChanged,
-            estimatedHumanMinutes,
-            humanCost,
-          });
-        } else {
-          console.log('[CompleteTask] No lines changed for commit:', commitHash);
-        }
-      } else {
-        console.log('[CompleteTask] ⚠️ No commit hash found (neither explicit nor via fallback)');
-      }
-      
-      // Get AI cost data from session transcript
-      const sessionCost = await getSessionCostFromTranscript(sessionKey);
-      
-      // Extract title if still placeholder
-      let finalTitle = task.title;
-      if (task.title === 'Task in progress...' && accumulatedText.length > 0) {
-        const extractedTitle = extractMeaningfulTitle(accumulatedText);
-        if (extractedTitle !== 'Task in progress...') {
-          finalTitle = extractedTitle;
-          console.log('[CompleteTask] Extracted title on completion:', finalTitle);
-        }
-      }
-      
-      const updatedTask = await updateTask(task.id, {
-        title: finalTitle !== task.title ? finalTitle : undefined,
-        status: 'review', // Move to review, not done - CSO will review and mark done
-        updatedAt: new Date().toISOString(),
-        commitHash,
-        linesChanged,
-        estimatedHumanMinutes,
-        humanCost,
-        // AI cost data
-        model: sessionCost?.model || undefined,
-        cost: sessionCost?.cost || undefined,
-        runtime: sessionCost?.runtime || undefined,
-        tokens: sessionCost?.tokens || undefined,
-      });
-
-      console.log('[CompleteTask] Successfully updated task:', {
-        taskId: updatedTask!.id,
-        status: updatedTask!.status,
-        commitHash: updatedTask!.commitHash,
-        linesChanged: updatedTask!.linesChanged,
-      });
-
-      // Trigger stage agents (e.g., QA on review transition)
-      if (task.status !== 'review') {
-        onTaskStatusChange(updatedTask!.id, task.status, 'review').catch(err => {
-          console.error('[CompleteTask] Stage agent error:', err.message);
-        });
-      }
-
-      // Broadcast the update
-      broadcast('task.updated', {
-        id: updatedTask!.id,
-        title: updatedTask!.title,
-        status: updatedTask!.status,
-        priority: updatedTask!.priority,
-        updatedAt: updatedTask!.updatedAt,
-        handoffNotes: updatedTask!.handoffNotes,
-        commitHash: updatedTask!.commitHash,
-        linesChanged: updatedTask!.linesChanged,
-        estimatedHumanMinutes: updatedTask!.estimatedHumanMinutes,
-        humanCost: updatedTask!.humanCost,
-      });
-
-      // Clean up
-      sessionLastActivity.delete(sessionKey);
-      knownSubagentSessions.delete(sessionKey);
-      subagentTaskIds.delete(sessionKey);
-      subagentTextBuffers.delete(sessionKey);
-      subagentTitleExtracted.delete(sessionKey);
-      
-      // Clear any pending title extraction timer
-      const timer = subagentTitleTimers.get(sessionKey);
-      if (timer) {
-        clearTimeout(timer);
-        subagentTitleTimers.delete(sessionKey);
-      }
-    } else {
-      console.log('[CompleteTask] Task not in in-progress status, skipping completion:', {
-        currentStatus: task.status,
-      });
-    }
-  } catch (err) {
-    console.error('[CompleteTask] Error completing task:', err);
-  }
-}
+// completeTask removed — agents move their own tasks to review via API.
+// Stuck in-progress tasks are visible on the kanban board for manual triage.
 
 // Plugins
 await fastify.register(cors, {
@@ -738,32 +588,8 @@ setSessionCleanupFn((oldSessionKey: string) => {
   subagentTextBuffers.delete(oldSessionKey);
 });
 
-// Start a timer to check for stale sessions (30 seconds of inactivity = completion)
-const completionCheckInterval = setInterval(() => {
-  const now = Date.now();
-  
-  // Log all tracked sessions for debugging
-  if (sessionLastActivity.size > 0) {
-    console.log('[CompletionCheck] Currently tracking', sessionLastActivity.size, 'sessions');
-  }
-  
-  for (const [sessionKey, lastActivity] of sessionLastActivity.entries()) {
-    const inactivityTime = now - lastActivity;
-    console.log('[CompletionCheck] Checking session:', {
-      sessionKey,
-      inactivityMs: inactivityTime,
-      isSubagent: sessionKey.includes(':subagent:'),
-    });
-    
-    if (inactivityTime > 30000) { // 30 seconds of inactivity
-      console.log('[CompletionCheck] ✅ Session inactive for 30s, triggering completion:', {
-        sessionKey,
-        inactivityMs: inactivityTime,
-      });
-      completeTask(sessionKey);
-    }
-  }
-}, 15000); // Check every 15 seconds
+// Note: completeTask poller removed — agents are responsible for moving their own
+// tasks to review. Stuck in-progress tasks are visible on the board for manual triage.
 
 // WebSocket for real-time updates
 fastify.register(async function (fastify) {
@@ -889,24 +715,12 @@ gatewayClient.on('agent', async (payload: any) => {
       subagentTextBuffers.set(sessionKey, currentBuffer + data.text);
     }
 
-    // Check for completion markers
-    if (hasCompletionMarker(data.text)) {
-      console.log('[SubagentHandler] ✅ Detected completion marker:', {
-        sessionKey,
-        marker: completionMarkers.find(m => data.text.includes(m)),
-      });
-      await completeTask(sessionKey);
-      return;
-    }
-
-    // Check for stream completion indicators
-    if (stream === 'complete' || stream === 'done') {
-      await completeTask(sessionKey);
-    }
-    
-    // Check for lifecycle end event
-    if (stream === 'lifecycle' && data.phase === 'end') {
-      await completeTask(sessionKey);
+    // Clean up session tracking on completion signals
+    if (hasCompletionMarker(data.text) || stream === 'complete' || stream === 'done' || (stream === 'lifecycle' && data.phase === 'end')) {
+      console.log('[SubagentHandler] Session completed, cleaning up tracking:', sessionKey);
+      sessionLastActivity.delete(sessionKey);
+      knownSubagentSessions.delete(sessionKey);
+      subagentTextBuffers.delete(sessionKey);
     }
   } catch (err) {
     console.error('[SubagentHandler] Error handling agent event:', err);
