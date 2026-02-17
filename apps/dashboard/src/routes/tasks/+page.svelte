@@ -413,6 +413,23 @@
     return user?.name || user?.githubLogin || userId;
   }
   
+  function getUserInitials(userId?: string | null): string {
+    if (!userId) return '?';
+    const user = users.find(u => u.id === userId);
+    if (!user) return '?';
+    
+    const name = user.name || user.username || user.githubLogin || '';
+    if (!name) return '?';
+    
+    // Get first letter of first and last name
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    // Single name - use first two letters
+    return name.substring(0, 2).toUpperCase();
+  }
+  
   async function handleCreateTask() {
     if (!newTask.title.trim()) {
       formError = 'Task title is required';
@@ -1069,9 +1086,17 @@
                 
                 <!-- Assignee + Agent + Priority -->
                 <div class="flex items-center justify-between">
-                  <div class="flex items-center gap-1 min-w-0">
+                  <div class="flex items-center gap-1.5 min-w-0">
                     {#if task.assignedTo}
-                      <span class="text-xs text-blue-400 truncate">👤 {getUserName(task.assignedTo)}</span>
+                      <div class="flex items-center gap-1.5">
+                        <div 
+                          class="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-semibold text-white flex-shrink-0"
+                          title={getUserName(task.assignedTo) || 'Assigned user'}
+                        >
+                          {getUserInitials(task.assignedTo)}
+                        </div>
+                        <span class="text-xs text-slate-300 truncate">{getUserName(task.assignedTo)}</span>
+                      </div>
                     {:else if task.agentId}
                       <span class="text-sm">{getAgentInfo(task.agentId).emoji}</span>
                       <span class="text-xs text-slate-400 truncate">{getAgentInfo(task.agentId).name}</span>
