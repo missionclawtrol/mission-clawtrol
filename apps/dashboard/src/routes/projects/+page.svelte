@@ -1,11 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { fetchProjects, fetchProject, createProject, deleteProject, spawnAgent, fetchProjectAgents, sendMessageToAgent, deleteAgent, changeAgentModel, fetchTasks, type Project, type AgentAssociation, type Task } from '$lib/api';
+  import { fetchProjects, fetchProject, createProject, deleteProject, spawnAgent, fetchProjectAgents, fetchProjectAgentSummary, sendMessageToAgent, deleteAgent, changeAgentModel, fetchTasks, type Project, type AgentAssociation, type AgentSummary, type Task } from '$lib/api';
   
   let projects: Project[] = [];
   let selectedProject: Project | null = null;
   let projectAgents: AgentAssociation[] = [];
+  let agentSummary: AgentSummary[] = [];
   let allTasks: Task[] = [];
   let loading = true;
   let loadingDetail = false;
@@ -60,12 +61,14 @@
   async function selectProject(id: string) {
     loadingDetail = true;
     try {
-      const [project, agents] = await Promise.all([
+      const [project, agents, summary] = await Promise.all([
         fetchProject(id),
         fetchProjectAgents(id),
+        fetchProjectAgentSummary(id),
       ]);
       selectedProject = project;
       projectAgents = agents;
+      agentSummary = summary;
     } catch (err) {
       console.error('Failed to load project details:', err);
     } finally {
@@ -694,68 +697,45 @@
           </div>
         </div>
         
-        <!-- Project Agents -->
+        <!-- Agent Roster (deduplicated from tasks) -->
         <div>
           <h3 class="text-sm text-slate-500 dark:text-slate-400 mb-2 font-medium flex items-center justify-between">
-            <span>AGENTS ({projectAgents.length})</span>
-            {#if projectAgents.length > 0}
-              <button 
-                on:click={() => selectedProject && selectProject(selectedProject.id)}
-                class="text-xs text-slate-500 hover:text-slate-600 dark:text-slate-300"
-              >
-                ↻ Refresh
-              </button>
-            {/if}
+            <span>AGENT ROSTER ({agentSummary.length})</span>
+            <button 
+              on:click={() => selectedProject && selectProject(selectedProject.id)}
+              class="text-xs text-slate-500 hover:text-slate-600 dark:text-slate-300"
+            >
+              ↻ Refresh
+            </button>
           </h3>
           
-          {#if projectAgents.length === 0}
+          {#if agentSummary.length === 0}
             <div class="p-4 bg-gray-100 dark:bg-gray-100/50 dark:bg-slate-700/30 rounded-lg text-center text-slate-500 text-sm">
-              No agents spawned for this project yet.
-              <button 
-                on:click={() => showSpawnAgentModal = true}
-                class="block mt-2 mx-auto text-blue-400 hover:text-blue-300"
-              >
-                Spawn your first agent →
-              </button>
+              No agents have worked on this project yet.
             </div>
           {:else}
-            <div class="space-y-2">
-              {#each projectAgents as agent}
-                <div class="p-3 bg-gray-100 dark:bg-gray-100/50 dark:bg-slate-700/50 rounded-lg hover:bg-gray-100 dark:bg-slate-700 transition-colors">
-                  <div class="flex items-center justify-between mb-1">
+            <div class="grid grid-cols-1 gap-2">
+              {#each agentSummary as agent}
+                <div class="p-3 bg-gray-100 dark:bg-slate-700/50 rounded-lg">
+                  <div class="flex items-center justify-between mb-2">
                     <div class="flex items-center gap-2">
-                      <span>{getAgentStatusIcon(agent.status)}</span>
-                      <span class="font-medium text-sm">{agent.label || getShortSessionKey(agent.sessionKey)}</span>
-                      <span class="text-xs px-1.5 py-0.5 bg-slate-600 rounded text-slate-500 dark:text-slate-400">{agent.status}</span>
+                      <span class="text-lg">{agent.agentId === 'senior-dev' ? '👨‍💻' : agent.agentId === 'junior-dev' ? '👩‍💻' : agent.agentId === 'cso' ? '🔵' : agent.agentId === 'editor' ? '✍️' : agent.agentId === 'qa' ? '🔍' : '🤖'}</span>
+                      <span class="font-medium text-sm text-gray-900 dark:text-slate-200">{agent.agentId}</span>
                     </div>
-                    <span class="text-xs text-slate-500">{formatTimeAgo(agent.spawnedAt)}</span>
+                    <span class="text-xs text-slate-500">{formatRelativeTime(agent.lastActive)}</span>
                   </div>
-                  <div class="text-xs text-slate-500 dark:text-slate-400 mb-2 line-clamp-2">{agent.task}</div>
-                  <div class="flex items-center justify-between">
-                    <span class="text-xs text-slate-500 font-mono">{getShortSessionKey(agent.sessionKey)}</span>
-                    <div class="flex gap-2">
-                      {#if agent.status === 'running'}
-                        <button 
-                          on:click={() => openMessageModal(agent)}
-                          class="px-2 py-1 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded text-xs transition-colors"
-                        >
-                          💬 Message
-                        </button>
-                      {/if}
-                      <button 
-                        on:click={() => openModelModal(agent)}
-                        class="px-2 py-1 bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 rounded text-xs transition-colors"
-                      >
-                        ⚙️ Model
-                      </button>
-                      <button 
-                        on:click={() => confirmDeleteAgent(agent)}
-                        class="px-2 py-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded text-xs transition-colors"
-                      >
-                        🗑️ Delete
-                      </button>
+                  <div class="flex items-center gap-3 text-xs">
+                    <span class="px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full">{agent.doneTasks} done</span>
+                    {#if agent.inProgress > 0}
+                      <span class="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded-full">{agent.inProgress} active</span>
+                    {/if}
+                    <span class="text-slate-500">{agent.taskCount} total</span>
+                  </div>
+                  {#if agent.models.length > 0}
+                    <div class="mt-1.5 text-xs text-slate-500 dark:text-slate-400 truncate">
+                      🧠 {agent.models.map(m => m.split('/').pop()).join(', ')}
                     </div>
-                  </div>
+                  {/if}
                 </div>
               {/each}
             </div>

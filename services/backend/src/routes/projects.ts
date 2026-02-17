@@ -4,6 +4,7 @@ import { join } from 'path';
 import { logProjectEvent, addActivity } from './activity.js';
 import { parseAgentsMd, type ProjectAgent } from '../agents-md-parser.js';
 import { getProjectTaskStats, getTasksByProject, createTask, type Task } from '../task-store.js';
+import { db } from '../database.js';
 import { parseProjectMd } from '../project-parser.js';
 
 // Path to OpenClaw workspace
@@ -277,6 +278,47 @@ export async function projectRoutes(fastify: FastifyInstance) {
         completed: [],
         total: 0,
       };
+    }
+  });
+
+  // Get deduplicated agent summary for a project (from task DB)
+  fastify.get('/:id/agent-summary', async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    try {
+      const rows = await db.query<{
+        agentId: string;
+        taskCount: number;
+        doneTasks: number;
+        lastActive: string;
+        models: string;
+      }>(
+        `SELECT 
+           agentId,
+           COUNT(*) as taskCount,
+           SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) as doneTasks,
+           MAX(updatedAt) as lastActive,
+           GROUP_CONCAT(DISTINCT model) as models
+         FROM tasks
+         WHERE projectId = ? AND agentId IS NOT NULL
+         GROUP BY agentId
+         ORDER BY MAX(updatedAt) DESC`,
+        [id]
+      );
+
+      const agents = rows.map(row => ({
+        agentId: row.agentId,
+        taskCount: row.taskCount,
+        doneTasks: row.doneTasks,
+        inProgress: row.taskCount - row.doneTasks,
+        lastActive: row.lastActive,
+        models: row.models ? row.models.split(',').filter(Boolean) : [],
+      }));
+
+      return { agents };
+    } catch (error) {
+      fastify.log.error(error);
+      return { agents: [] };
     }
   });
 

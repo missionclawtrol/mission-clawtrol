@@ -299,6 +299,27 @@ export async function fetchProjectAgents(projectId: string): Promise<AgentAssoci
   }
 }
 
+// Deduplicated agent summary from task DB
+export interface AgentSummary {
+  agentId: string;
+  taskCount: number;
+  doneTasks: number;
+  inProgress: number;
+  lastActive: string;
+  models: string[];
+}
+
+export async function fetchProjectAgentSummary(projectId: string): Promise<AgentSummary[]> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/projects/${encodeURIComponent(projectId)}/agent-summary`);
+    const data = await res.json();
+    return data.agents || [];
+  } catch (error) {
+    console.error('Failed to fetch agent summary:', error);
+    return [];
+  }
+}
+
 export async function deleteAgent(sessionKey: string): Promise<{ success: boolean; error?: string }> {
   try {
     const res = await fetchWithTimeout(`${API_BASE}/agents/${encodeURIComponent(sessionKey)}`, {
