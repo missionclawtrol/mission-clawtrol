@@ -85,6 +85,19 @@ export class SqliteDatabase implements IDatabase {
       CREATE INDEX IF NOT EXISTS idx_tasks_agentId ON tasks(agentId);
       CREATE INDEX IF NOT EXISTS idx_tasks_userId ON tasks(userId);
       CREATE INDEX IF NOT EXISTS idx_users_githubId ON users(githubId);
+
+      CREATE TABLE IF NOT EXISTS audit_log (
+        id TEXT PRIMARY KEY,
+        userId TEXT,
+        action TEXT NOT NULL,
+        entityType TEXT,
+        entityId TEXT,
+        details TEXT,
+        createdAt TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entityType, entityId);
+      CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(userId);
     `);
 
     // Add userId column to tasks if it doesn't exist (backward compatibility)

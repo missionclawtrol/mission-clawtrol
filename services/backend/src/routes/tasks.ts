@@ -16,6 +16,7 @@ import {
   getTasksByStatus,
 } from '../task-store.js';
 import { db, getRawDb } from '../database.js';
+import { logAudit } from '../audit-store.js';
 
 const WORKSPACE_PATH = join(process.env.HOME || '', '.openclaw/workspace');
 const WORK_ORDER_TEMPLATE_PATH = join(WORKSPACE_PATH, 'workflow', 'WORK_ORDER_TEMPLATE.md');
@@ -255,6 +256,15 @@ export async function taskRoutes(fastify: FastifyInstance) {
         task.description = updatedDescription;
       }
 
+      // Log task creation
+      await logAudit({
+        userId: request.user?.id,
+        action: 'task.created',
+        entityType: 'task',
+        entityId: task.id,
+        details: { title: task.title, priority: task.priority, projectId: task.projectId },
+      });
+
       return reply.status(201).send(task);
     } catch (error) {
       fastify.log.error(error);
@@ -389,10 +399,24 @@ export async function taskRoutes(fastify: FastifyInstance) {
         }
       }
 
+      // Capture old task for audit logging before update
+      const oldTask = await findTaskById(id);
+
       const task = await updateTask(id, updates);
 
       if (!task) {
         return reply.status(404).send({ error: 'Task not found' });
+      }
+
+      // Log status change
+      if (oldTask && updates.status && oldTask.status !== updates.status) {
+        await logAudit({
+          userId: request.user?.id,
+          action: 'task.status_changed',
+          entityType: 'task',
+          entityId: task.id,
+          details: { oldStatus: oldTask.status, newStatus: updates.status },
+        });
       }
 
       return task;
@@ -408,10 +432,25 @@ export async function taskRoutes(fastify: FastifyInstance) {
   }>('/:id', async (request, reply) => {
     try {
       const { id } = request.params;
+      
+      // Get task before deletion for audit logging
+      const task = await findTaskById(id);
+      
       const success = await deleteTask(id);
 
       if (!success) {
         return reply.status(404).send({ error: 'Task not found' });
+      }
+
+      // Log task deletion
+      if (task) {
+        await logAudit({
+          userId: request.user?.id,
+          action: 'task.deleted',
+          entityType: 'task',
+          entityId: id,
+          details: { title: task.title },
+        });
       }
 
       return { success: true, id };
