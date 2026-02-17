@@ -5,6 +5,8 @@
   import { page } from '$app/stores';
   import { wsConnected, connectWebSocket, disconnectWebSocket } from '$lib/websocket';
   import { checkHealth, fetchCurrentUser, logout, type CurrentUser } from '$lib/api';
+  import { initTaskWebSocket, setCurrentUserId } from '$lib/taskWebSocket';
+  import Toast from '$lib/components/Toast.svelte';
   
   const tabs = [
     { name: 'Overview', href: '/', icon: '🏠' },
@@ -60,6 +62,9 @@
     // If not authenticated, redirect to login
     if (!currentUser) {
       goto('/login');
+    } else {
+      // Set current user ID for task notifications
+      setCurrentUserId(currentUser.id);
     }
   }
   
@@ -69,6 +74,7 @@
     checkBackend();
     checkAuth();
     connectWebSocket();
+    initTaskWebSocket(); // Initialize task WebSocket listener
 
     // Check backend health every 10 seconds
     intervalId = window.setInterval(checkBackend, 10000);
@@ -221,5 +227,8 @@
     <main class="flex-1 p-6">
       <slot />
     </main>
+    
+    <!-- Toast Notifications -->
+    <Toast />
   </div>
 {/if}

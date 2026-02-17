@@ -11,7 +11,7 @@ import { agentRoutes } from './routes/agents.js';
 import { projectRoutes } from './routes/projects.js';
 import { activityRoutes, logApprovalEvent, setBroadcastFunction } from './routes/activity.js';
 import { approvalRoutes } from './routes/approvals.js';
-import { taskRoutes } from './routes/tasks.js';
+import { taskRoutes, setBroadcastFn } from './routes/tasks.js';
 import { auditRoutes } from './routes/audit.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { settingsRoutes } from './routes/settings.js';
@@ -669,6 +669,9 @@ function broadcast(type: string, payload: unknown) {
 
 // Wire up broadcast function for activity module
 setBroadcastFunction(broadcast);
+
+// Wire up broadcast function for task routes
+setBroadcastFn(broadcast);
 
 // Start a timer to check for stale sessions (30 seconds of inactivity = completion)
 const completionCheckInterval = setInterval(() => {

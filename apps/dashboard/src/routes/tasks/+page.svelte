@@ -3,6 +3,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fetchTasks, createTask, updateTask, deleteTask, spawnAgent, fetchProjects, fetchAgents, fetchSettings, fetchUsers, type Task, type Project, type Agent, type Settings, type UserInfo } from '$lib/api';
+  import { onTaskUpdate } from '$lib/taskWebSocket';
   
   // Data
   let tasks: Task[] = [];
@@ -390,6 +391,11 @@
     
     // Initial load
     loadData();
+    
+    // Register WebSocket callback for real-time updates
+    onTaskUpdate(() => {
+      loadData();
+    });
     
     // Periodic refresh every 30 seconds (preserves filter)
     // Periodic refresh disabled - caused UX issues

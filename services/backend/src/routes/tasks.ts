@@ -20,6 +20,13 @@ import { logAudit } from '../audit-store.js';
 import { requireRole, canModifyTask } from '../middleware/auth.js';
 import { onTaskStatusChange } from '../stage-agents/index.js';
 
+// Broadcast function will be injected from index.ts
+let broadcastFn: ((type: string, payload: unknown) => void) | null = null;
+
+export function setBroadcastFn(fn: (type: string, payload: unknown) => void) {
+  broadcastFn = fn;
+}
+
 const WORKSPACE_PATH = join(process.env.HOME || '', '.openclaw/workspace');
 const WORK_ORDER_TEMPLATE_PATH = join(WORKSPACE_PATH, 'workflow', 'WORK_ORDER_TEMPLATE.md');
 const execAsync = promisify(exec);
@@ -279,6 +286,14 @@ export async function taskRoutes(fastify: FastifyInstance) {
         details: { title: task.title, priority: task.priority, projectId: task.projectId },
       });
 
+      // Broadcast task creation to connected clients
+      if (broadcastFn) {
+        broadcastFn('task.created', {
+          task,
+          actor: user?.username || user?.name || 'Unknown',
+        });
+      }
+
       return reply.status(201).send(task);
     } catch (error) {
       fastify.log.error(error);
@@ -452,6 +467,16 @@ export async function taskRoutes(fastify: FastifyInstance) {
         });
       }
 
+      // Broadcast task update to connected clients
+      if (broadcastFn) {
+        broadcastFn('task.updated', {
+          task,
+          updates,
+          oldTask,
+          actor: user?.username || user?.name || 'Unknown',
+        });
+      }
+
       return task;
     } catch (error) {
       fastify.log.error(error);
@@ -494,6 +519,15 @@ export async function taskRoutes(fastify: FastifyInstance) {
           entityId: id,
           details: { title: task.title },
         });
+
+        // Broadcast task deletion to connected clients
+        if (broadcastFn) {
+          broadcastFn('task.deleted', {
+            taskId: id,
+            task,
+            actor: user?.username || user?.name || 'Unknown',
+          });
+        }
       }
 
       return { success: true, id };
