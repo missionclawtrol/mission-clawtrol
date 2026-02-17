@@ -19,6 +19,7 @@ import { db, getRawDb } from '../database.js';
 import { logAudit } from '../audit-store.js';
 import { requireRole, canModifyTask } from '../middleware/auth.js';
 import { onTaskStatusChange } from '../stage-agents/index.js';
+import { enrichDoneTransition } from '../enrichment.js';
 
 // Broadcast function will be injected from index.ts
 let broadcastFn: ((type: string, payload: unknown) => void) | null = null;
@@ -379,59 +380,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
         if (!task) {
           return reply.status(404).send({ error: 'Task not found' });
         }
-
-        const hourlyRate = getHumanHourlyRate();
-        const MINUTES_PER_LINE = 3;
-
-        const existingLines = updates.linesChanged ?? task.linesChanged;
-        let commitHash = updates.commitHash ?? task.commitHash;
-
-        if (!commitHash) {
-          const hashFromNotes = extractCommitHash(updates.handoffNotes ?? task.handoffNotes ?? updates.description ?? task.description);
-          if (hashFromNotes) {
-            commitHash = hashFromNotes;
-          }
-        }
-
-        const repoPath = task.projectId ? join(WORKSPACE_PATH, task.projectId) : null;
-
-        if (!commitHash && repoPath && task.createdAt) {
-          const taskStartTime = new Date(task.createdAt);
-          taskStartTime.setSeconds(taskStartTime.getSeconds() - 5);
-          commitHash = await getMostRecentCommitHash(repoPath, taskStartTime);
-        }
-
-        if (!existingLines && repoPath) {
-          let diff = { added: 0, removed: 0 };
-          if (commitHash) {
-            diff = await getLinesChanged(commitHash, repoPath);
-          }
-          // If no commit hash or zero diff, fall back to working tree diff
-          if ((!commitHash || (diff.added === 0 && diff.removed === 0))) {
-            diff = await getWorkingTreeLinesChanged(repoPath);
-          }
-          const totalLines = diff.added + diff.removed;
-          updates.linesChanged = { added: diff.added, removed: diff.removed, total: totalLines };
-        }
-
-        if (!updates.commitHash && commitHash) {
-          updates.commitHash = commitHash;
-        }
-
-        const linesForEstimate = updates.linesChanged ?? task.linesChanged;
-        if (linesForEstimate && linesForEstimate.total > 0 && !updates.humanCost && !task.humanCost) {
-          const estimatedHumanMinutes = linesForEstimate.total * MINUTES_PER_LINE;
-          updates.estimatedHumanMinutes = estimatedHumanMinutes;
-          updates.humanCost = (estimatedHumanMinutes / 60) * hourlyRate;
-        }
-
-        // Fallback to runtime-based estimate if LOC is unavailable
-        if (!updates.humanCost && !task.humanCost && task.runtime) {
-          const runtimeSeconds = task.runtime / 1000;
-          const estimatedHumanMinutes = Math.ceil(runtimeSeconds * 10 / 60);
-          updates.estimatedHumanMinutes = estimatedHumanMinutes;
-          updates.humanCost = (estimatedHumanMinutes / 60) * hourlyRate;
-        }
+        await enrichDoneTransition(task, updates);
       }
 
       // Validate priority if provided

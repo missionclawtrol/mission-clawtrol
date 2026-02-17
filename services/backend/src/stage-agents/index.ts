@@ -12,6 +12,7 @@ import { Task, updateTask, findTaskById } from '../task-store.js';
 import { createComment } from '../comment-store.js';
 import { logAudit } from '../audit-store.js';
 import { runQAReview } from './qa-reviewer.js';
+import { enrichDoneTransition } from '../enrichment.js';
 
 // Track tasks currently being processed to prevent infinite loops
 const processingTasks = new Set<string>();
@@ -68,8 +69,10 @@ async function handleReviewStage(taskId: string): Promise<void> {
   });
 
   if (result.passed) {
-    // Move to done
-    await updateTask(taskId, { status: 'done' });
+    // Move to done — enrich with LOC/cost data first
+    const doneUpdates: Record<string, any> = { status: 'done' };
+    await enrichDoneTransition(task, doneUpdates);
+    await updateTask(taskId, doneUpdates);
 
     await logAudit({
       userId: 'qa-agent',
