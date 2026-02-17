@@ -18,6 +18,7 @@ import { settingsRoutes } from './routes/settings.js';
 import { costRoutes } from './routes/costs.js';
 import { messageRoutes } from './routes/message.js';
 import { authRoutes } from './routes/auth.js';
+import { userRoutes } from './routes/users.js';
 import { createAuthMiddleware } from './middleware/auth.js';
 import { gatewayClient, ApprovalRequest, ApprovalResolved } from './gateway-client.js';
 import { loadAssociations } from './project-agents.js';
@@ -641,6 +642,7 @@ await fastify.register(settingsRoutes, { prefix: '/api/settings' });
 await fastify.register(costRoutes, { prefix: '/api/costs' });
 await fastify.register(messageRoutes, { prefix: '/api/message' });
 await fastify.register(authRoutes, { prefix: '/api/auth' });
+await fastify.register(userRoutes, { prefix: '/api/users' });
 
 // Health check
 fastify.get('/api/health', async () => {

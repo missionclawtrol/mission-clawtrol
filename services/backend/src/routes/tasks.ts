@@ -236,6 +236,10 @@ export async function taskRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ error: 'Invalid priority' });
       }
 
+      // Stamp createdBy from authenticated user (or 'dev-user' when auth disabled)
+      const createdBy = (request as any).user?.id || (process.env.DISABLE_AUTH === 'true' ? 'dev-user' : null);
+      const assignedTo = (request.body as any).assignedTo || null;
+
       const task = await createTask({
         title,
         description,
@@ -245,6 +249,8 @@ export async function taskRoutes(fastify: FastifyInstance) {
         agentId: agentId || null,
         sessionKey: sessionKey || null,
         handoffNotes: handoffNotes || null,
+        createdBy,
+        assignedTo,
       });
 
       const workOrderPath = await createWorkOrderFile(task);
@@ -282,9 +288,9 @@ export async function taskRoutes(fastify: FastifyInstance) {
       const updates = request.body;
 
       // Validate that we're not trying to update protected fields
-      if ('id' in updates || 'createdAt' in updates) {
+      if ('id' in updates || 'createdAt' in updates || 'createdBy' in updates) {
         return reply.status(400).send({
-          error: 'Cannot update id or createdAt',
+          error: 'Cannot update id, createdAt, or createdBy',
         });
       }
 

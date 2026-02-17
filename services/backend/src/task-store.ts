@@ -22,6 +22,8 @@ export interface Task {
   linesChanged?: { added: number; removed: number; total: number };
   estimatedHumanMinutes?: number; // Auto-calculated from lines changed
   humanCost?: number; // Auto-calculated cost (humanMinutes * hourlyRate / 60)
+  createdBy?: string | null; // User ID who created this task
+  assignedTo?: string | null; // User ID this task is assigned to
 }
 
 /**
@@ -47,6 +49,8 @@ function rowToTask(row: any): Task {
     commitHash: row.commitHash,
     estimatedHumanMinutes: row.estimatedHumanMinutes,
     humanCost: row.humanCost,
+    createdBy: row.createdBy || null,
+    assignedTo: row.assignedTo || null,
     linesChanged:
       row.linesAdded !== null || row.linesRemoved !== null || row.linesTotal !== null
         ? {
@@ -118,8 +122,9 @@ export async function createTask(
       `INSERT INTO tasks (
         id, title, description, status, priority, projectId, agentId, sessionKey, 
         handoffNotes, commitHash, linesAdded, linesRemoved, linesTotal, 
-        estimatedHumanMinutes, humanCost, cost, runtime, model, createdAt, updatedAt, completedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        estimatedHumanMinutes, humanCost, cost, runtime, model, 
+        createdBy, assignedTo, createdAt, updatedAt, completedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         data.title,
@@ -139,6 +144,8 @@ export async function createTask(
         data.cost || null,
         data.runtime || null,
         data.model || null,
+        data.createdBy || null,
+        data.assignedTo || null,
         now,
         now,
         null,
@@ -179,7 +186,8 @@ export async function updateTask(id: string, updates: Partial<Task>): Promise<Ta
         title = ?, description = ?, status = ?, priority = ?, 
         projectId = ?, agentId = ?, sessionKey = ?, handoffNotes = ?, 
         commitHash = ?, linesAdded = ?, linesRemoved = ?, linesTotal = ?, 
-        estimatedHumanMinutes = ?, humanCost = ?, cost = ?, runtime = ?, model = ?, updatedAt = ?, completedAt = ?
+        estimatedHumanMinutes = ?, humanCost = ?, cost = ?, runtime = ?, model = ?,
+        assignedTo = ?, updatedAt = ?, completedAt = ?
       WHERE id = ?`,
       [
         updates.title ?? task.title,
@@ -199,6 +207,7 @@ export async function updateTask(id: string, updates: Partial<Task>): Promise<Ta
         updates.cost ?? task.cost,
         updates.runtime ?? task.runtime,
         updates.model ?? task.model,
+        updates.assignedTo !== undefined ? updates.assignedTo : task.assignedTo,
         now,
         completedAt,
         id,

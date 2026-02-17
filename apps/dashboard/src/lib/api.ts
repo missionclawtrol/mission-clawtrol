@@ -386,6 +386,30 @@ export interface Task {
   };
   estimatedHumanMinutes?: number; // Auto-calculated from lines changed
   humanCost?: number; // Auto-calculated cost
+  createdBy?: string | null;
+  assignedTo?: string | null;
+  createdByName?: string | null; // Populated client-side
+  assignedToName?: string | null; // Populated client-side
+}
+
+export interface UserInfo {
+  id: string;
+  githubLogin: string;
+  name: string | null;
+  email: string | null;
+  avatarUrl: string | null;
+  role: string;
+}
+
+export async function fetchUsers(): Promise<UserInfo[]> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/users`);
+    const data = await res.json();
+    return data.users || [];
+  } catch (error) {
+    console.error('Failed to fetch users:', error);
+    return [];
+  }
 }
 
 export async function fetchTasks(): Promise<Task[]> {

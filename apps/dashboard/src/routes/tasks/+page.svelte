@@ -2,12 +2,13 @@
 
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fetchTasks, createTask, updateTask, deleteTask, spawnAgent, fetchProjects, fetchAgents, fetchSettings, type Task, type Project, type Agent, type Settings } from '$lib/api';
+  import { fetchTasks, createTask, updateTask, deleteTask, spawnAgent, fetchProjects, fetchAgents, fetchSettings, fetchUsers, type Task, type Project, type Agent, type Settings, type UserInfo } from '$lib/api';
   
   // Data
   let tasks: Task[] = [];
   let projects: Project[] = [];
   let agents: Agent[] = [];
+  let users: UserInfo[] = [];
   let settings: Settings = { humanHourlyRate: 100 };
   let loading = true;
   
@@ -55,6 +56,7 @@
     description: '',
     projectId: '',
     agentId: '',
+    assignedTo: '',
     priority: 'P2' as const,
   };
   
@@ -69,15 +71,17 @@
   async function loadData() {
     loading = true;
     try {
-      const [tasksData, projectsData, agentsData, settingsData] = await Promise.all([
+      const [tasksData, projectsData, agentsData, usersData, settingsData] = await Promise.all([
         fetchTasks(),
         fetchProjects(),
         fetchAgents(),
+        fetchUsers(),
         fetchSettings(),
       ]);
       tasks = tasksData;
       projects = projectsData;
       agents = agentsData;
+      users = usersData;
       settings = settingsData;
     } catch (err) {
       console.error('Failed to load tasks view data:', err);
@@ -182,6 +186,12 @@
     };
   }
   
+  function getUserName(userId?: string | null): string | null {
+    if (!userId) return null;
+    const user = users.find(u => u.id === userId);
+    return user?.name || user?.githubLogin || userId;
+  }
+  
   async function handleCreateTask() {
     if (!newTask.title.trim()) {
       formError = 'Task title is required';
@@ -201,6 +211,7 @@
       description: newTask.description.trim(),
       projectId: newTask.projectId,
       agentId: newTask.agentId || undefined,
+      assignedTo: newTask.assignedTo || undefined,
       priority: newTask.priority,
       status: 'backlog',
     });
@@ -209,7 +220,7 @@
     
     if (result.success) {
       showNewTaskModal = false;
-      newTask = { title: '', description: '', projectId: '', agentId: '', priority: 'P2' };
+      newTask = { title: '', description: '', projectId: '', agentId: '', assignedTo: '', priority: 'P2' };
       await loadData();
     } else {
       formError = result.error || 'Failed to create task';
@@ -370,15 +381,29 @@
         </div>
         
         <div>
-          <label for="task-agent" class="block text-sm text-slate-400 mb-1">Assign To</label>
+          <label for="task-agent" class="block text-sm text-slate-400 mb-1">Agent</label>
           <select 
             id="task-agent"
             bind:value={newTask.agentId}
             class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-blue-500 focus:outline-none"
           >
-            <option value="">Unassigned</option>
+            <option value="">No agent</option>
             {#each agents as agent}
               <option value={agent.id}>{agent.emoji} {agent.name}</option>
+            {/each}
+          </select>
+        </div>
+        
+        <div>
+          <label for="task-assignee" class="block text-sm text-slate-400 mb-1">Assign To (User)</label>
+          <select 
+            id="task-assignee"
+            bind:value={newTask.assignedTo}
+            class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-blue-500 focus:outline-none"
+          >
+            <option value="">Unassigned</option>
+            {#each users as user}
+              <option value={user.id}>{user.name || user.githubLogin}</option>
             {/each}
           </select>
         </div>
@@ -453,18 +478,44 @@
         </div>
         
         <div>
-          <h4 class="text-sm text-slate-400 mb-1">Assigned To</h4>
+          <h4 class="text-sm text-slate-400 mb-1">Agent</h4>
           <select 
             class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white"
             value={selectedTask.agentId || ''}
             on:change={(e) => handleAssignAgent(selectedTask.id, e.currentTarget.value || null)}
           >
-            <option value="">Unassigned</option>
+            <option value="">No agent</option>
             {#each agents as agent}
               <option value={agent.id}>{agent.emoji} {agent.name}</option>
             {/each}
           </select>
         </div>
+        
+        <div>
+          <h4 class="text-sm text-slate-400 mb-1">Assigned To (User)</h4>
+          <select 
+            class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white"
+            value={selectedTask.assignedTo || ''}
+            on:change={async (e) => {
+              const val = e.currentTarget.value || null;
+              await updateTask(selectedTask.id, { assignedTo: val });
+              await loadData();
+              if (selectedTask) selectedTask = { ...selectedTask, assignedTo: val };
+            }}
+          >
+            <option value="">Unassigned</option>
+            {#each users as user}
+              <option value={user.id}>{user.name || user.githubLogin}</option>
+            {/each}
+          </select>
+        </div>
+
+        {#if selectedTask.createdBy}
+          <div>
+            <h4 class="text-sm text-slate-400 mb-1">Created By</h4>
+            <p class="text-slate-300">👤 {getUserName(selectedTask.createdBy)}</p>
+          </div>
+        {/if}
         
         <div>
           <h4 class="text-sm text-slate-400 mb-1">Status</h4>
@@ -687,13 +738,19 @@
                   {/if}
                 {/if}
                 
-                <!-- Agent + Priority -->
+                <!-- Assignee + Agent + Priority -->
                 <div class="flex items-center justify-between">
-                  <div class="flex items-center gap-1">
-                    <span class="text-sm">{getAgentInfo(task.agentId).emoji}</span>
-                    <span class="text-xs text-slate-400">{getAgentInfo(task.agentId).name}</span>
+                  <div class="flex items-center gap-1 min-w-0">
+                    {#if task.assignedTo}
+                      <span class="text-xs text-blue-400 truncate">👤 {getUserName(task.assignedTo)}</span>
+                    {:else if task.agentId}
+                      <span class="text-sm">{getAgentInfo(task.agentId).emoji}</span>
+                      <span class="text-xs text-slate-400 truncate">{getAgentInfo(task.agentId).name}</span>
+                    {:else}
+                      <span class="text-xs text-slate-500">Unassigned</span>
+                    {/if}
                   </div>
-                  <span class={`px-1.5 py-0.5 rounded text-xs font-semibold text-white ${getPriorityColor(task.priority)}`}>
+                  <span class={`px-1.5 py-0.5 rounded text-xs font-semibold text-white flex-shrink-0 ${getPriorityColor(task.priority)}`}>
                     {task.priority}
                   </span>
                 </div>

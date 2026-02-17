@@ -46,6 +46,8 @@ export class SqliteDatabase implements IDatabase {
         projectId TEXT,
         agentId TEXT,
         userId TEXT,
+        createdBy TEXT,
+        assignedTo TEXT,
         sessionKey TEXT UNIQUE,
         handoffNotes TEXT,
         commitHash TEXT,
@@ -100,15 +102,18 @@ export class SqliteDatabase implements IDatabase {
       CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(userId);
     `);
 
-    // Add userId column to tasks if it doesn't exist (backward compatibility)
-    try {
-      this.db.prepare('ALTER TABLE tasks ADD COLUMN userId TEXT').run();
-    } catch (e: any) {
-      // Column already exists, ignore
-      if (!e.message.includes('duplicate column name')) {
-        throw e;
+    // Schema migrations (backward compatibility)
+    const addColumnIfMissing = (table: string, column: string, type: string) => {
+      try {
+        this.db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`).run();
+      } catch (e: any) {
+        if (!e.message.includes('duplicate column name')) throw e;
       }
-    }
+    };
+
+    addColumnIfMissing('tasks', 'userId', 'TEXT');
+    addColumnIfMissing('tasks', 'createdBy', 'TEXT');
+    addColumnIfMissing('tasks', 'assignedTo', 'TEXT');
 
     // Insert default settings if not exist
     this.db
