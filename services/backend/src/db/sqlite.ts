@@ -45,6 +45,7 @@ export class SqliteDatabase implements IDatabase {
         priority TEXT NOT NULL DEFAULT 'P2',
         projectId TEXT,
         agentId TEXT,
+        userId TEXT,
         sessionKey TEXT UNIQUE,
         handoffNotes TEXT,
         commitHash TEXT,
@@ -61,6 +62,18 @@ export class SqliteDatabase implements IDatabase {
         completedAt TEXT
       );
 
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        githubId INTEGER UNIQUE NOT NULL,
+        githubLogin TEXT NOT NULL,
+        name TEXT,
+        email TEXT,
+        avatarUrl TEXT,
+        role TEXT NOT NULL DEFAULT 'member',
+        createdAt TEXT NOT NULL,
+        lastLoginAt TEXT
+      );
+
       CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
@@ -70,7 +83,19 @@ export class SqliteDatabase implements IDatabase {
       CREATE INDEX IF NOT EXISTS idx_tasks_sessionKey ON tasks(sessionKey);
       CREATE INDEX IF NOT EXISTS idx_tasks_projectId ON tasks(projectId);
       CREATE INDEX IF NOT EXISTS idx_tasks_agentId ON tasks(agentId);
+      CREATE INDEX IF NOT EXISTS idx_tasks_userId ON tasks(userId);
+      CREATE INDEX IF NOT EXISTS idx_users_githubId ON users(githubId);
     `);
+
+    // Add userId column to tasks if it doesn't exist (backward compatibility)
+    try {
+      this.db.prepare('ALTER TABLE tasks ADD COLUMN userId TEXT').run();
+    } catch (e: any) {
+      // Column already exists, ignore
+      if (!e.message.includes('duplicate column name')) {
+        throw e;
+      }
+    }
 
     // Insert default settings if not exist
     this.db
