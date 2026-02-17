@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { db } from '../database';
+import { db, getRawDb } from '../database';
 
 interface CostSummary {
   totalTasks: number;
@@ -44,7 +44,7 @@ interface TimeSeriesPoint {
  */
 function getHumanHourlyRate(): number {
   try {
-    const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('humanHourlyRate') as { value: string } | undefined;
+    const row = getRawDb().prepare('SELECT value FROM settings WHERE key = ?').get('humanHourlyRate') as { value: string } | undefined;
     if (row) {
       const parsed = parseFloat(row.value);
       return isNaN(parsed) ? 100 : parsed;
@@ -60,27 +60,35 @@ export async function costRoutes(fastify: FastifyInstance) {
   fastify.get<{}>('/summary', async (request, reply) => {
     try {
       const humanHourlyRate = getHumanHourlyRate();
+      const MINUTES_PER_LINE = 3;
       
-      // Get completed tasks with cost data
-      const rows = db.prepare(`
+      // Get completed tasks with LOC-based estimates
+      const rows = getRawDb().prepare(`
         SELECT 
           COUNT(*) as totalTasks,
           COALESCE(SUM(linesAdded), 0) + COALESCE(SUM(linesRemoved), 0) as totalLines,
           COALESCE(SUM(cost), 0) as totalAiCost,
+          COALESCE(SUM(runtime), 0) as totalAiSeconds,
           COALESCE(SUM(estimatedHumanMinutes), 0) as totalHumanMinutes,
-          COALESCE(SUM(humanCost), 0) as totalHumanCost,
-          COALESCE(SUM(runtime), 0) as totalAiSeconds
+          COALESCE(SUM(humanCost), 0) as totalHumanCost
         FROM tasks 
-        WHERE status = 'done' AND (humanCost IS NOT NULL OR linesAdded IS NOT NULL)
+        WHERE status = 'done'
       `).get() as any;
 
-      const totalAiSeconds = rows?.totalAiSeconds || 0;
-      const totalHumanMinutes = rows?.totalHumanMinutes || 0;
+      const totalLines = rows?.totalLines || 0;
+      let totalHumanMinutes = rows?.totalHumanMinutes || 0;
+      let totalHumanCost = rows?.totalHumanCost || 0;
       const totalAiCost = rows?.totalAiCost || 0;
-      const totalHumanCost = rows?.totalHumanCost || 0;
-      
-      // Calculate time saved in minutes - AI time vs human estimate
-      const aiMinutes = totalAiSeconds / 60;
+      const totalAiSeconds = rows?.totalAiSeconds || 0;
+
+      // Backfill from LOC if older tasks are missing per-task estimates
+      if (totalHumanMinutes === 0 && totalLines > 0) {
+        totalHumanMinutes = totalLines * MINUTES_PER_LINE;
+        totalHumanCost = (totalHumanMinutes / 60) * humanHourlyRate;
+      }
+
+      // totalAiSeconds is in milliseconds - convert to minutes
+      const aiMinutes = totalAiSeconds / 1000 / 60;
       const timeSavedMinutes = totalHumanMinutes - aiMinutes;
       const hoursSaved = timeSavedMinutes / 60;
       
@@ -89,7 +97,7 @@ export async function costRoutes(fastify: FastifyInstance) {
 
       const summary: CostSummary = {
         totalTasks: rows?.totalTasks || 0,
-        totalLines: rows?.totalLines || 0,
+        totalLines,
         totalAiCost,
         totalHumanCost,
         totalAiSeconds,
@@ -108,7 +116,7 @@ export async function costRoutes(fastify: FastifyInstance) {
   // GET /api/costs/by-agent - Breakdown by agent
   fastify.get<{}>('/by-agent', async (request, reply) => {
     try {
-      const rows = db.prepare(`
+      const rows = getRawDb().prepare(`
         SELECT 
           agentId,
           COUNT(*) as tasks,
@@ -116,7 +124,7 @@ export async function costRoutes(fastify: FastifyInstance) {
           COALESCE(SUM(cost), 0) as aiCost,
           COALESCE(SUM(humanCost), 0) as humanCost
         FROM tasks 
-        WHERE status = 'done' AND (humanCost IS NOT NULL OR linesAdded IS NOT NULL) AND agentId IS NOT NULL
+        WHERE status = 'done' AND agentId IS NOT NULL
         GROUP BY agentId
       `).all() as any[];
 
@@ -139,7 +147,7 @@ export async function costRoutes(fastify: FastifyInstance) {
   // GET /api/costs/by-project - Breakdown by project
   fastify.get<{}>('/by-project', async (request, reply) => {
     try {
-      const rows = db.prepare(`
+      const rows = getRawDb().prepare(`
         SELECT 
           projectId,
           COUNT(*) as tasks,
@@ -147,7 +155,7 @@ export async function costRoutes(fastify: FastifyInstance) {
           COALESCE(SUM(cost), 0) as aiCost,
           COALESCE(SUM(humanCost), 0) as humanCost
         FROM tasks 
-        WHERE status = 'done' AND (humanCost IS NOT NULL OR linesAdded IS NOT NULL) AND projectId IS NOT NULL
+        WHERE status = 'done' AND projectId IS NOT NULL
         GROUP BY projectId
       `).all() as any[];
 
@@ -194,7 +202,7 @@ export async function costRoutes(fastify: FastifyInstance) {
       }
 
       // For daily view, get last 7 days
-      const rows = db.prepare(`
+      const rows = getRawDb().prepare(`
         SELECT 
           strftime('${dateFormat}', completedAt) as date,
           COUNT(*) as tasks,
@@ -203,7 +211,6 @@ export async function costRoutes(fastify: FastifyInstance) {
           COALESCE(SUM(humanCost), 0) as humanCost
         FROM tasks 
         WHERE status = 'done' 
-          AND (humanCost IS NOT NULL OR linesAdded IS NOT NULL) 
           AND completedAt IS NOT NULL
           AND completedAt >= date('now', '-7 days')
         GROUP BY strftime('${dateFormat}', completedAt)
@@ -233,7 +240,7 @@ export async function costRoutes(fastify: FastifyInstance) {
     try {
       const limit = parseInt(request.query.limit || '10', 10);
       
-      const rows = db.prepare(`
+      const rows = getRawDb().prepare(`
         SELECT 
           id,
           title,
@@ -249,7 +256,7 @@ export async function costRoutes(fastify: FastifyInstance) {
           linesTotal,
           completedAt
         FROM tasks 
-        WHERE status = 'done' AND (humanCost IS NOT NULL OR linesAdded IS NOT NULL)
+        WHERE status = 'done'
         ORDER BY completedAt DESC
         LIMIT ?
       `).all(limit) as any[];

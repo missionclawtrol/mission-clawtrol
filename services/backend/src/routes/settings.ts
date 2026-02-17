@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { db } from '../database';
+import { db, getRawDb } from '../database';
 
 export interface Settings {
   humanHourlyRate: number;
@@ -11,7 +11,7 @@ export interface Settings {
  */
 function loadSettings(): Settings {
   try {
-    const rows = db.prepare('SELECT key, value FROM settings').all();
+    const rows = getRawDb().prepare('SELECT key, value FROM settings').all();
     const settings: Settings = {
       humanHourlyRate: 100, // Default
     };
@@ -43,7 +43,7 @@ function loadSettings(): Settings {
 function saveSetting(key: string, value: any): void {
   try {
     const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
-    db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, stringValue);
+    getRawDb().prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, stringValue);
   } catch (error) {
     console.error('Failed to save setting:', error);
     throw error;

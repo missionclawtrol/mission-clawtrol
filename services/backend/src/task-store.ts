@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { db } from './database';
+import { db } from './db/index.js';
 
 export interface Task {
   id: string;
@@ -14,20 +14,12 @@ export interface Task {
   updatedAt: string;
   completedAt: string | null;
   handoffNotes: string | null;
-  tokens?: {
-    input: number;
-    output: number;
-    total: number;
-  };
+  tokens?: { input: number; output: number; total: number };
   cost?: number; // estimated USD
   model?: string; // which model was used
   runtime?: number; // milliseconds
   commitHash?: string; // Git commit hash for this task
-  linesChanged?: {
-    added: number;
-    removed: number;
-    total: number;
-  };
+  linesChanged?: { added: number; removed: number; total: number };
   estimatedHumanMinutes?: number; // Auto-calculated from lines changed
   humanCost?: number; // Auto-calculated cost (humanMinutes * hourlyRate / 60)
 }
@@ -55,13 +47,14 @@ function rowToTask(row: any): Task {
     commitHash: row.commitHash,
     estimatedHumanMinutes: row.estimatedHumanMinutes,
     humanCost: row.humanCost,
-    linesChanged: row.linesAdded || row.linesRemoved || row.linesTotal 
-      ? {
-          added: row.linesAdded || 0,
-          removed: row.linesRemoved || 0,
-          total: row.linesTotal || 0,
-        }
-      : undefined,
+    linesChanged:
+      row.linesAdded !== null || row.linesRemoved !== null || row.linesTotal !== null
+        ? {
+            added: row.linesAdded ?? 0,
+            removed: row.linesRemoved ?? 0,
+            total: row.linesTotal ?? 0,
+          }
+        : undefined,
   };
 }
 
@@ -70,7 +63,7 @@ function rowToTask(row: any): Task {
  */
 export async function loadTasks(): Promise<Task[]> {
   try {
-    const rows = db.prepare('SELECT * FROM tasks').all();
+    const rows = await db.query<any>('SELECT * FROM tasks');
     return rows.map(rowToTask);
   } catch (error) {
     console.error('Failed to load tasks:', error);
@@ -83,10 +76,30 @@ export async function loadTasks(): Promise<Task[]> {
  */
 export async function getTask(id: string): Promise<Task | null> {
   try {
-    const row = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
+    const row = await db.queryOne<any>('SELECT * FROM tasks WHERE id = ?', [id]);
     return row ? rowToTask(row) : null;
   } catch (error) {
     console.error('Failed to get task:', error);
+    throw error;
+  }
+}
+
+/**
+ * Alias for getTask (used by some modules)
+ */
+export async function findTaskById(id: string): Promise<Task | null> {
+  return getTask(id);
+}
+
+/**
+ * Find a task by session key
+ */
+export async function findTaskBySessionKey(sessionKey: string): Promise<Task | null> {
+  try {
+    const row = await db.queryOne<any>('SELECT * FROM tasks WHERE sessionKey = ?', [sessionKey]);
+    return row ? rowToTask(row) : null;
+  } catch (error) {
+    console.error('Failed to get task by session key:', error);
     throw error;
   }
 }
@@ -101,37 +114,35 @@ export async function createTask(
     const id = randomUUID();
     const now = new Date().toISOString();
 
-    const insert = db.prepare(`
-      INSERT INTO tasks (
-        id, title, description, status, priority, projectId, agentId,
-        sessionKey, handoffNotes, commitHash, linesAdded, linesRemoved,
-        linesTotal, estimatedHumanMinutes, humanCost, cost, runtime, model,
-        createdAt, updatedAt, completedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    insert.run(
-      id,
-      data.title,
-      data.description || null,
-      data.status || 'backlog',
-      data.priority || 'P2',
-      data.projectId || null,
-      data.agentId || null,
-      data.sessionKey || null,
-      data.handoffNotes || null,
-      data.commitHash || null,
-      data.linesChanged?.added || null,
-      data.linesChanged?.removed || null,
-      data.linesChanged?.total || null,
-      data.estimatedHumanMinutes || null,
-      data.humanCost || null,
-      data.cost || null,
-      data.runtime || null,
-      data.model || null,
-      now,
-      now,
-      null
+    await db.execute(
+      `INSERT INTO tasks (
+        id, title, description, status, priority, projectId, agentId, sessionKey, 
+        handoffNotes, commitHash, linesAdded, linesRemoved, linesTotal, 
+        estimatedHumanMinutes, humanCost, cost, runtime, model, createdAt, updatedAt, completedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        data.title,
+        data.description || null,
+        data.status || 'backlog',
+        data.priority || 'P2',
+        data.projectId || null,
+        data.agentId || null,
+        data.sessionKey || null,
+        data.handoffNotes || null,
+        data.commitHash || null,
+        data.linesChanged?.added || null,
+        data.linesChanged?.removed || null,
+        data.linesChanged?.total || null,
+        data.estimatedHumanMinutes || null,
+        data.humanCost || null,
+        data.cost || null,
+        data.runtime || null,
+        data.model || null,
+        now,
+        now,
+        null,
+      ]
     );
 
     const task = await getTask(id);
@@ -163,51 +174,35 @@ export async function updateTask(id: string, updates: Partial<Task>): Promise<Ta
       completedAt = now;
     }
 
-    const update = db.prepare(`
-      UPDATE tasks SET
-        title = ?,
-        description = ?,
-        status = ?,
-        priority = ?,
-        projectId = ?,
-        agentId = ?,
-        sessionKey = ?,
-        handoffNotes = ?,
-        commitHash = ?,
-        linesAdded = ?,
-        linesRemoved = ?,
-        linesTotal = ?,
-        estimatedHumanMinutes = ?,
-        humanCost = ?,
-        cost = ?,
-        runtime = ?,
-        model = ?,
-        updatedAt = ?,
-        completedAt = ?
-      WHERE id = ?
-    `);
-
-    update.run(
-      updates.title ?? task.title,
-      updates.description ?? task.description,
-      updates.status ?? task.status,
-      updates.priority ?? task.priority,
-      updates.projectId ?? task.projectId,
-      updates.agentId ?? task.agentId,
-      updates.sessionKey ?? task.sessionKey,
-      updates.handoffNotes ?? task.handoffNotes,
-      updates.commitHash ?? task.commitHash,
-      updates.linesChanged?.added ?? task.linesChanged?.added ?? null,
-      updates.linesChanged?.removed ?? task.linesChanged?.removed ?? null,
-      updates.linesChanged?.total ?? task.linesChanged?.total ?? null,
-      updates.estimatedHumanMinutes ?? task.estimatedHumanMinutes,
-      updates.humanCost ?? task.humanCost,
-      updates.cost ?? task.cost,
-      updates.runtime ?? task.runtime,
-      updates.model ?? task.model,
-      now,
-      completedAt,
-      id
+    await db.execute(
+      `UPDATE tasks SET 
+        title = ?, description = ?, status = ?, priority = ?, 
+        projectId = ?, agentId = ?, sessionKey = ?, handoffNotes = ?, 
+        commitHash = ?, linesAdded = ?, linesRemoved = ?, linesTotal = ?, 
+        estimatedHumanMinutes = ?, humanCost = ?, cost = ?, runtime = ?, model = ?, updatedAt = ?, completedAt = ?
+      WHERE id = ?`,
+      [
+        updates.title ?? task.title,
+        updates.description ?? task.description,
+        updates.status ?? task.status,
+        updates.priority ?? task.priority,
+        updates.projectId ?? task.projectId,
+        updates.agentId ?? task.agentId,
+        updates.sessionKey ?? task.sessionKey,
+        updates.handoffNotes ?? task.handoffNotes,
+        updates.commitHash ?? task.commitHash,
+        updates.linesChanged?.added ?? task.linesChanged?.added ?? null,
+        updates.linesChanged?.removed ?? task.linesChanged?.removed ?? null,
+        updates.linesChanged?.total ?? task.linesChanged?.total ?? null,
+        updates.estimatedHumanMinutes ?? task.estimatedHumanMinutes,
+        updates.humanCost ?? task.humanCost,
+        updates.cost ?? task.cost,
+        updates.runtime ?? task.runtime,
+        updates.model ?? task.model,
+        now,
+        completedAt,
+        id,
+      ]
     );
 
     const updated = await getTask(id);
@@ -223,8 +218,8 @@ export async function updateTask(id: string, updates: Partial<Task>): Promise<Ta
  */
 export async function deleteTask(id: string): Promise<boolean> {
   try {
-    const result = db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
-    return (result.changes || 0) > 0;
+    const result = await db.execute('DELETE FROM tasks WHERE id = ?', [id]);
+    return result.changes > 0;
   } catch (error) {
     console.error('Failed to delete task:', error);
     throw error;
@@ -236,7 +231,7 @@ export async function deleteTask(id: string): Promise<boolean> {
  */
 export async function getTasksByProject(projectId: string): Promise<Task[]> {
   try {
-    const rows = db.prepare('SELECT * FROM tasks WHERE projectId = ?').all(projectId);
+    const rows = await db.query<any>('SELECT * FROM tasks WHERE projectId = ?', [projectId]);
     return rows.map(rowToTask);
   } catch (error) {
     console.error('Failed to get tasks by project:', error);
@@ -249,7 +244,7 @@ export async function getTasksByProject(projectId: string): Promise<Task[]> {
  */
 export async function getTasksByAgent(agentId: string): Promise<Task[]> {
   try {
-    const rows = db.prepare('SELECT * FROM tasks WHERE agentId = ?').all(agentId);
+    const rows = await db.query<any>('SELECT * FROM tasks WHERE agentId = ?', [agentId]);
     return rows.map(rowToTask);
   } catch (error) {
     console.error('Failed to get tasks by agent:', error);
@@ -262,7 +257,7 @@ export async function getTasksByAgent(agentId: string): Promise<Task[]> {
  */
 export async function getTasksByStatus(status: Task['status']): Promise<Task[]> {
   try {
-    const rows = db.prepare('SELECT * FROM tasks WHERE status = ?').all(status);
+    const rows = await db.query<any>('SELECT * FROM tasks WHERE status = ?', [status]);
     return rows.map(rowToTask);
   } catch (error) {
     console.error('Failed to get tasks by status:', error);
@@ -280,20 +275,20 @@ export async function getProjectTaskStats(projectId: string): Promise<{
 }> {
   try {
     const tasks = await getTasksByProject(projectId);
-    
+
     // Count total tasks
     const total = tasks.length;
-    
+
     // Count by status
     const byStatus: Record<string, number> = {};
     for (const task of tasks) {
       byStatus[task.status] = (byStatus[task.status] || 0) + 1;
     }
-    
+
     // Calculate completion percentage
-    const completedCount = tasks.filter(t => t.status === 'done').length;
-    const completionPercent = total === 0 ? 0 : Math.round((completedCount / total) * 100);
-    
+    const completedCount = (byStatus['done'] || 0) + (byStatus['archived'] || 0);
+    const completionPercent = total > 0 ? Math.round((completedCount / total) * 100) : 0;
+
     return {
       total,
       byStatus,
@@ -301,19 +296,6 @@ export async function getProjectTaskStats(projectId: string): Promise<{
     };
   } catch (error) {
     console.error('Failed to get project task stats:', error);
-    throw error;
-  }
-}
-
-/**
- * Find task by session key (used to link subagent tasks)
- */
-export async function findTaskBySessionKey(sessionKey: string): Promise<Task | null> {
-  try {
-    const row = db.prepare('SELECT * FROM tasks WHERE sessionKey = ?').get(sessionKey);
-    return row ? rowToTask(row) : null;
-  } catch (error) {
-    console.error('Failed to find task by session key:', error);
     throw error;
   }
 }

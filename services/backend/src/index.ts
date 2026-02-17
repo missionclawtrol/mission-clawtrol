@@ -13,9 +13,10 @@ import { taskRoutes } from './routes/tasks.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { settingsRoutes } from './routes/settings.js';
 import { costRoutes } from './routes/costs.js';
+import { messageRoutes } from './routes/message.js';
 import { gatewayClient, ApprovalRequest, ApprovalResolved } from './gateway-client.js';
 import { loadAssociations } from './project-agents.js';
-import { createTask, updateTask, findTaskBySessionKey } from './task-store.js';
+import { createTask, updateTask, findTaskBySessionKey, findTaskById } from './task-store.js';
 import { initializeDatabase } from './database.js';
 import { migrateFromJSON } from './migrate.js';
 
@@ -310,8 +311,12 @@ async function getLinesChanged(
   repoPath: string
 ): Promise<{ added: number; removed: number }> {
   try {
-    console.log('[LinesChanged] Getting diff for commit:', commitHash);
-    const command = `git -C ${repoPath} diff --shortstat ${commitHash}^..${commitHash}`;
+    // Handle comma-separated commit hashes (e.g., "abc123,def456" from squash merges)
+    // Use only the first/most recent commit
+    const primaryHash = commitHash.split(',')[0].trim();
+    
+    console.log('[LinesChanged] Getting diff for commit:', primaryHash);
+    const command = `git -C ${repoPath} diff --shortstat ${primaryHash}^..${primaryHash}`;
     console.log('[LinesChanged] Running command:', command);
     
     const { stdout } = await execAsync(command, { timeout: 5000 });
@@ -601,6 +606,7 @@ await fastify.register(taskRoutes, { prefix: '/api/tasks' });
 await fastify.register(sessionRoutes, { prefix: '/api/sessions' });
 await fastify.register(settingsRoutes, { prefix: '/api/settings' });
 await fastify.register(costRoutes, { prefix: '/api/costs' });
+await fastify.register(messageRoutes, { prefix: '/api/message' });
 
 // Health check
 fastify.get('/api/health', async () => {
@@ -727,149 +733,59 @@ gatewayClient.on('approval-resolved', (resolved: ApprovalResolved) => {
   });
 });
 
-// Handle agent stream events to detect subagents
+// Handle agent stream events — track activity and detect completion for EXISTING tasks only.
+// Tasks are NEVER auto-created here. They must be created via the UI or API first.
 gatewayClient.on('agent', async (payload: any) => {
   try {
     const sessionKey = payload.sessionKey;
     const stream = payload.stream;
     const data = payload.data || {};
 
-    // Check if this is a subagent session (contains :subagent:)
+    // Only track subagent sessions
     if (!sessionKey || !sessionKey.includes(':subagent:')) {
       return;
     }
 
-    console.log('[SubagentHandler] Received agent event for subagent:', {
-      sessionKey,
-      stream,
-      dataKeys: Object.keys(data),
-      hasText: !!data.text,
-      textLength: data.text?.length || 0,
-    });
-
     // Update activity timestamp for this session
     sessionLastActivity.set(sessionKey, Date.now());
 
-    // Check if this is a NEW subagent session
-    // IMPORTANT: Check both the in-memory set AND the database to prevent duplicates
+    // If we haven't loaded this session into memory yet, look it up in the DB
     if (!knownSubagentSessions.has(sessionKey)) {
-      // First check if task already exists in database
       const existingTask = await findTaskBySessionKey(sessionKey);
-      if (existingTask) {
-        // Task already exists - just track it in memory and return
-        console.log('[SubagentHandler] ✅ Task already exists for session:', sessionKey, 'Task ID:', existingTask.id);
-        
-        // Register this session in memory
-        const parts = sessionKey.split(':');
-        const agentId = parts.length >= 2 ? parts[1] : 'unknown';
-        knownSubagentSessions.set(sessionKey, {
-          agentId,
-          title: existingTask.title,
-          startedAt: Date.now(),
-        });
-        
-        subagentTaskIds.set(sessionKey, existingTask.id);
-        subagentTextBuffers.set(sessionKey, '');
-        subagentTitleExtracted.set(sessionKey, existingTask.title !== 'Task in progress...');
-        
-        // CRITICAL: Make sure we're tracking activity for existing task!
-        console.log('[SubagentHandler] 🔔 Activity timestamp updated for existing task:', {
-          sessionKey,
-          timestamp: Date.now(),
-        });
-        
-        return; // Don't create duplicate
+      if (!existingTask) {
+        // No task exists for this session — ignore it. Tasks must be created first.
+        return;
       }
 
-      // Extract agentId from sessionKey (format: "agent:senior-dev:subagent:...")
+      // Track this existing task in memory for activity/completion detection
       const parts = sessionKey.split(':');
       const agentId = parts.length >= 2 ? parts[1] : 'unknown';
-
-      // Start with a placeholder title - we'll extract a better one later
-      const title = 'Task in progress...';
-
-      console.log('[SubagentHandler] Detected new subagent session:', {
-        sessionKey,
-        agentId,
-        title,
-      });
-
-      // Register this session
+      
       knownSubagentSessions.set(sessionKey, {
         agentId,
-        title,
+        title: existingTask.title,
         startedAt: Date.now(),
       });
-
-      // Initialize text buffer for this session
+      subagentTaskIds.set(sessionKey, existingTask.id);
       subagentTextBuffers.set(sessionKey, '');
-      subagentTitleExtracted.set(sessionKey, false);
+      subagentTitleExtracted.set(sessionKey, true); // Don't overwrite user-set titles
 
-      // Create a task for this subagent with placeholder title
-      try {
-        const task = await createTask({
-          title,
-          description: `Subagent task spawned by ${agentId}`,
-          status: 'in-progress',
-          priority: 'P2',
-          projectId: 'mission-clawtrol',
-          agentId,
-          sessionKey,
-          handoffNotes: null,
-        });
-
-        subagentTaskIds.set(sessionKey, task.id);
-
-        console.log('[SubagentHandler] Created task:', task.id, 'for session:', sessionKey);
-
-        // Broadcast the new task
-        broadcast('task-created', {
-          id: task.id,
-          title: task.title,
-          status: task.status,
-          priority: task.priority,
-          agentId: task.agentId,
-          sessionKey: task.sessionKey,
-        });
-
-        // Schedule title extraction (will extract after 5 seconds or when 500+ chars accumulate)
-        await scheduleTitleExtraction(sessionKey, task.id);
-      } catch (err) {
-        console.error('[SubagentHandler] Error creating task:', err);
-      }
+      console.log('[SubagentHandler] Tracking existing task for session:', {
+        sessionKey,
+        taskId: existingTask.id,
+        title: existingTask.title,
+      });
     }
 
-    // Accumulate text for title extraction
+    // Accumulate text for completion detection
     if (data.text && typeof data.text === 'string') {
       const currentBuffer = subagentTextBuffers.get(sessionKey) || '';
-      const newBuffer = currentBuffer + data.text;
-      subagentTextBuffers.set(sessionKey, newBuffer);
-
-      console.log('[SubagentHandler] Accumulated text:', {
-        sessionKey,
-        addedLength: data.text.length,
-        totalBufferLength: newBuffer.length,
-        firstCharOfNew: data.text.substring(0, 30),
-      });
-
-      // Check if we should extract title now (500+ chars accumulated)
-      const taskId = subagentTaskIds.get(sessionKey);
-      if (taskId) {
-        await checkAndExtractTitle(sessionKey, taskId);
-      }
+      subagentTextBuffers.set(sessionKey, currentBuffer + data.text);
     }
 
-    // Check for completion markers in the event text
-    const hasMarker = hasCompletionMarker(data.text);
-    console.log('[SubagentHandler] Checking for completion markers:', {
-      sessionKey,
-      textLength: data.text?.length || 0,
-      hasMarker,
-      markers: hasMarker ? [completionMarkers.find(m => data.text?.includes(m))] : [],
-    });
-    
-    if (hasMarker) {
-      console.log('[SubagentHandler] ✅ Detected completion marker in agent event:', {
+    // Check for completion markers
+    if (hasCompletionMarker(data.text)) {
+      console.log('[SubagentHandler] ✅ Detected completion marker:', {
         sessionKey,
         marker: completionMarkers.find(m => data.text.includes(m)),
       });
@@ -879,20 +795,11 @@ gatewayClient.on('agent', async (payload: any) => {
 
     // Check for stream completion indicators
     if (stream === 'complete' || stream === 'done') {
-      console.log('[SubagentHandler] ✅ Detected subagent completion (stream event):', {
-        sessionKey,
-        stream,
-      });
       await completeTask(sessionKey);
     }
     
-    // Check for lifecycle end event (this is how OpenClaw signals completion)
+    // Check for lifecycle end event
     if (stream === 'lifecycle' && data.phase === 'end') {
-      console.log('[SubagentHandler] ✅ Detected lifecycle end for subagent:', {
-        sessionKey,
-        phase: data.phase,
-        endedAt: data.endedAt,
-      });
       await completeTask(sessionKey);
     }
   } catch (err) {
@@ -900,75 +807,11 @@ gatewayClient.on('agent', async (payload: any) => {
   }
 });
 
-// Handle subagent spawn events (kept for backward compatibility)
+// Handle subagent spawn events — log only, no auto-task-creation.
+// Tasks must be created via UI or API before spawning agents.
 gatewayClient.on('subagent-started', async (payload: any) => {
-  try {
-    console.log('[SubagentHandler] Subagent started:', JSON.stringify(payload));
-    
-    // Extract relevant fields from the payload
-    const sessionKey = payload.sessionKey || payload.session || payload.id;
-    const agentId = payload.agentId || payload.agent || 'unknown';
-    const description = payload.description || payload.message || 'Subagent task';
-    
-    if (!sessionKey) {
-      console.warn('[SubagentHandler] No sessionKey in subagent-started event');
-      return;
-    }
-
-    // CRITICAL: Check if task already exists for this sessionKey to prevent duplicates
-    const existingTask = await findTaskBySessionKey(sessionKey);
-    if (existingTask) {
-      console.log('[SubagentHandler] Task already exists for session:', sessionKey, 'Task ID:', existingTask.id);
-      return; // Don't create duplicate
-    }
-
-    // Also check the in-memory set
-    if (knownSubagentSessions.has(sessionKey)) {
-      console.log('[SubagentHandler] Session already being tracked:', sessionKey);
-      return; // Already tracking this session
-    }
-
-    // Extract title from description (first line or first 60 chars)
-    const titleLines = description.split('\n');
-    const title = titleLines[0].substring(0, 100) || 'Subagent task';
-
-    // Mark session as known before creating task
-    knownSubagentSessions.set(sessionKey, {
-      agentId,
-      title,
-      startedAt: Date.now(),
-    });
-
-    // Create a task for this subagent
-    const task = await createTask({
-      title,
-      description,
-      status: 'in-progress',
-      priority: 'P2',
-      projectId: 'mission-clawtrol',
-      agentId,
-      sessionKey,
-      handoffNotes: null,
-    });
-
-    subagentTaskIds.set(sessionKey, task.id);
-    subagentTextBuffers.set(sessionKey, '');
-    subagentTitleExtracted.set(sessionKey, false);
-
-    console.log('[SubagentHandler] Created task:', task.id, 'for session:', sessionKey);
-
-    // Broadcast the new task
-    broadcast('task-created', {
-      id: task.id,
-      title: task.title,
-      status: task.status,
-      priority: task.priority,
-      agentId: task.agentId,
-      sessionKey: task.sessionKey,
-    });
-  } catch (err) {
-    console.error('[SubagentHandler] Error handling subagent-started:', err);
-  }
+  const sessionKey = payload.sessionKey || payload.session || payload.id;
+  console.log('[SubagentHandler] Subagent started (no auto-task-creation):', { sessionKey });
 });
 
 // Helper function to calculate cost based on model and token usage
@@ -1089,6 +932,48 @@ gatewayClient.on('subagent-completed', async (payload: any) => {
       return;
     }
 
+    // Try to extract commit hash from completion summary text
+    let commitHash: string | undefined;
+    let linesChanged: { added: number; removed: number; total: number } | undefined;
+    
+    // First try to extract from the completion summary
+    if (completionSummary && typeof completionSummary === 'string') {
+      commitHash = extractCommitHash(completionSummary);
+    }
+    
+    // Fallback: if no explicit hash found, query git log for recent commits since task started
+    const repoPath = '/home/chris/.openclaw/workspace/mission-clawtrol';
+    if (!commitHash && task.createdAt) {
+      const taskStartTime = new Date(task.createdAt);
+      taskStartTime.setSeconds(taskStartTime.getSeconds() - 5);
+      commitHash = await getMostRecentCommitHash(repoPath, taskStartTime);
+    }
+    
+    // Get lines changed if we have a commit hash
+    if (commitHash) {
+      const diff = await getLinesChanged(commitHash, repoPath);
+      if (diff.added > 0 || diff.removed > 0) {
+        const MINUTES_PER_LINE = 3;
+        const totalLines = diff.added + diff.removed;
+        const estimatedHumanMinutes = totalLines * MINUTES_PER_LINE;
+        const hourlyRate = 100;
+        const humanCost = (estimatedHumanMinutes / 60) * hourlyRate;
+        
+        linesChanged = {
+          added: diff.added,
+          removed: diff.removed,
+          total: totalLines,
+        };
+        
+        console.log('[SubagentCompleted] Calculated lines changed:', {
+          commitHash,
+          linesChanged,
+          estimatedHumanMinutes,
+          humanCost,
+        });
+      }
+    }
+
     // Update the task to review status (CSO will review and mark as done)
     const updatedTask = await updateTask(task.id, {
       status: 'review',
@@ -1097,6 +982,15 @@ gatewayClient.on('subagent-completed', async (payload: any) => {
       cost,
       model,
       runtime,
+      commitHash,
+      linesChanged,
+      // Estimate: AI is 10x faster than human. If AI took X seconds, human would take 10X seconds
+      estimatedHumanMinutes: linesChanged 
+        ? linesChanged.total * 3 
+        : runtime ? Math.ceil((runtime / 1000) * 10 / 60) : undefined, // fallback: runtime-based estimate
+      humanCost: linesChanged 
+        ? (linesChanged.total * 3 / 60) * 100 
+        : runtime ? ((runtime / 1000) * 10 / 60) * 100 : undefined, // fallback: runtime-based estimate
     });
 
     console.log('[SubagentHandler] Updated task:', task.id, 'to review', {
@@ -1104,6 +998,8 @@ gatewayClient.on('subagent-completed', async (payload: any) => {
       cost,
       model,
       runtime,
+      commitHash,
+      linesChanged,
     });
 
     // Broadcast the task update
@@ -1118,6 +1014,8 @@ gatewayClient.on('subagent-completed', async (payload: any) => {
       cost: updatedTask!.cost,
       model: updatedTask!.model,
       runtime: updatedTask!.runtime,
+      commitHash: updatedTask!.commitHash,
+      linesChanged: updatedTask!.linesChanged,
     });
 
     // Clean up

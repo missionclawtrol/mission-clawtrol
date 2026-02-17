@@ -6,7 +6,7 @@
 import { readFile, rename } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { db } from './database';
+import { db } from './database.js';
 
 export async function migrateFromJSON(): Promise<void> {
   const homeDir = process.env.HOME || '';
@@ -16,11 +16,11 @@ export async function migrateFromJSON(): Promise<void> {
   console.log('Starting migration from JSON to SQLite...');
 
   // Check if migration has already been done
-  const migrationCheckResult = db
-    .prepare('SELECT COUNT(*) as count FROM tasks')
-    .get() as { count: number };
+  const migrationCheckResult = await db.queryOne<{ count: number }>(
+    'SELECT COUNT(*) as count FROM tasks'
+  );
 
-  if (migrationCheckResult.count > 0) {
+  if (migrationCheckResult && migrationCheckResult.count > 0) {
     console.log('Database already has tasks. Skipping migration.');
     return;
   }
@@ -33,41 +33,40 @@ export async function migrateFromJSON(): Promise<void> {
 
       console.log(`Found ${tasks.length} tasks to migrate`);
 
-      const insertTask = db.prepare(`
-        INSERT INTO tasks (
-          id, title, description, status, priority, projectId, agentId,
-          sessionKey, handoffNotes, commitHash, linesAdded, linesRemoved,
-          linesTotal, estimatedHumanMinutes, humanCost, cost, runtime, model,
-          createdAt, updatedAt, completedAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-
       // Use transaction for bulk insert
-      const insertMany = db.transaction((tasks: any[]) => {
+      await db.transaction(async (txDb) => {
         for (const task of tasks) {
           try {
-            insertTask.run(
-              task.id || '',
-              task.title || '',
-              task.description || null,
-              task.status || 'backlog',
-              task.priority || 'P2',
-              task.projectId || null,
-              task.agentId || null,
-              task.sessionKey || null,
-              task.handoffNotes || null,
-              task.commitHash || null,
-              task.linesChanged?.added || null,
-              task.linesChanged?.removed || null,
-              task.linesChanged?.total || null,
-              task.estimatedHumanMinutes || null,
-              task.humanCost || null,
-              task.cost || null,
-              task.runtime || null,
-              task.model || null,
-              task.createdAt || new Date().toISOString(),
-              task.updatedAt || new Date().toISOString(),
-              task.completedAt || null
+            await txDb.execute(
+              `INSERT INTO tasks (
+                id, title, description, status, priority, projectId, agentId,
+                sessionKey, handoffNotes, commitHash, linesAdded, linesRemoved,
+                linesTotal, estimatedHumanMinutes, humanCost, cost, runtime, model,
+                createdAt, updatedAt, completedAt
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [
+                task.id || '',
+                task.title || '',
+                task.description || null,
+                task.status || 'backlog',
+                task.priority || 'P2',
+                task.projectId || null,
+                task.agentId || null,
+                task.sessionKey || null,
+                task.handoffNotes || null,
+                task.commitHash || null,
+                task.linesChanged?.added || null,
+                task.linesChanged?.removed || null,
+                task.linesChanged?.total || null,
+                task.estimatedHumanMinutes || null,
+                task.humanCost || null,
+                task.cost || null,
+                task.runtime || null,
+                task.model || null,
+                task.createdAt || new Date().toISOString(),
+                task.updatedAt || new Date().toISOString(),
+                task.completedAt || null,
+              ]
             );
           } catch (error) {
             console.warn(`Failed to migrate task ${task.id}:`, error);
@@ -76,7 +75,6 @@ export async function migrateFromJSON(): Promise<void> {
         }
       });
 
-      insertMany(tasks);
       console.log(`Successfully migrated ${tasks.length} tasks`);
 
       // Backup old file
@@ -99,10 +97,11 @@ export async function migrateFromJSON(): Promise<void> {
 
       console.log('Migrating settings...');
 
-      const insertSetting = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
-
       for (const [key, value] of Object.entries(settings)) {
-        insertSetting.run(key, String(value));
+        await db.execute(
+          'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+          [key, String(value)]
+        );
       }
 
       console.log('Successfully migrated settings');

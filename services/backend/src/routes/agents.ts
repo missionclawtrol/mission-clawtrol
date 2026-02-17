@@ -3,7 +3,9 @@ import { readFile, readdir, writeFile, stat } from 'fs/promises';
 import { join } from 'path';
 import { gatewayClient } from '../gateway-client.js';
 import { addAssociation, getProjectAgents, getAllAssociations, updateAssociation, removeAssociation, type AgentAssociation } from '../project-agents.js';
+import { db } from '../database.js';
 import { getAgentDefinitions, type AgentDefinition } from '../config-reader.js';
+import { updateTask, findTaskById } from '../task-store.js';
 
 // Helper to update model in sessions.json
 async function updateSessionModel(sessionKey: string, model: string): Promise<boolean> {
@@ -312,9 +314,10 @@ export async function agentRoutes(fastify: FastifyInstance) {
       label?: string;
       model?: string;
       projectId?: string;
+      taskId?: string;
     };
   }>('/spawn', async (request, reply) => {
-    const { task, label, model, projectId } = request.body;
+    const { task, label, model, projectId, taskId } = request.body;
 
     // Project is required
     if (!projectId) {
@@ -337,6 +340,22 @@ export async function agentRoutes(fastify: FastifyInstance) {
     const sessionKey = `agent:main:subagent:${agentLabel}:${timestamp}`;
 
     try {
+      // IMPORTANT: If taskId provided, link the existing task BEFORE calling gateway
+      // This prevents the race condition where gateway events create a duplicate task
+      if (taskId) {
+        const existingTask = await findTaskById(taskId);
+        if (existingTask) {
+          // Extract agentId from label
+          const agentId = label || 'senior-dev';
+          await updateTask(taskId, { 
+            sessionKey, 
+            status: 'in-progress',
+            agentId 
+          });
+          fastify.log.info(`Linked existing task ${taskId} to session ${sessionKey} (before gateway call)`);
+        }
+      }
+
       // Send initial message to create the session via chat.send
       // This creates a proper session that subsequent messages will find
       await gatewayClient.request('chat.send', {
@@ -389,7 +408,25 @@ export async function agentRoutes(fastify: FastifyInstance) {
   }>('/project/:projectId', async (request, reply) => {
     const { projectId } = request.params;
     const agents = getProjectAgents(projectId);
-    return { agents };
+
+    const statusBySession = new Map<string, { status: string; completedAt?: number }>();
+    for (const agent of agents) {
+      if (!agent.sessionKey) continue;
+      const row = await db.queryOne<{ status?: string; completedAt?: string }>(
+        'SELECT status, completedAt FROM tasks WHERE sessionKey = ? ORDER BY updatedAt DESC LIMIT 1',
+        [agent.sessionKey]
+      );
+      if (row?.status === 'done') {
+        statusBySession.set(agent.sessionKey, { status: 'completed', completedAt: row.completedAt ? Date.parse(row.completedAt) : undefined });
+      }
+    }
+
+    const enriched = agents.map((agent) => {
+      const override = statusBySession.get(agent.sessionKey);
+      return override ? { ...agent, status: override.status as any, completedAt: override.completedAt } : agent;
+    });
+
+    return { agents: enriched };
   });
 
   // Get all project-agent associations
