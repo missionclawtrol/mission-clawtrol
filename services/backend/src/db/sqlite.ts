@@ -100,6 +100,21 @@ export class SqliteDatabase implements IDatabase {
 
       CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entityType, entityId);
       CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(userId);
+
+      CREATE TABLE IF NOT EXISTS comments (
+        id TEXT PRIMARY KEY,
+        taskId TEXT NOT NULL,
+        userId TEXT,
+        userName TEXT,
+        userAvatar TEXT,
+        content TEXT NOT NULL,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT,
+        FOREIGN KEY (taskId) REFERENCES tasks(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_comments_taskId ON comments(taskId);
+      CREATE INDEX IF NOT EXISTS idx_comments_userId ON comments(userId);
     `);
 
     // Schema migrations (backward compatibility)

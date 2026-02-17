@@ -60,6 +60,83 @@
     priority: 'P2' as const,
   };
   
+  // Comments state
+  interface TaskComment {
+    id: string;
+    taskId: string;
+    userId: string | null;
+    userName: string | null;
+    userAvatar: string | null;
+    content: string;
+    createdAt: string;
+    updatedAt: string | null;
+  }
+  let comments: TaskComment[] = [];
+  let newComment = '';
+  let loadingComments = false;
+  let submittingComment = false;
+
+  async function loadComments(taskId: string) {
+    loadingComments = true;
+    try {
+      const res = await fetch(`http://${window.location.hostname}:3001/api/tasks/${taskId}/comments`, { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        comments = data.comments || [];
+      }
+    } catch (e) {
+      console.error('Failed to load comments:', e);
+    } finally {
+      loadingComments = false;
+    }
+  }
+
+  async function submitComment() {
+    if (!selectedTask || !newComment.trim()) return;
+    submittingComment = true;
+    try {
+      const res = await fetch(`http://${window.location.hostname}:3001/api/tasks/${selectedTask.id}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ content: newComment.trim() }),
+      });
+      if (res.ok) {
+        newComment = '';
+        await loadComments(selectedTask.id);
+      }
+    } catch (e) {
+      console.error('Failed to submit comment:', e);
+    } finally {
+      submittingComment = false;
+    }
+  }
+
+  async function removeComment(commentId: string) {
+    if (!selectedTask) return;
+    try {
+      await fetch(`http://${window.location.hostname}:3001/api/tasks/${selectedTask.id}/comments/${commentId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      await loadComments(selectedTask.id);
+    } catch (e) {
+      console.error('Failed to delete comment:', e);
+    }
+  }
+
+  function formatCommentTime(ts: string): string {
+    const d = new Date(ts);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return d.toLocaleDateString();
+  }
+
   // Kanban columns configuration
   const columns = [
     { id: 'backlog', name: 'Backlog', color: 'bg-gray-500' },
@@ -444,12 +521,12 @@
 <!-- Task Detail Modal -->
 {#if showTaskDetail && selectedTask}
   <div class="fixed inset-0 flex items-center justify-center z-50 p-4">
-    <div class="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-md" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="task-detail-title" tabindex="-1">
+    <div class="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-lg max-h-[85vh] flex flex-col" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="task-detail-title" tabindex="-1">
       <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
         <h2 id="task-detail-title" class="font-semibold">Task Details</h2>
         <button on:click={closeModals} class="text-slate-400 hover:text-white">✕</button>
       </div>
-      <div class="p-4 space-y-4">
+      <div class="p-4 space-y-4 overflow-y-auto">
         <div>
           <h3 class="font-semibold text-lg">{selectedTask.title}</h3>
         </div>
@@ -582,6 +659,60 @@
             </div>
           </div>
         {/if}
+        <!-- Comments Section -->
+        <div class="pt-2 border-t border-slate-700">
+          <h4 class="text-sm text-slate-400 mb-2">💬 Comments ({comments.length})</h4>
+          
+          {#if loadingComments}
+            <p class="text-xs text-slate-500">Loading comments...</p>
+          {:else}
+            {#if comments.length > 0}
+              <div class="space-y-2 max-h-48 overflow-y-auto mb-3">
+                {#each comments as comment (comment.id)}
+                  <div class="bg-slate-700/50 rounded p-2 group">
+                    <div class="flex items-center justify-between mb-1">
+                      <div class="flex items-center gap-1.5">
+                        {#if comment.userAvatar}
+                          <img src={comment.userAvatar} alt="" class="w-4 h-4 rounded-full" />
+                        {/if}
+                        <span class="text-xs font-medium text-slate-300">{comment.userName || 'Unknown'}</span>
+                        <span class="text-xs text-slate-500">{formatCommentTime(comment.createdAt)}</span>
+                        {#if comment.updatedAt}
+                          <span class="text-xs text-slate-500 italic">(edited)</span>
+                        {/if}
+                      </div>
+                      <button
+                        on:click={() => removeComment(comment.id)}
+                        class="text-xs text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Delete comment"
+                      >✕</button>
+                    </div>
+                    <p class="text-sm text-slate-200 whitespace-pre-wrap">{comment.content}</p>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+            
+            <!-- New comment input -->
+            <div class="flex gap-2">
+              <input
+                type="text"
+                bind:value={newComment}
+                on:keydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitComment(); } }}
+                placeholder="Add a comment..."
+                class="flex-1 bg-slate-700 border border-slate-600 rounded px-2 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                disabled={submittingComment}
+              />
+              <button
+                on:click={submitComment}
+                disabled={submittingComment || !newComment.trim()}
+                class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded text-sm text-white transition-colors"
+              >
+                {submittingComment ? '...' : 'Send'}
+              </button>
+            </div>
+          {/if}
+        </div>
       </div>
       <div class="px-4 py-3 border-t border-slate-700 flex justify-between gap-2">
         {#if (selectedTask.status === 'todo' || selectedTask.status === 'in-progress') && !selectedTask.sessionKey}
@@ -681,7 +812,7 @@
               <div 
                 draggable="true"
                 on:dragstart={() => handleDragStart(task)}
-                on:click={() => { selectedTask = task; showTaskDetail = true; }}
+                on:click={() => { selectedTask = task; showTaskDetail = true; comments = []; newComment = ''; loadComments(task.id); }}
                 class="p-3 bg-slate-800 rounded-lg border border-slate-600 hover:border-slate-500 cursor-move hover:bg-slate-700/80 transition-colors"
               >
                 <!-- Title -->
