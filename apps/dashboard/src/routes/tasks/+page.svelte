@@ -233,6 +233,68 @@
     return `${hours}h`;
   }
 
+  function getModelDisplayName(model: string | null | undefined): string | null {
+    if (!model) return null;
+    
+    // Map raw model strings to friendly display names
+    const modelMap: Record<string, string> = {
+      'claude-sonnet-4-5': 'Sonnet 4.5',
+      'claude-opus-4-6': 'Opus 4.6',
+      'claude-opus-4': 'Opus 4',
+      'claude-sonnet-4': 'Sonnet 4',
+      'claude-sonnet-3-5': 'Sonnet 3.5',
+      'claude-3-5-sonnet-20241022': 'Sonnet 3.5',
+      'claude-3-5-sonnet-20240620': 'Sonnet 3.5',
+      'claude-3-opus-20240229': 'Opus 3',
+      'MiniMax-M2.5': 'MiniMax M2.5',
+      'minimax/MiniMax-M2.5': 'MiniMax M2.5',
+      'gpt-4': 'GPT-4',
+      'gpt-4-turbo': 'GPT-4 Turbo',
+      'gpt-4o': 'GPT-4o',
+      'gpt-3.5-turbo': 'GPT-3.5',
+      'o1': 'o1',
+      'o1-mini': 'o1-mini',
+      'o1-preview': 'o1-preview',
+    };
+    
+    // Try exact match first
+    if (modelMap[model]) {
+      return modelMap[model];
+    }
+    
+    // Try partial matches for anthropic models
+    if (model.includes('claude-sonnet-4-5') || model.includes('anthropic/claude-sonnet-4-5')) {
+      return 'Sonnet 4.5';
+    }
+    if (model.includes('claude-opus-4-6') || model.includes('anthropic/claude-opus-4-6')) {
+      return 'Opus 4.6';
+    }
+    if (model.includes('claude-opus-4') || model.includes('anthropic/claude-opus-4')) {
+      return 'Opus 4';
+    }
+    if (model.includes('claude-sonnet-4') || model.includes('anthropic/claude-sonnet-4')) {
+      return 'Sonnet 4';
+    }
+    if (model.includes('sonnet-3-5') || model.includes('sonnet-3.5')) {
+      return 'Sonnet 3.5';
+    }
+    if (model.includes('opus-3')) {
+      return 'Opus 3';
+    }
+    if (model.includes('MiniMax')) {
+      return 'MiniMax M2.5';
+    }
+    
+    // Return cleaned-up raw string if no mapping exists
+    // Remove common prefixes
+    return model
+      .replace('anthropic/', '')
+      .replace('openai/', '')
+      .replace('minimax/', '')
+      .replace('claude-', '')
+      .replace('gpt-', 'GPT-');
+  }
+
   function formatCompletedAt(dateStr: string | undefined): string {
     if (!dateStr) return '';
     const date = new Date(dateStr);
@@ -641,9 +703,19 @@
                   Human Time: <span class="font-semibold">{formatMinutes(selectedTask.estimatedHumanMinutes)}</span>
                 </p>
               {/if}
+              {#if selectedTask.cost}
+                <p class="text-slate-300">
+                  AI Cost: <span class="font-semibold">${selectedTask.cost.toFixed(2)}</span>
+                </p>
+              {/if}
               {#if selectedTask.humanCost}
                 <p class="text-slate-300">
                   Human Cost: <span class="font-semibold">${selectedTask.humanCost.toFixed(2)}</span>
+                </p>
+              {/if}
+              {#if getModelDisplayName(selectedTask.model)}
+                <p class="text-slate-300">
+                  Model: <span class="font-semibold">🤖 {getModelDisplayName(selectedTask.model)}</span>
                 </p>
               {/if}
             </div>
@@ -859,6 +931,9 @@
                     </div>
                     {#if task.cost}
                       <span>💰 AI: ${task.cost.toFixed(2)}</span>
+                    {/if}
+                    {#if getModelDisplayName(task.model)}
+                      <span class="text-slate-400">🤖 {getModelDisplayName(task.model)}</span>
                     {/if}
                   </div>
                 {/if}
