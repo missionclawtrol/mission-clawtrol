@@ -31,11 +31,8 @@ COPY --from=builder /app/package.json ./
 # Switch to non-root user
 USER app
 
-# Expose port (adapter-node default)
+# Expose port
 EXPOSE 3000
-
-# Health check
-HEALTHCHECK CMD wget -qO- http://localhost:3000/api/health || exit 1
 
 # Start the application
 CMD ["node", "build"]

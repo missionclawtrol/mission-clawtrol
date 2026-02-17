@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: clawtrol-postgres
+    environment:
+      POSTGRES_DB: clawtrol
+      POSTGRES_USER: clawtrol
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clawtrol"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - clawtrol-network
+
+  backend:
+    build:
+      context: ./services/backend
+      dockerfile: Dockerfile
+    container_name: clawtrol-backend
+    environment:
+      DATABASE_URL: postgres://clawtrol:${POSTGRES_PASSWORD}@postgres:5432/clawtrol
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+      SESSION_SECRET: ${SESSION_SECRET}
+      GATEWAY_URL: ${GATEWAY_URL:-ws://host.docker.internal:18789}
+      GATEWAY_TOKEN: ${GATEWAY_TOKEN}
+      ALLOWED_ORG: ${ALLOWED_ORG:-}
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:5173}
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - clawtrol-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  dashboard:
+    build:
+      context: ./apps/dashboard
+      dockerfile: Dockerfile
+    container_name: clawtrol-dashboard
+    environment:
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:3001}
+      PORT: "5173"
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    networks:
+      - clawtrol-network
+
+volumes:
+  pgdata:
+    driver: local
+
+networks:
+  clawtrol-network:
+    driver: bridge
