@@ -81,7 +81,7 @@
 
 <div class="w-full h-full">
   {#if title}
-    <h3 class="text-sm font-medium text-slate-300 mb-3 text-center">{title}</h3>
+    <h3 class="text-sm font-medium text-slate-600 dark:text-slate-300 mb-3 text-center">{title}</h3>
   {/if}
   <div class="relative" style="height: 250px;">
     <canvas bind:this={canvas}></canvas>

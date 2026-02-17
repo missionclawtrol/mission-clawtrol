@@ -65,8 +65,8 @@
     switch (role) {
       case 'admin': return 'bg-red-500/20 text-red-400 border-red-500/30';
       case 'member': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
-      case 'viewer': return 'bg-slate-500/20 text-slate-500 dark:text-slate-400 border-slate-500/30';
-      default: return 'bg-slate-500/20 text-slate-500 dark:text-slate-400';
+      case 'viewer': return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+      default: return 'bg-slate-500/20 text-slate-400';
     }
   }
 
@@ -75,8 +75,8 @@
 
 <div class="max-w-4xl mx-auto space-y-6">
   <div class="flex items-center justify-between">
-    <h1 class="text-2xl font-bold text-slate-900 dark:text-slate-100">Team Management</h1>
-    <span class="text-sm text-slate-500 dark:text-slate-400">{users.length} member{users.length !== 1 ? 's' : ''}</span>
+    <h1 class="text-2xl font-bold text-slate-100">Team Management</h1>
+    <span class="text-sm text-slate-400">{users.length} member{users.length !== 1 ? 's' : ''}</span>
   </div>
 
   {#if error}
@@ -87,23 +87,23 @@
   {/if}
 
   {#if loading}
-    <div class="flex justify-center py-12 text-slate-500 dark:text-slate-400">Loading team...</div>
+    <div class="flex justify-center py-12 text-slate-400">Loading team...</div>
   {:else if users.length === 0}
-    <div class="p-8 text-center bg-white dark:bg-slate-800/50 rounded-lg border border-gray-200 dark:border-slate-700">
-      <p class="text-slate-500 dark:text-slate-400">No team members yet. Users are added when they log in via GitHub OAuth.</p>
+    <div class="p-8 text-center bg-slate-800/50 rounded-lg border border-slate-700">
+      <p class="text-slate-400">No team members yet. Users are added when they log in via GitHub OAuth.</p>
     </div>
   {:else}
     <!-- Role legend -->
-    <div class="flex gap-4 text-xs text-slate-500 dark:text-slate-400">
+    <div class="flex gap-4 text-xs text-slate-400">
       <span><strong class="text-red-400">Admin</strong> — Full access, manage users</span>
       <span><strong class="text-blue-400">Member</strong> — Create & edit own tasks</span>
-      <span><strong class="text-slate-600 dark:text-slate-300">Viewer</strong> — Read-only</span>
+      <span><strong class="text-slate-300">Viewer</strong> — Read-only</span>
     </div>
 
-    <div class="bg-white dark:bg-slate-800/50 rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden">
+    <div class="bg-slate-800/50 rounded-lg border border-slate-700 overflow-hidden">
       <table class="w-full">
         <thead>
-          <tr class="border-b border-gray-200 dark:border-slate-700 text-left text-xs text-slate-500 dark:text-slate-400 uppercase">
+          <tr class="border-b border-slate-700 text-left text-xs text-slate-400 uppercase">
             <th class="px-4 py-3">User</th>
             <th class="px-4 py-3">Role</th>
             {#if isAdmin()}
@@ -113,19 +113,19 @@
         </thead>
         <tbody>
           {#each users as user (user.id)}
-            <tr class="border-b border-gray-200 dark:border-slate-700/50 hover:bg-gray-100 dark:bg-gray-100/50 dark:bg-slate-700/30">
+            <tr class="border-b border-slate-700/50 hover:bg-slate-700/30">
               <td class="px-4 py-3">
                 <div class="flex items-center gap-3">
                   {#if user.avatarUrl}
                     <img src={user.avatarUrl} alt="" class="w-8 h-8 rounded-full" />
                   {:else}
-                    <div class="w-8 h-8 rounded-full bg-slate-600 flex items-center justify-center text-sm text-slate-600 dark:text-slate-300">
+                    <div class="w-8 h-8 rounded-full bg-slate-600 flex items-center justify-center text-sm text-slate-300">
                       {(user.name || user.githubLogin).charAt(0).toUpperCase()}
                     </div>
                   {/if}
                   <div>
                     <div class="text-sm font-medium text-slate-200">{user.name || user.githubLogin}</div>
-                    <div class="text-xs text-slate-500 dark:text-slate-400">@{user.githubLogin}</div>
+                    <div class="text-xs text-slate-400">@{user.githubLogin}</div>
                   </div>
                   {#if user.id === currentUser?.id}
                     <span class="text-xs text-slate-500">(you)</span>
@@ -138,7 +138,7 @@
                     value={user.role}
                     on:change={(e) => changeRole(user.id, e.currentTarget.value)}
                     disabled={saving === user.id}
-                    class="bg-gray-100 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 text-slate-200 text-sm rounded px-2 py-1 focus:ring-blue-500 focus:border-blue-500"
+                    class="bg-slate-700 border border-slate-600 text-slate-200 text-sm rounded px-2 py-1 focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="admin">Admin</option>
                     <option value="member">Member</option>

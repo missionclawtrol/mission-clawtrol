@@ -221,7 +221,7 @@
           
           <!-- Model info -->
           <div class="mb-3">
-            <div class="flex items-center space-x-2 text-xs text-slate-500 dark:text-slate-400">
+            <div class="flex items-center space-x-2 text-xs text-slate-400">
               <span>🧠</span>
               <span>{formatModelName(agent.model)}</span>
             </div>

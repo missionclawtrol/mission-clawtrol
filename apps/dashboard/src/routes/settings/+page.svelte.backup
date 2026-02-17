@@ -98,29 +98,29 @@
   <h2 class="text-lg font-semibold">Settings</h2>
   
   <!-- Alert Settings -->
-  <div class="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-4">
+  <div class="bg-slate-800 rounded-lg border border-slate-700 p-4">
     <h3 class="font-medium mb-4">🔔 Alert Preferences</h3>
     
     <div class="space-y-4">
       <div class="flex items-center justify-between">
         <div>
           <div class="font-medium">Browser Push Notifications</div>
-          <div class="text-sm text-slate-500 dark:text-slate-400">Receive notifications when agents need attention</div>
+          <div class="text-sm text-slate-400">Receive notifications when agents need attention</div>
         </div>
         <label class="relative inline-flex items-center cursor-pointer">
           <input type="checkbox" bind:checked={settings.alerts.browserPush} class="sr-only peer">
-          <div class="w-11 h-6 bg-gray-100 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+          <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
         </label>
       </div>
       
       <div class="flex items-center justify-between">
         <div>
           <div class="font-medium">Audio Alerts</div>
-          <div class="text-sm text-slate-500 dark:text-slate-400">Play sound for high-priority approvals</div>
+          <div class="text-sm text-slate-400">Play sound for high-priority approvals</div>
         </div>
         <label class="relative inline-flex items-center cursor-pointer">
           <input type="checkbox" bind:checked={settings.alerts.audio} class="sr-only peer">
-          <div class="w-11 h-6 bg-gray-100 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+          <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
         </label>
       </div>
       
@@ -133,20 +133,20 @@
             min="0" 
             max="100" 
             bind:value={settings.alerts.audioVolume}
-            class="w-full h-2 bg-gray-100 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+            class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
           >
-          <div class="text-sm text-slate-500 dark:text-slate-400 mt-1">{settings.alerts.audioVolume}%</div>
+          <div class="text-sm text-slate-400 mt-1">{settings.alerts.audioVolume}%</div>
         </div>
       {/if}
       
       <div class="flex items-center justify-between">
         <div>
           <div class="font-medium">Quiet Hours</div>
-          <div class="text-sm text-slate-500 dark:text-slate-400">Silence non-critical alerts during these hours</div>
+          <div class="text-sm text-slate-400">Silence non-critical alerts during these hours</div>
         </div>
         <label class="relative inline-flex items-center cursor-pointer">
           <input type="checkbox" bind:checked={settings.alerts.quietHours.enabled} class="sr-only peer">
-          <div class="w-11 h-6 bg-gray-100 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+          <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
         </label>
       </div>
       
@@ -158,7 +158,7 @@
               id="quiet-hours-start"
               type="time" 
               bind:value={settings.alerts.quietHours.start}
-              class="bg-gray-100 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded px-3 py-2 text-sm"
+              class="bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm"
             >
           </div>
           <div>
@@ -167,7 +167,7 @@
               id="quiet-hours-end"
               type="time" 
               bind:value={settings.alerts.quietHours.end}
-              class="bg-gray-100 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded px-3 py-2 text-sm"
+              class="bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm"
             >
           </div>
         </div>
@@ -176,7 +176,7 @@
   </div>
   
   <!-- Display Settings -->
-  <div class="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-4">
+  <div class="bg-slate-800 rounded-lg border border-slate-700 p-4">
     <h3 class="font-medium mb-4">🎨 Display</h3>
     
     <div class="space-y-4">
@@ -185,7 +185,7 @@
         <select 
           id="theme-select"
           bind:value={settings.theme}
-          class="bg-gray-100 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded px-3 py-2 text-sm w-full"
+          class="bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm w-full"
         >
           <option value="dark">Dark</option>
           <option value="light">Light (coming soon)</option>
@@ -201,9 +201,9 @@
           max="600"
           step="20"
           bind:value={settings.kanbanColumnWidth}
-          class="w-full h-2 bg-gray-100 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+          class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
         >
-        <div class="text-sm text-slate-500 dark:text-slate-400 mt-1">{settings.kanbanColumnWidth}px</div>
+        <div class="text-sm text-slate-400 mt-1">{settings.kanbanColumnWidth}px</div>
       </div>
       
       <div>
@@ -214,32 +214,32 @@
           min="1" 
           max="30"
           bind:value={settings.refreshInterval}
-          class="bg-gray-100 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded px-3 py-2 text-sm w-32"
+          class="bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm w-32"
         >
-        <div class="text-sm text-slate-500 dark:text-slate-400 mt-1">How often to poll for updates (WebSocket will be instant)</div>
+        <div class="text-sm text-slate-400 mt-1">How often to poll for updates (WebSocket will be instant)</div>
       </div>
     </div>
   </div>
   
   <!-- Connection Info -->
-  <div class="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-4">
+  <div class="bg-slate-800 rounded-lg border border-slate-700 p-4">
     <h3 class="font-medium mb-4">🔌 Connection</h3>
     
     <div class="space-y-2 text-sm">
       <div class="flex justify-between">
-        <span class="text-slate-500 dark:text-slate-400">OpenClaw Gateway</span>
+        <span class="text-slate-400">OpenClaw Gateway</span>
         <span class={gatewayStatus === 'connected' ? 'text-green-400' : gatewayStatus === 'error' ? 'text-red-400' : 'text-yellow-400'}>
           ● {gatewayStatus === 'connected' ? 'Connected' : gatewayStatus === 'error' ? 'Not Connected' : 'Pending'}
         </span>
       </div>
       <div class="flex justify-between">
-        <span class="text-slate-500 dark:text-slate-400">WebSocket</span>
+        <span class="text-slate-400">WebSocket</span>
         <span class={wsStatus === 'connected' ? 'text-green-400' : wsStatus === 'error' ? 'text-red-400' : 'text-yellow-400'}>
           ● {wsStatus === 'connected' ? 'Connected' : wsStatus === 'error' ? 'Not Connected' : 'Pending'}
         </span>
       </div>
       <div class="flex justify-between">
-        <span class="text-slate-500 dark:text-slate-400">Backend API</span>
+        <span class="text-slate-400">Backend API</span>
         <span class={backendStatus === 'connected' ? 'text-green-400' : backendStatus === 'error' ? 'text-red-400' : 'text-yellow-400'}>
           ● {backendStatus === 'connected' ? 'Connected' : backendStatus === 'error' ? 'Not Running' : 'Pending'}
         </span>

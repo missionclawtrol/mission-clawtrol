@@ -178,8 +178,8 @@
 <div class="max-w-6xl mx-auto space-y-6">
   <div class="flex items-center justify-between">
     <div>
-      <h1 class="text-2xl font-bold text-slate-900 dark:text-slate-100">Webhook Notifications</h1>
-      <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Receive real-time notifications for task events</p>
+      <h1 class="text-2xl font-bold text-slate-100">Webhook Notifications</h1>
+      <p class="text-sm text-slate-400 mt-1">Receive real-time notifications for task events</p>
     </div>
     {#if isAdmin() && !showAddForm}
       <button
@@ -206,14 +206,14 @@
 
   <!-- Add/Edit Form -->
   {#if showAddForm && isAdmin()}
-    <div class="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg p-6 space-y-4">
+    <div class="bg-slate-800 border border-slate-700 rounded-lg p-6 space-y-4">
       <div class="flex items-center justify-between">
-        <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100">
+        <h2 class="text-lg font-semibold text-slate-100">
           {editingId ? 'Edit Webhook' : 'Add New Webhook'}
         </h2>
         <button
           on:click={resetForm}
-          class="text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:text-slate-300 text-sm"
+          class="text-slate-400 hover:text-slate-300 text-sm"
         >
           Cancel
         </button>
@@ -222,34 +222,34 @@
       <div class="space-y-4">
         <!-- URL Input -->
         <div>
-          <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">
+          <label class="block text-sm font-medium text-slate-300 mb-2">
             Webhook URL *
           </label>
           <input
             type="url"
             bind:value={formUrl}
             placeholder="https://your-domain.com/webhook"
-            class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+            class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
           />
-          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">The endpoint that will receive POST requests</p>
+          <p class="text-xs text-slate-400 mt-1">The endpoint that will receive POST requests</p>
         </div>
 
         <!-- Event Types -->
         <div>
-          <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">
+          <label class="block text-sm font-medium text-slate-300 mb-2">
             Event Types *
           </label>
           <div class="space-y-2">
             {#each eventTypes as eventType}
-              <label class="flex items-start gap-3 p-3 bg-gray-50 dark:bg-slate-900/50 rounded border border-gray-200 dark:border-slate-700/50 hover:border-gray-300 dark:border-slate-600 cursor-pointer">
+              <label class="flex items-start gap-3 p-3 bg-slate-900/50 rounded border border-slate-700/50 hover:border-slate-600 cursor-pointer">
                 <input
                   type="checkbox"
                   bind:checked={formEvents[eventType.id]}
-                  class="mt-0.5 w-4 h-4 text-blue-600 bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600 rounded focus:ring-blue-500 focus:ring-offset-slate-900"
+                  class="mt-0.5 w-4 h-4 text-blue-600 bg-slate-800 border-slate-600 rounded focus:ring-blue-500 focus:ring-offset-slate-900"
                 />
                 <div class="flex-1">
                   <div class="text-sm font-medium text-slate-200">{eventType.label}</div>
-                  <div class="text-xs text-slate-500 dark:text-slate-400">{eventType.desc}</div>
+                  <div class="text-xs text-slate-400">{eventType.desc}</div>
                 </div>
               </label>
             {/each}
@@ -262,9 +262,9 @@
             type="checkbox"
             bind:checked={formEnabled}
             id="enabled-toggle"
-            class="w-4 h-4 text-blue-600 bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600 rounded focus:ring-blue-500 focus:ring-offset-slate-900"
+            class="w-4 h-4 text-blue-600 bg-slate-800 border-slate-600 rounded focus:ring-blue-500 focus:ring-offset-slate-900"
           />
-          <label for="enabled-toggle" class="text-sm text-slate-600 dark:text-slate-300">
+          <label for="enabled-toggle" class="text-sm text-slate-300">
             Enable webhook immediately
           </label>
         </div>
@@ -274,13 +274,13 @@
           <button
             on:click={handleSubmit}
             disabled={saving}
-            class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-100 dark:bg-slate-700 disabled:text-slate-500 text-white rounded-lg text-sm font-medium transition-colors"
+            class="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg text-sm font-medium transition-colors"
           >
             {saving ? 'Saving...' : editingId ? 'Update Webhook' : 'Create Webhook'}
           </button>
           <button
             on:click={resetForm}
-            class="px-4 py-2 bg-gray-100 dark:bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-sm font-medium transition-colors"
+            class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-sm font-medium transition-colors"
           >
             Cancel
           </button>
@@ -291,10 +291,10 @@
 
   <!-- Webhooks List -->
   {#if loading}
-    <div class="flex justify-center py-12 text-slate-500 dark:text-slate-400">Loading webhooks...</div>
+    <div class="flex justify-center py-12 text-slate-400">Loading webhooks...</div>
   {:else if webhooks.length === 0}
-    <div class="p-8 text-center bg-white dark:bg-slate-800/50 rounded-lg border border-gray-200 dark:border-slate-700">
-      <p class="text-slate-500 dark:text-slate-400">No webhooks configured yet.</p>
+    <div class="p-8 text-center bg-slate-800/50 rounded-lg border border-slate-700">
+      <p class="text-slate-400">No webhooks configured yet.</p>
       {#if isAdmin()}
         <p class="text-sm text-slate-500 mt-2">Add your first webhook to start receiving task event notifications.</p>
       {/if}
@@ -302,17 +302,17 @@
   {:else}
     <div class="space-y-4">
       {#each webhooks as webhook (webhook.id)}
-        <div class="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg p-5 space-y-3">
+        <div class="bg-slate-800 border border-slate-700 rounded-lg p-5 space-y-3">
           <!-- Header -->
           <div class="flex items-start justify-between gap-4">
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-3">
-                <span class="text-sm font-mono text-slate-900 dark:text-slate-100 break-all">{webhook.url}</span>
-                <span class={`px-2 py-0.5 text-xs font-medium rounded border ${webhook.enabled ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-slate-500/20 text-slate-500 dark:text-slate-400 border-slate-500/30'}`}>
+                <span class="text-sm font-mono text-slate-100 break-all">{webhook.url}</span>
+                <span class={`px-2 py-0.5 text-xs font-medium rounded border ${webhook.enabled ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-slate-500/20 text-slate-400 border-slate-500/30'}`}>
                   {webhook.enabled ? 'Enabled' : 'Disabled'}
                 </span>
               </div>
-              <div class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              <div class="text-xs text-slate-400 mt-1">
                 Created {new Date(webhook.createdAt).toLocaleDateString()}
               </div>
             </div>
@@ -322,7 +322,7 @@
                 <!-- Toggle -->
                 <button
                   on:click={() => handleToggle(webhook)}
-                  class="px-3 py-1.5 text-xs font-medium rounded bg-gray-100 dark:bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors"
+                  class="px-3 py-1.5 text-xs font-medium rounded bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors"
                   title={webhook.enabled ? 'Disable' : 'Enable'}
                 >
                   {webhook.enabled ? '⏸️' : '▶️'}
@@ -340,7 +340,7 @@
                 <!-- Edit -->
                 <button
                   on:click={() => startEdit(webhook)}
-                  class="px-3 py-1.5 text-xs font-medium rounded bg-gray-100 dark:bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors"
+                  class="px-3 py-1.5 text-xs font-medium rounded bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors"
                 >
                   ✏️ Edit
                 </button>
@@ -367,14 +367,14 @@
 
           <!-- Secret (collapsible) -->
           <details class="text-sm">
-            <summary class="cursor-pointer text-slate-500 dark:text-slate-400 hover:text-slate-600 dark:text-slate-300 select-none">
+            <summary class="cursor-pointer text-slate-400 hover:text-slate-300 select-none">
               Show signing secret
             </summary>
-            <div class="mt-2 p-3 bg-gray-50 dark:bg-slate-900 rounded border border-gray-200 dark:border-slate-700 font-mono text-xs text-slate-600 dark:text-slate-300 break-all flex items-center justify-between gap-2">
+            <div class="mt-2 p-3 bg-slate-900 rounded border border-slate-700 font-mono text-xs text-slate-300 break-all flex items-center justify-between gap-2">
               <span>{webhook.secret}</span>
               <button
                 on:click={() => copySecret(webhook.secret)}
-                class="px-2 py-1 text-xs bg-gray-100 dark:bg-slate-700 hover:bg-slate-600 rounded shrink-0"
+                class="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded shrink-0"
                 title="Copy to clipboard"
               >
                 📋
@@ -390,13 +390,13 @@
   {/if}
 
   <!-- Documentation -->
-  <div class="bg-white dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-lg p-5 space-y-3">
+  <div class="bg-slate-800/50 border border-slate-700 rounded-lg p-5 space-y-3">
     <h3 class="text-sm font-semibold text-slate-200">📖 Webhook Documentation</h3>
-    <div class="text-xs text-slate-500 dark:text-slate-400 space-y-2">
-      <p><strong class="text-slate-600 dark:text-slate-300">Payload Format:</strong> All webhooks receive a JSON POST request with <code class="bg-gray-50 dark:bg-slate-900 px-1 py-0.5 rounded">event</code>, <code class="bg-gray-50 dark:bg-slate-900 px-1 py-0.5 rounded">data</code>, and <code class="bg-gray-50 dark:bg-slate-900 px-1 py-0.5 rounded">timestamp</code> fields.</p>
-      <p><strong class="text-slate-600 dark:text-slate-300">Signature Verification:</strong> The <code class="bg-gray-50 dark:bg-slate-900 px-1 py-0.5 rounded">X-Webhook-Signature</code> header contains an HMAC-SHA256 signature of the request body using your webhook secret.</p>
-      <p><strong class="text-slate-600 dark:text-slate-300">Timeout:</strong> Webhook requests timeout after 5 seconds.</p>
-      <p><strong class="text-slate-600 dark:text-slate-300">Event Types:</strong> Subscribe to specific events or select multiple to receive all relevant notifications.</p>
+    <div class="text-xs text-slate-400 space-y-2">
+      <p><strong class="text-slate-300">Payload Format:</strong> All webhooks receive a JSON POST request with <code class="bg-slate-900 px-1 py-0.5 rounded">event</code>, <code class="bg-slate-900 px-1 py-0.5 rounded">data</code>, and <code class="bg-slate-900 px-1 py-0.5 rounded">timestamp</code> fields.</p>
+      <p><strong class="text-slate-300">Signature Verification:</strong> The <code class="bg-slate-900 px-1 py-0.5 rounded">X-Webhook-Signature</code> header contains an HMAC-SHA256 signature of the request body using your webhook secret.</p>
+      <p><strong class="text-slate-300">Timeout:</strong> Webhook requests timeout after 5 seconds.</p>
+      <p><strong class="text-slate-300">Event Types:</strong> Subscribe to specific events or select multiple to receive all relevant notifications.</p>
     </div>
   </div>
 </div>

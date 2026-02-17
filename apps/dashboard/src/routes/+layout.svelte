@@ -23,6 +23,7 @@
   let currentUser: CurrentUser | null = null;
   let authChecked = false;
   let userMenuOpen = false;
+  let theme: 'dark' | 'light' = 'dark';
 
   function toggleUserMenu() {
     userMenuOpen = !userMenuOpen;
@@ -72,6 +73,7 @@
   let intervalId: ReturnType<typeof setInterval> | undefined;
 
   onMount(() => {
+    loadTheme();
     checkBackend();
     checkAuth();
     connectWebSocket();
@@ -100,6 +102,44 @@
       window.location.href = '/projects';
     }, 50);
   }
+
+  function toggleTheme() {
+    theme = theme === 'dark' ? 'light' : 'dark';
+    applyTheme();
+    saveTheme();
+  }
+
+  function applyTheme() {
+    if (typeof document !== 'undefined') {
+      if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    }
+  }
+
+  function saveTheme() {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('theme', theme);
+    }
+    // Also save to settings API
+    if (currentUser) {
+      fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ theme }),
+      }).catch(err => console.error('Failed to save theme to API:', err));
+    }
+  }
+
+  function loadTheme() {
+    if (typeof localStorage !== 'undefined') {
+      const savedTheme = localStorage.getItem('theme');
+      theme = (savedTheme === 'light' ? 'light' : 'dark') as 'dark' | 'light';
+    }
+    applyTheme();
+  }
 </script>
 
 <!-- Click outside to close user menu -->
@@ -107,17 +147,17 @@
 
 <!-- Show loading while checking auth (except on login page) -->
 {#if !authChecked && $page.url.pathname !== '/login'}
-  <div class="min-h-screen flex items-center justify-center bg-slate-900">
+  <div class="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-900">
     <div class="text-center">
       <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400 mx-auto mb-4"></div>
-      <p class="text-slate-400">Checking authentication...</p>
+      <p class="text-slate-600 dark:text-slate-400">Checking authentication...</p>
     </div>
   </div>
 {:else}
   <!-- Show content for login page or authenticated users -->
   <div class="min-h-screen flex flex-col">
     <!-- Header - show for all pages including login (to maintain consistent UI) -->
-    <header class="bg-slate-800 border-b border-slate-700 px-6 py-4">
+    <header class="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-6 py-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
           <span class="text-2xl">🦞</span>
@@ -142,12 +182,24 @@
               <span class="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></span>
             {/if}
           </div>
+          <!-- Theme Toggle -->
+          <button
+            on:click={toggleTheme}
+            class="p-2 hover:bg-slate-700/50 dark:hover:bg-slate-700 rounded-lg transition-colors"
+            title="Toggle {theme === 'dark' ? 'light' : 'dark'} mode"
+          >
+            {#if theme === 'dark'}
+              <span class="text-xl">☀️</span>
+            {:else}
+              <span class="text-xl">🌙</span>
+            {/if}
+          </button>
           <!-- User Menu -->
           {#if currentUser}
-            <div class="relative pl-4 border-l border-slate-600 user-menu-container">
+            <div class="relative pl-4 border-l border-gray-300 dark:border-slate-600 user-menu-container">
               <button
                 on:click={toggleUserMenu}
-                class="flex items-center gap-2 hover:bg-slate-700 rounded-lg px-2 py-1 transition-colors"
+                class="flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg px-2 py-1 transition-colors"
               >
                 {#if currentUser.avatarUrl}
                   <img 
@@ -156,23 +208,23 @@
                     class="w-8 h-8 rounded-full"
                   />
                 {:else}
-                  <div class="w-8 h-8 rounded-full bg-slate-600 flex items-center justify-center">
-                    <span class="text-sm text-slate-300">{(currentUser.name || currentUser.username).charAt(0).toUpperCase()}</span>
+                  <div class="w-8 h-8 rounded-full bg-gray-300 dark:bg-slate-600 flex items-center justify-center">
+                    <span class="text-sm text-slate-700 dark:text-slate-300">{(currentUser.name || currentUser.username).charAt(0).toUpperCase()}</span>
                   </div>
                 {/if}
-                <span class="text-sm text-slate-300">{currentUser.name || currentUser.username}</span>
-                <svg class="w-4 h-4 text-slate-400 transition-transform {userMenuOpen ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <span class="text-sm text-slate-700 dark:text-slate-300">{currentUser.name || currentUser.username}</span>
+                <svg class="w-4 h-4 text-slate-500 dark:text-slate-400 transition-transform {userMenuOpen ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
 
               {#if userMenuOpen}
-                <div class="absolute right-0 top-full mt-2 w-64 bg-slate-800 border border-slate-600 rounded-lg shadow-xl z-50">
+                <div class="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-lg shadow-xl z-50">
                   <!-- User info -->
-                  <div class="px-4 py-3 border-b border-slate-700">
-                    <p class="text-sm font-medium text-slate-200">{currentUser.name || currentUser.username}</p>
+                  <div class="px-4 py-3 border-b border-gray-200 dark:border-slate-700">
+                    <p class="text-sm font-medium text-slate-900 dark:text-slate-200">{currentUser.name || currentUser.username}</p>
                     {#if currentUser.email}
-                      <p class="text-xs text-slate-400 mt-0.5">{currentUser.email}</p>
+                      <p class="text-xs text-slate-600 dark:text-slate-400 mt-0.5">{currentUser.email}</p>
                     {/if}
                     {#if currentUser.role}
                       <span class="inline-block mt-2 px-2 py-0.5 text-xs font-medium rounded-full
@@ -187,7 +239,7 @@
                   <div class="px-2 py-2">
                     <button
                       on:click={handleLogout}
-                      class="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-slate-700 rounded-md transition-colors"
+                      class="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-md transition-colors"
                     >
                       Logout
                     </button>
@@ -202,7 +254,7 @@
     
     <!-- Tab Navigation - only show for authenticated users -->
     {#if currentUser}
-      <nav class="bg-slate-800/50 border-b border-slate-700 px-6">
+      <nav class="bg-gray-50 dark:bg-slate-800/50 border-b border-gray-200 dark:border-slate-700 px-6">
         <div class="flex gap-1">
           {#each tabs as tab}
             <a
@@ -210,13 +262,13 @@
               on:click={tab.href === '/costs' ? handleCostsNav : tab.href === '/projects' ? handleProjectsNav : undefined}
               class="px-4 py-3 text-sm font-medium transition-colors relative
                 {$page.url.pathname === tab.href 
-                  ? 'text-blue-400' 
-                  : 'text-slate-400 hover:text-slate-200'}"
+                  ? 'text-blue-600 dark:text-blue-400' 
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}"
             >
               <span class="mr-2">{tab.icon}</span>
               {tab.name}
               {#if $page.url.pathname === tab.href}
-                <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-400"></div>
+                <div class="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 dark:bg-blue-400"></div>
               {/if}
             </a>
           {/each}

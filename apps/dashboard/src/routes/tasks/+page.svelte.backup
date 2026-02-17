@@ -434,7 +434,7 @@
       return { text, color: 'text-orange-400', icon: '' };
     } else {
       // Future
-      return { text, color: 'text-slate-500 dark:text-slate-400', icon: '' };
+      return { text, color: 'text-slate-400', icon: '' };
     }
   }
   
@@ -627,10 +627,10 @@
 <!-- New Task Modal -->
 {#if showNewTaskModal}
   <div class="fixed inset-0 flex items-center justify-center z-50 p-4">
-    <div class="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 w-full max-w-md" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="new-task-title" tabindex="-1">
-      <div class="px-4 py-3 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between">
+    <div class="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-md" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="new-task-title" tabindex="-1">
+      <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
         <h2 id="new-task-title" class="font-semibold">New Task</h2>
-        <button on:click={closeModals} class="text-slate-500 dark:text-slate-400 hover:text-white">✕</button>
+        <button on:click={closeModals} class="text-slate-400 hover:text-white">✕</button>
       </div>
       <div class="p-4 space-y-4">
         {#if formError}
@@ -638,33 +638,33 @@
         {/if}
         
         <div>
-          <label for="task-title" class="block text-sm text-slate-500 dark:text-slate-400 mb-1">Title *</label>
+          <label for="task-title" class="block text-sm text-slate-400 mb-1">Title *</label>
           <input 
             id="task-title"
             type="text" 
             bind:value={newTask.title}
             placeholder="Task title"
-            class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded focus:border-blue-500 focus:outline-none"
+            class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-blue-500 focus:outline-none"
           />
         </div>
         
         <div>
-          <label for="task-description" class="block text-sm text-slate-500 dark:text-slate-400 mb-1">Description</label>
+          <label for="task-description" class="block text-sm text-slate-400 mb-1">Description</label>
           <textarea 
             id="task-description"
             bind:value={newTask.description}
             placeholder="Task description..."
             rows="3"
-            class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded focus:border-blue-500 focus:outline-none resize-none"
+            class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-blue-500 focus:outline-none resize-none"
           ></textarea>
         </div>
         
         <div>
-          <label for="task-project" class="block text-sm text-slate-500 dark:text-slate-400 mb-1">Project *</label>
+          <label for="task-project" class="block text-sm text-slate-400 mb-1">Project *</label>
           <select 
             id="task-project"
             bind:value={newTask.projectId}
-            class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded focus:border-blue-500 focus:outline-none"
+            class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-blue-500 focus:outline-none"
           >
             <option value="">Select a project</option>
             {#each projects as project}
@@ -674,11 +674,11 @@
         </div>
         
         <div>
-          <label for="task-agent" class="block text-sm text-slate-500 dark:text-slate-400 mb-1">Agent</label>
+          <label for="task-agent" class="block text-sm text-slate-400 mb-1">Agent</label>
           <select 
             id="task-agent"
             bind:value={newTask.agentId}
-            class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded focus:border-blue-500 focus:outline-none"
+            class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-blue-500 focus:outline-none"
           >
             <option value="">No agent</option>
             {#each agents as agent}
@@ -688,11 +688,11 @@
         </div>
         
         <div>
-          <label for="task-assignee" class="block text-sm text-slate-500 dark:text-slate-400 mb-1">Assign To (User)</label>
+          <label for="task-assignee" class="block text-sm text-slate-400 mb-1">Assign To (User)</label>
           <select 
             id="task-assignee"
             bind:value={newTask.assignedTo}
-            class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded focus:border-blue-500 focus:outline-none"
+            class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-blue-500 focus:outline-none"
           >
             <option value="">Unassigned</option>
             {#each users as user}
@@ -702,11 +702,11 @@
         </div>
         
         <div>
-          <label for="task-priority" class="block text-sm text-slate-500 dark:text-slate-400 mb-1">Priority</label>
+          <label for="task-priority" class="block text-sm text-slate-400 mb-1">Priority</label>
           <select 
             id="task-priority"
             bind:value={newTask.priority}
-            class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded focus:border-blue-500 focus:outline-none"
+            class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-blue-500 focus:outline-none"
           >
             <option value="P0">P0 - Critical</option>
             <option value="P1">P1 - High</option>
@@ -716,19 +716,19 @@
         </div>
         
         <div>
-          <label for="task-due-date" class="block text-sm text-slate-500 dark:text-slate-400 mb-1">Due Date (Optional)</label>
+          <label for="task-due-date" class="block text-sm text-slate-400 mb-1">Due Date (Optional)</label>
           <input 
             id="task-due-date"
             type="date"
             bind:value={newTask.dueDate}
-            class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded focus:border-blue-500 focus:outline-none"
+            class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-blue-500 focus:outline-none"
           />
         </div>
       </div>
-      <div class="px-4 py-3 border-t border-gray-200 dark:border-slate-700 flex justify-end gap-2">
+      <div class="px-4 py-3 border-t border-slate-700 flex justify-end gap-2">
         <button 
           on:click={closeModals}
-          class="px-4 py-2 bg-gray-100 dark:bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors"
+          class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors"
         >
           Cancel
         </button>
@@ -747,10 +747,10 @@
 <!-- Task Detail Modal -->
 {#if showTaskDetail && selectedTask}
   <div class="fixed inset-0 flex items-center justify-center z-50 p-4">
-    <div class="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 w-full max-w-lg max-h-[85vh] flex flex-col" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="task-detail-title" tabindex="-1">
-      <div class="px-4 py-3 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between">
+    <div class="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-lg max-h-[85vh] flex flex-col" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="task-detail-title" tabindex="-1">
+      <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
         <h2 id="task-detail-title" class="font-semibold">Task Details</h2>
-        <button on:click={closeModals} class="text-slate-500 dark:text-slate-400 hover:text-white">✕</button>
+        <button on:click={closeModals} class="text-slate-400 hover:text-white">✕</button>
       </div>
       <div class="p-4 space-y-4 overflow-y-auto">
         <div>
@@ -759,19 +759,19 @@
         
         {#if selectedTask.description}
           <div>
-            <h4 class="text-sm text-slate-500 dark:text-slate-400 mb-1">Description</h4>
-            <p class="text-slate-600 dark:text-slate-300">{selectedTask.description}</p>
+            <h4 class="text-sm text-slate-400 mb-1">Description</h4>
+            <p class="text-slate-300">{selectedTask.description}</p>
           </div>
         {/if}
         
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <h4 class="text-sm text-slate-500 dark:text-slate-400 mb-1">Project</h4>
-            <p class="text-slate-600 dark:text-slate-300">{selectedTask.projectName || getProjectName(selectedTask.projectId)}</p>
+            <h4 class="text-sm text-slate-400 mb-1">Project</h4>
+            <p class="text-slate-300">{selectedTask.projectName || getProjectName(selectedTask.projectId)}</p>
           </div>
           
           <div>
-            <h4 class="text-sm text-slate-500 dark:text-slate-400 mb-1">Priority</h4>
+            <h4 class="text-sm text-slate-400 mb-1">Priority</h4>
             <div class="flex items-center gap-2">
               <span class={`px-2 py-1 rounded text-xs text-white font-semibold ${getPriorityColor(selectedTask.priority)}`}>
                 {selectedTask.priority}
@@ -781,9 +781,9 @@
         </div>
         
         <div>
-          <h4 class="text-sm text-slate-500 dark:text-slate-400 mb-1">Agent</h4>
+          <h4 class="text-sm text-slate-400 mb-1">Agent</h4>
           <select 
-            class="w-full bg-gray-100 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded px-3 py-2 text-white"
+            class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white"
             value={selectedTask.agentId || ''}
             on:change={(e) => handleAssignAgent(selectedTask.id, e.currentTarget.value || null)}
           >
@@ -795,9 +795,9 @@
         </div>
         
         <div>
-          <h4 class="text-sm text-slate-500 dark:text-slate-400 mb-1">Assigned To (User)</h4>
+          <h4 class="text-sm text-slate-400 mb-1">Assigned To (User)</h4>
           <select 
-            class="w-full bg-gray-100 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded px-3 py-2 text-white"
+            class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white"
             value={selectedTask.assignedTo || ''}
             on:change={async (e) => {
               const val = e.currentTarget.value || null;
@@ -814,7 +814,7 @@
         </div>
 
         <div>
-          <h4 class="text-sm text-slate-500 dark:text-slate-400 mb-1">Due Date</h4>
+          <h4 class="text-sm text-slate-400 mb-1">Due Date</h4>
           <div class="flex gap-2">
             <input 
               type="date"
@@ -826,7 +826,7 @@
                 await loadData();
                 if (selectedTask) selectedTask = { ...selectedTask, dueDate: isoDate };
               }}
-              class="flex-1 bg-gray-100 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded px-3 py-2 text-white"
+              class="flex-1 bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white"
             />
             {#if selectedTask.dueDate}
               <button
@@ -846,34 +846,34 @@
 
         {#if selectedTask.createdBy}
           <div>
-            <h4 class="text-sm text-slate-500 dark:text-slate-400 mb-1">Created By</h4>
-            <p class="text-slate-600 dark:text-slate-300">👤 {getUserName(selectedTask.createdBy)}</p>
+            <h4 class="text-sm text-slate-400 mb-1">Created By</h4>
+            <p class="text-slate-300">👤 {getUserName(selectedTask.createdBy)}</p>
           </div>
         {/if}
         
         <div>
-          <h4 class="text-sm text-slate-500 dark:text-slate-400 mb-1">Status</h4>
-          <div class="text-slate-600 dark:text-slate-300 capitalize">{selectedTask.status.replace('_', ' ')}</div>
+          <h4 class="text-sm text-slate-400 mb-1">Status</h4>
+          <div class="text-slate-300 capitalize">{selectedTask.status.replace('_', ' ')}</div>
         </div>
 
         {#if selectedTask.completedAt}
           <div>
-            <h4 class="text-sm text-slate-500 dark:text-slate-400 mb-1">Completed</h4>
-            <div class="text-slate-600 dark:text-slate-300">✅ {formatCompletedAt(selectedTask.completedAt)}</div>
+            <h4 class="text-sm text-slate-400 mb-1">Completed</h4>
+            <div class="text-slate-300">✅ {formatCompletedAt(selectedTask.completedAt)}</div>
           </div>
         {/if}
 
         {#if selectedTask.status === 'done' && selectedTask.linesChanged}
-          <div class="pt-2 border-t border-gray-200 dark:border-slate-700">
-            <h4 class="text-sm text-slate-500 dark:text-slate-400 mb-2">📊 Code Changes</h4>
+          <div class="pt-2 border-t border-slate-700">
+            <h4 class="text-sm text-slate-400 mb-2">📊 Code Changes</h4>
             <div class="space-y-1 text-sm">
-              <p class="text-slate-600 dark:text-slate-300">
+              <p class="text-slate-300">
                 Lines Added: <span class="font-semibold text-green-400">+{selectedTask.linesChanged.added}</span>
               </p>
-              <p class="text-slate-600 dark:text-slate-300">
+              <p class="text-slate-300">
                 Lines Removed: <span class="font-semibold text-red-400">-{selectedTask.linesChanged.removed}</span>
               </p>
-              <p class="text-slate-600 dark:text-slate-300">
+              <p class="text-slate-300">
                 Total: <span class="font-semibold">{selectedTask.linesChanged.total}</span>
               </p>
             </div>
@@ -881,29 +881,29 @@
         {/if}
 
         {#if selectedTask.status === 'done'}
-          <div class="pt-2 border-t border-gray-200 dark:border-slate-700">
-            <h4 class="text-sm text-slate-500 dark:text-slate-400 mb-2">⏱️ Time Estimates</h4>
+          <div class="pt-2 border-t border-slate-700">
+            <h4 class="text-sm text-slate-400 mb-2">⏱️ Time Estimates</h4>
             <div class="space-y-1 text-sm">
-              <p class="text-slate-600 dark:text-slate-300">
+              <p class="text-slate-300">
                 AI Time: <span class="font-semibold">{formatRuntime(selectedTask.runtime || 0)}</span>
               </p>
               {#if selectedTask.estimatedHumanMinutes}
-                <p class="text-slate-600 dark:text-slate-300">
+                <p class="text-slate-300">
                   Human Time: <span class="font-semibold">{formatMinutes(selectedTask.estimatedHumanMinutes)}</span>
                 </p>
               {/if}
               {#if selectedTask.cost}
-                <p class="text-slate-600 dark:text-slate-300">
+                <p class="text-slate-300">
                   AI Cost: <span class="font-semibold">${selectedTask.cost.toFixed(2)}</span>
                 </p>
               {/if}
               {#if selectedTask.humanCost}
-                <p class="text-slate-600 dark:text-slate-300">
+                <p class="text-slate-300">
                   Human Cost: <span class="font-semibold">${selectedTask.humanCost.toFixed(2)}</span>
                 </p>
               {/if}
               {#if getModelDisplayName(selectedTask.model)}
-                <p class="text-slate-600 dark:text-slate-300">
+                <p class="text-slate-300">
                   Model: <span class="font-semibold">🤖 {getModelDisplayName(selectedTask.model)}</span>
                 </p>
               {/if}
@@ -914,8 +914,8 @@
         {#if selectedTask.status === 'done' && selectedTask.estimatedHumanMinutes && selectedTask.runtime}
           {@const timeSaved = Math.round(Math.max(0, selectedTask.estimatedHumanMinutes - (selectedTask.runtime / 60000)))}
           {@const moneySaved = Math.max(0, (selectedTask.humanCost || 0) - (selectedTask.cost || 0))}
-          <div class="pt-2 border-t border-gray-200 dark:border-slate-700">
-            <h4 class="text-sm text-slate-500 dark:text-slate-400 mb-2">💰 ROI</h4>
+          <div class="pt-2 border-t border-slate-700">
+            <h4 class="text-sm text-slate-400 mb-2">💰 ROI</h4>
             <div class="space-y-1 text-sm">
               <p class="text-green-400 font-semibold">
                 ⏱️ Time Saved: {formatMinutes(timeSaved)}
@@ -927,8 +927,8 @@
           </div>
         {/if}
         <!-- Comments Section -->
-        <div class="pt-2 border-t border-gray-200 dark:border-slate-700">
-          <h4 class="text-sm text-slate-500 dark:text-slate-400 mb-2">💬 Comments ({comments.length})</h4>
+        <div class="pt-2 border-t border-slate-700">
+          <h4 class="text-sm text-slate-400 mb-2">💬 Comments ({comments.length})</h4>
           
           {#if loadingComments}
             <p class="text-xs text-slate-500">Loading comments...</p>
@@ -936,13 +936,13 @@
             {#if comments.length > 0}
               <div class="space-y-2 max-h-48 overflow-y-auto mb-3">
                 {#each comments as comment (comment.id)}
-                  <div class="bg-gray-100 dark:bg-gray-100/50 dark:bg-slate-700/50 rounded p-2 group">
+                  <div class="bg-slate-700/50 rounded p-2 group">
                     <div class="flex items-center justify-between mb-1">
                       <div class="flex items-center gap-1.5">
                         {#if comment.userAvatar}
                           <img src={comment.userAvatar} alt="" class="w-4 h-4 rounded-full" />
                         {/if}
-                        <span class="text-xs font-medium text-slate-600 dark:text-slate-300">{comment.userName || 'Unknown'}</span>
+                        <span class="text-xs font-medium text-slate-300">{comment.userName || 'Unknown'}</span>
                         <span class="text-xs text-slate-500">{formatCommentTime(comment.createdAt)}</span>
                         {#if comment.updatedAt}
                           <span class="text-xs text-slate-500 italic">(edited)</span>
@@ -967,7 +967,7 @@
                 bind:value={newComment}
                 on:keydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitComment(); } }}
                 placeholder="Add a comment..."
-                class="flex-1 bg-gray-100 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded px-2 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                class="flex-1 bg-slate-700 border border-slate-600 rounded px-2 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
                 disabled={submittingComment}
               />
               <button
@@ -981,7 +981,7 @@
           {/if}
         </div>
       </div>
-      <div class="px-4 py-3 border-t border-gray-200 dark:border-slate-700 flex justify-between gap-2">
+      <div class="px-4 py-3 border-t border-slate-700 flex justify-between gap-2">
         {#if (selectedTask.status === 'todo' || selectedTask.status === 'in-progress') && !selectedTask.sessionKey}
           <button 
             on:click={() => handleStartWork(selectedTask!)}
@@ -1025,15 +1025,15 @@
           type="text"
           bind:value={searchQuery}
           placeholder="Search tasks..."
-          class="w-full px-3 py-2 pl-8 bg-gray-100 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded text-sm focus:outline-none focus:border-blue-500 placeholder-slate-400"
+          class="w-full px-3 py-2 pl-8 bg-slate-700 border border-slate-600 rounded text-sm focus:outline-none focus:border-blue-500 placeholder-slate-400"
         />
-        <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 text-sm">🔍</span>
+        <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
       </div>
       
       <!-- Assignee Filter -->
       <select 
         bind:value={selectedAssignee}
-        class="px-3 py-2 bg-gray-100 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded text-sm focus:outline-none focus:border-blue-500 min-w-[140px]"
+        class="px-3 py-2 bg-slate-700 border border-slate-600 rounded text-sm focus:outline-none focus:border-blue-500 min-w-[140px]"
       >
         <option value="">All Assignees</option>
         {#each uniqueAssignees as assignee}
@@ -1044,7 +1044,7 @@
       <!-- Project Filter -->
       <select 
         bind:value={selectedProjectId}
-        class="px-3 py-2 bg-gray-100 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded text-sm focus:outline-none focus:border-blue-500 min-w-[140px]"
+        class="px-3 py-2 bg-slate-700 border border-slate-600 rounded text-sm focus:outline-none focus:border-blue-500 min-w-[140px]"
       >
         <option value="">All Projects</option>
         {#each projects as project}
@@ -1056,7 +1056,7 @@
       {#if hasActiveFilters}
         <button 
           on:click={clearAllFilters}
-          class="px-3 py-2 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-600 rounded transition-colors"
+          class="px-3 py-2 text-sm text-slate-400 hover:text-slate-200 hover:bg-slate-600 rounded transition-colors"
           title="Clear all filters"
         >
           ✕ Clear
@@ -1082,17 +1082,17 @@
     <div class="flex gap-4 overflow-x-auto pb-4">
       {#each columns as column}
         <div 
-          class="bg-gray-100 dark:bg-gray-100/50 dark:bg-slate-700/30 rounded-lg flex flex-col flex-shrink-0 max-h-[calc(100vh-200px)] transition-all {dragOverColumn === column.id ? 'border-2 border-blue-500 shadow-lg shadow-blue-500/30' : 'border border-gray-300 dark:border-slate-600'}"
+          class="bg-slate-700/30 rounded-lg flex flex-col flex-shrink-0 max-h-[calc(100vh-200px)] transition-all {dragOverColumn === column.id ? 'border-2 border-blue-500 shadow-lg shadow-blue-500/30' : 'border border-slate-600'}"
           style="width: {kanbanColumnWidth}px"
           on:dragover={(e) => handleDragOver(column.id, e)}
           on:dragleave={(e) => handleDragLeave(e)}
           on:drop={(e) => handleDrop(column.id, e)}
         >
           <!-- Column Header -->
-          <div class="px-4 py-3 border-b border-gray-300 dark:border-slate-600 flex items-center gap-2 bg-white dark:bg-slate-800/50">
+          <div class="px-4 py-3 border-b border-slate-600 flex items-center gap-2 bg-slate-800/50">
             <div class="w-3 h-3 rounded-full {column.color}"></div>
             <h2 class="font-semibold text-sm">{column.name}</h2>
-            <span class="ml-auto text-xs text-slate-500 dark:text-slate-400 bg-gray-100 dark:bg-slate-700 px-2 py-1 rounded">
+            <span class="ml-auto text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">
               {getTasksForColumn(column.id).length}
             </span>
           </div>
@@ -1111,18 +1111,18 @@
                 draggable="true"
                 on:dragstart={() => handleDragStart(task)}
                 on:click={() => { selectedTask = task; showTaskDetail = true; comments = []; newComment = ''; loadComments(task.id); }}
-                class="p-3 bg-white dark:bg-slate-800 rounded-lg border border-gray-300 dark:border-slate-600 hover:border-slate-500 cursor-move hover:bg-gray-100 dark:bg-slate-700/80 transition-all {draggedTask && draggedTask.id === task.id ? 'opacity-50 scale-95' : ''}"
+                class="p-3 bg-slate-800 rounded-lg border border-slate-600 hover:border-slate-500 cursor-move hover:bg-slate-700/80 transition-all {draggedTask && draggedTask.id === task.id ? 'opacity-50 scale-95' : ''}"
               >
                 <!-- Title -->
                 <h3 class="font-semibold text-sm mb-1">{task.title}</h3>
                 
                 <!-- Project Name -->
-                <p class="text-xs text-slate-500 dark:text-slate-400 mb-2">{task.projectName || getProjectName(task.projectId)}</p>
+                <p class="text-xs text-slate-400 mb-2">{task.projectName || getProjectName(task.projectId)}</p>
                 
                 <!-- Lines Changed Info (for completed tasks) -->
                 {#if task.status === 'done' && task.linesChanged}
-                  <div class="mb-2 pb-2 border-b border-gray-200 dark:border-slate-700">
-                    <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">
+                  <div class="mb-2 pb-2 border-b border-slate-700">
+                    <div class="text-xs text-slate-400 mb-1">
                       <span class="text-green-400">+{task.linesChanged.added}</span>
                       <span class="text-red-400"> / -{task.linesChanged.removed}</span> lines
                     </div>
@@ -1131,8 +1131,8 @@
 
                 <!-- Completed At (for done tasks) -->
                 {#if task.status === 'done' && task.completedAt}
-                  <div class="mb-2 pb-2 border-b border-gray-200 dark:border-slate-700">
-                    <div class="text-xs text-slate-500 dark:text-slate-400">
+                  <div class="mb-2 pb-2 border-b border-slate-700">
+                    <div class="text-xs text-slate-400">
                       ✅ Completed {formatCompletedAt(task.completedAt)}
                     </div>
                   </div>
@@ -1140,20 +1140,20 @@
 
                 <!-- AI Stats (for completed tasks) -->
                 {#if task.status === 'done' && (task.tokens || task.cost || task.runtime)}
-                  <div class="mb-2 pb-2 border-b border-gray-200 dark:border-slate-700 flex flex-col gap-1 text-xs text-slate-500">
+                  <div class="mb-2 pb-2 border-b border-slate-700 flex flex-col gap-1 text-xs text-slate-500">
                     <div class="flex gap-2 flex-wrap">
                       {#if task.runtime}
                         <span>⏱️ AI: {formatRuntime(task.runtime)}</span>
                       {/if}
                       {#if task.estimatedHumanMinutes}
-                        <span class="text-slate-600 dark:text-slate-300">👤 {formatMinutes(task.estimatedHumanMinutes)}</span>
+                        <span class="text-slate-300">👤 {formatMinutes(task.estimatedHumanMinutes)}</span>
                       {/if}
                     </div>
                     {#if task.cost}
                       <span>💰 AI: ${task.cost.toFixed(2)}</span>
                     {/if}
                     {#if getModelDisplayName(task.model)}
-                      <span class="text-slate-500 dark:text-slate-400">🤖 {getModelDisplayName(task.model)}</span>
+                      <span class="text-slate-400">🤖 {getModelDisplayName(task.model)}</span>
                     {/if}
                   </div>
                 {/if}
@@ -1163,7 +1163,7 @@
                   {@const timeSaved = Math.round(Math.max(0, task.estimatedHumanMinutes - (task.runtime || 0) / 60000))}
                   {@const moneySaved = Math.max(0, task.humanCost - (task.cost || 0))}
                   {#if timeSaved > 0 || moneySaved > 0}
-                    <div class="mb-2 pb-2 border-b border-gray-200 dark:border-slate-700 flex flex-col gap-1 text-xs">
+                    <div class="mb-2 pb-2 border-b border-slate-700 flex flex-col gap-1 text-xs">
                       <span class="text-green-400 font-semibold">✨ Saved {formatMinutes(timeSaved)}</span>
                       <span class="text-green-400 font-semibold">💚 ${moneySaved.toFixed(0)}</span>
                     </div>
@@ -1174,7 +1174,7 @@
                 {#if task.dueDate}
                   {@const dueDateInfo = formatDueDate(task.dueDate)}
                   {#if dueDateInfo}
-                    <div class="mb-2 pb-2 border-b border-gray-200 dark:border-slate-700">
+                    <div class="mb-2 pb-2 border-b border-slate-700">
                       <div class="text-xs {dueDateInfo.color} flex items-center gap-1">
                         {#if dueDateInfo.icon}
                           <span>{dueDateInfo.icon}</span>
@@ -1196,11 +1196,11 @@
                         >
                           {getUserInitials(task.assignedTo)}
                         </div>
-                        <span class="text-xs text-slate-600 dark:text-slate-300 truncate">{getUserName(task.assignedTo)}</span>
+                        <span class="text-xs text-slate-300 truncate">{getUserName(task.assignedTo)}</span>
                       </div>
                     {:else if task.agentId}
                       <span class="text-sm">{getAgentInfo(task.agentId).emoji}</span>
-                      <span class="text-xs text-slate-500 dark:text-slate-400 truncate">{getAgentInfo(task.agentId).name}</span>
+                      <span class="text-xs text-slate-400 truncate">{getAgentInfo(task.agentId).name}</span>
                     {:else}
                       <span class="text-xs text-slate-500">Unassigned</span>
                     {/if}

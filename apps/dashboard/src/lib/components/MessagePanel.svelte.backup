@@ -160,16 +160,16 @@
   });
 </script>
 
-<div class="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden h-full flex flex-col">
+<div class="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden h-full flex flex-col">
   <!-- Header -->
-  <div class="px-4 py-3 border-b border-gray-200 dark:border-slate-700 bg-gray-100 dark:bg-gray-100/50 dark:bg-slate-700/50">
-    <h2 class="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+  <div class="px-4 py-3 border-b border-slate-700 bg-slate-700/50">
+    <h2 class="font-semibold text-slate-100 flex items-center gap-2">
       <span>💬</span> Message AI
     </h2>
     {#if projectId}
-      <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Project context active</p>
+      <p class="text-xs text-slate-400 mt-1">Project context active</p>
     {:else}
-      <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Select a project above to add context</p>
+      <p class="text-xs text-slate-400 mt-1">Select a project above to add context</p>
     {/if}
   </div>
 
@@ -183,8 +183,8 @@
     {:else}
       {#each chatHistory as msg}
         <div class="flex {msg.role === 'user' ? 'justify-end' : 'justify-start'}">
-          <div class="max-w-[85%] {msg.role === 'user' ? 'bg-blue-600' : 'bg-gray-100 dark:bg-slate-700'} rounded-lg px-3 py-2">
-            <div class="text-sm {msg.role === 'user' ? 'text-white' : 'text-slate-900 dark:text-slate-100'} whitespace-pre-wrap break-words">
+          <div class="max-w-[85%] {msg.role === 'user' ? 'bg-blue-600' : 'bg-slate-700'} rounded-lg px-3 py-2">
+            <div class="text-sm {msg.role === 'user' ? 'text-white' : 'text-slate-100'} whitespace-pre-wrap break-words">
               {msg.content}
             </div>
             <div class="text-xs {msg.role === 'user' ? 'text-blue-200' : 'text-slate-500'} mt-1">
@@ -197,8 +197,8 @@
     
     {#if sending}
       <div class="flex justify-start">
-        <div class="bg-gray-100 dark:bg-slate-700 rounded-lg px-3 py-2">
-          <div class="text-sm text-slate-600 dark:text-slate-300">Sending...</div>
+        <div class="bg-slate-700 rounded-lg px-3 py-2">
+          <div class="text-sm text-slate-300">Sending...</div>
         </div>
       </div>
     {/if}
@@ -217,14 +217,14 @@
   {/if}
 
   <!-- Input Area -->
-  <div class="px-4 py-3 border-t border-gray-200 dark:border-slate-700">
+  <div class="px-4 py-3 border-t border-slate-700">
     <div class="flex gap-2">
       <input
         type="text"
         bind:value={message}
         on:keydown={handleKeydown}
         placeholder="Type your message..."
-        class="flex-1 bg-gray-100 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-blue-500"
+        class="flex-1 bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm text-slate-100 placeholder-slate-400 focus:outline-none focus:border-blue-500"
         disabled={sending}
       />
       <button

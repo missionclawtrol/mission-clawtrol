@@ -311,40 +311,40 @@
 <!-- New Project Modal -->
 {#if showNewProjectModal}
   <div class="fixed inset-0 flex items-center justify-center z-50 p-4">
-    <div class="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 w-full max-w-md" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="new-project-title" tabindex="-1">
-      <div class="px-4 py-3 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between">
+    <div class="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-md" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="new-project-title" tabindex="-1">
+      <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
         <h2 id="new-project-title" class="font-semibold">New Project</h2>
-        <button on:click={closeModals} class="text-slate-500 dark:text-slate-400 hover:text-white">✕</button>
+        <button on:click={closeModals} class="text-slate-400 hover:text-white">✕</button>
       </div>
       <div class="p-4 space-y-4">
         {#if formError}
           <div class="p-3 bg-red-500/20 border border-red-500 rounded text-red-400 text-sm">{formError}</div>
         {/if}
         <div>
-          <label for="new-project-name" class="block text-sm text-slate-500 dark:text-slate-400 mb-1">Project Name</label>
+          <label for="new-project-name" class="block text-sm text-slate-400 mb-1">Project Name</label>
           <input 
             id="new-project-name"
             type="text" 
             bind:value={newProjectName}
             placeholder="My New Project"
-            class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded focus:border-blue-500 focus:outline-none"
+            class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-blue-500 focus:outline-none"
           />
         </div>
         <div>
-          <label for="new-project-description" class="block text-sm text-slate-500 dark:text-slate-400 mb-1">Description (optional)</label>
+          <label for="new-project-description" class="block text-sm text-slate-400 mb-1">Description (optional)</label>
           <textarea 
             id="new-project-description"
             bind:value={newProjectDescription}
             placeholder="Brief description of the project..."
             rows="3"
-            class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded focus:border-blue-500 focus:outline-none resize-none"
+            class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-blue-500 focus:outline-none resize-none"
           ></textarea>
         </div>
       </div>
-      <div class="px-4 py-3 border-t border-gray-200 dark:border-slate-700 flex justify-end gap-2">
+      <div class="px-4 py-3 border-t border-slate-700 flex justify-end gap-2">
         <button 
           on:click={closeModals}
-          class="px-4 py-2 bg-gray-100 dark:bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors"
+          class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors"
         >
           Cancel
         </button>
@@ -363,10 +363,10 @@
 <!-- Spawn Agent Modal -->
 {#if showSpawnAgentModal}
   <div class="fixed inset-0 flex items-center justify-center z-50 p-4">
-    <div class="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 w-full max-w-lg" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="spawn-agent-title" tabindex="-1">
-      <div class="px-4 py-3 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between">
+    <div class="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-lg" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="spawn-agent-title" tabindex="-1">
+      <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
         <h2 id="spawn-agent-title" class="font-semibold">🚀 Spawn Agent</h2>
-        <button on:click={closeModals} class="text-slate-500 dark:text-slate-400 hover:text-white">✕</button>
+        <button on:click={closeModals} class="text-slate-400 hover:text-white">✕</button>
       </div>
       <div class="p-4 space-y-4">
         {#if formError}
@@ -381,13 +381,13 @@
         {/if}
         
         <div>
-          <label for="agent-task" class="block text-sm text-slate-500 dark:text-slate-400 mb-1">Task (optional)</label>
+          <label for="agent-task" class="block text-sm text-slate-400 mb-1">Task (optional)</label>
           <textarea 
             id="agent-task"
             bind:value={agentTask}
             placeholder="What should this agent work on? Leave empty for a general-purpose project agent."
             rows="3"
-            class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded focus:border-green-500 focus:outline-none resize-none"
+            class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-green-500 focus:outline-none resize-none"
           ></textarea>
         </div>
         
@@ -395,10 +395,10 @@
           This will ask the main agent (Jarvis) to spawn a subagent for this project. The subagent runs in isolation and reports back when complete.
         </p>
       </div>
-      <div class="px-4 py-3 border-t border-gray-200 dark:border-slate-700 flex justify-end gap-2">
+      <div class="px-4 py-3 border-t border-slate-700 flex justify-end gap-2">
         <button 
           on:click={closeModals}
-          class="px-4 py-2 bg-gray-100 dark:bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors"
+          class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors"
         >
           Cancel
         </button>
@@ -417,39 +417,39 @@
 <!-- Message Agent Modal -->
 {#if showMessageModal && selectedAgent}
   <div class="fixed inset-0 flex items-center justify-center z-50 p-4">
-    <div class="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 w-full max-w-md" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="message-agent-title" tabindex="-1">
-      <div class="px-4 py-3 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between">
+    <div class="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-md" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="message-agent-title" tabindex="-1">
+      <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
         <h2 id="message-agent-title" class="font-semibold">💬 Message Agent</h2>
-        <button on:click={closeModals} class="text-slate-500 dark:text-slate-400 hover:text-white">✕</button>
+        <button on:click={closeModals} class="text-slate-400 hover:text-white">✕</button>
       </div>
       <div class="p-4 space-y-4">
         {#if formError}
           <div class="p-3 bg-red-500/20 border border-red-500 rounded text-red-400 text-sm">{formError}</div>
         {/if}
         
-        <div class="p-3 bg-gray-100 dark:bg-gray-100/50 dark:bg-slate-700/50 rounded text-sm">
+        <div class="p-3 bg-slate-700/50 rounded text-sm">
           <div class="flex items-center gap-2 mb-1">
             <span>{getAgentStatusIcon(selectedAgent.status)}</span>
             <span class="font-medium">{selectedAgent.label || getShortSessionKey(selectedAgent.sessionKey)}</span>
           </div>
-          <div class="text-xs text-slate-500 dark:text-slate-400 truncate">{selectedAgent.task}</div>
+          <div class="text-xs text-slate-400 truncate">{selectedAgent.task}</div>
         </div>
         
         <div>
-          <label for="agent-message" class="block text-sm text-slate-500 dark:text-slate-400 mb-1">Message</label>
+          <label for="agent-message" class="block text-sm text-slate-400 mb-1">Message</label>
           <textarea 
             id="agent-message"
             bind:value={agentMessage}
             placeholder="Send a message to this agent..."
             rows="3"
-            class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded focus:border-blue-500 focus:outline-none resize-none"
+            class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-blue-500 focus:outline-none resize-none"
           ></textarea>
         </div>
       </div>
-      <div class="px-4 py-3 border-t border-gray-200 dark:border-slate-700 flex justify-end gap-2">
+      <div class="px-4 py-3 border-t border-slate-700 flex justify-end gap-2">
         <button 
           on:click={closeModals}
-          class="px-4 py-2 bg-gray-100 dark:bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors"
+          class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors"
         >
           Cancel
         </button>
@@ -468,18 +468,18 @@
 <!-- Delete Confirm Modal -->
 {#if showDeleteConfirm}
   <div class="fixed inset-0 flex items-center justify-center z-50 p-4">
-    <div class="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 w-full max-w-sm" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="delete-confirm-title" tabindex="-1">
-      <div class="px-4 py-3 border-b border-gray-200 dark:border-slate-700">
+    <div class="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-sm" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="delete-confirm-title" tabindex="-1">
+      <div class="px-4 py-3 border-b border-slate-700">
         <h2 id="delete-confirm-title" class="font-semibold text-red-400">⚠️ Delete Project</h2>
       </div>
       <div class="p-4">
-        <p class="text-slate-600 dark:text-slate-300">Are you sure you want to delete <strong>{selectedProject?.name}</strong>?</p>
-        <p class="text-sm text-slate-500 dark:text-slate-400 mt-2">The project will be moved to trash and can be recovered.</p>
+        <p class="text-slate-300">Are you sure you want to delete <strong>{selectedProject?.name}</strong>?</p>
+        <p class="text-sm text-slate-400 mt-2">The project will be moved to trash and can be recovered.</p>
       </div>
-      <div class="px-4 py-3 border-t border-gray-200 dark:border-slate-700 flex justify-end gap-2">
+      <div class="px-4 py-3 border-t border-slate-700 flex justify-end gap-2">
         <button 
           on:click={closeModals}
-          class="px-4 py-2 bg-gray-100 dark:bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors"
+          class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors"
         >
           Cancel
         </button>
@@ -498,21 +498,21 @@
 <!-- Delete Agent Confirm Modal -->
 {#if showDeleteAgentConfirm}
   <div class="fixed inset-0 flex items-center justify-center z-50 p-4">
-    <div class="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 w-full max-w-sm" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="delete-agent-title" tabindex="-1">
-      <div class="px-4 py-3 border-b border-gray-200 dark:border-slate-700">
+    <div class="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-sm" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="delete-agent-title" tabindex="-1">
+      <div class="px-4 py-3 border-b border-slate-700">
         <h2 id="delete-agent-title" class="font-semibold text-red-400">🗑️ Delete Agent</h2>
       </div>
       <div class="p-4">
-        <p class="text-slate-600 dark:text-slate-300">Are you sure you want to delete agent <strong>{agentToDelete?.label || 'this agent'}</strong>?</p>
-        <p class="text-sm text-slate-500 dark:text-slate-400 mt-2">This will permanently delete the agent session and its history.</p>
+        <p class="text-slate-300">Are you sure you want to delete agent <strong>{agentToDelete?.label || 'this agent'}</strong>?</p>
+        <p class="text-sm text-slate-400 mt-2">This will permanently delete the agent session and its history.</p>
         {#if formError}
           <p class="text-sm text-red-400 mt-2">{formError}</p>
         {/if}
       </div>
-      <div class="px-4 py-3 border-t border-gray-200 dark:border-slate-700 flex justify-end gap-2">
+      <div class="px-4 py-3 border-t border-slate-700 flex justify-end gap-2">
         <button 
           on:click={closeModals}
-          class="px-4 py-2 bg-gray-100 dark:bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors"
+          class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors"
         >
           Cancel
         </button>
@@ -531,15 +531,15 @@
 <!-- Change Model Modal -->
 {#if showModelModal && agentToChangeModel}
   <div class="fixed inset-0 flex items-center justify-center z-50 p-4">
-    <div class="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 w-full max-w-sm" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="model-title" tabindex="-1">
-      <div class="px-4 py-3 border-b border-gray-200 dark:border-slate-700">
+    <div class="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-sm" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="model-title" tabindex="-1">
+      <div class="px-4 py-3 border-b border-slate-700">
         <h2 id="model-title" class="font-semibold text-purple-400">⚙️ Change Model</h2>
       </div>
       <div class="p-4 space-y-4">
-        <p class="text-slate-600 dark:text-slate-300 text-sm">Select model for <strong>{agentToChangeModel.label || 'agent'}</strong>:</p>
+        <p class="text-slate-300 text-sm">Select model for <strong>{agentToChangeModel.label || 'agent'}</strong>:</p>
         <select 
           bind:value={selectedModel}
-          class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded focus:border-purple-500 focus:outline-none"
+          class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded focus:border-purple-500 focus:outline-none"
         >
           <option value="claude-opus-4-5">Claude Opus 4.5</option>
           <option value="anthropic/claude-sonnet-4-20250514">Claude Sonnet 4</option>
@@ -549,10 +549,10 @@
           <p class="text-sm text-red-400">{formError}</p>
         {/if}
       </div>
-      <div class="px-4 py-3 border-t border-gray-200 dark:border-slate-700 flex justify-end gap-2">
+      <div class="px-4 py-3 border-t border-slate-700 flex justify-end gap-2">
         <button 
           on:click={closeModals}
-          class="px-4 py-2 bg-gray-100 dark:bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors"
+          class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors"
         >
           Cancel
         </button>
@@ -570,8 +570,8 @@
 
 <div class="grid grid-cols-3 gap-6 h-[calc(100vh-180px)]">
   <!-- Project List -->
-  <div class="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 flex flex-col">
-    <div class="px-4 py-3 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between">
+  <div class="bg-slate-800 rounded-lg border border-slate-700 flex flex-col">
+    <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
       <h2 class="font-semibold">Projects</h2>
       <div class="flex items-center gap-2">
         <button 
@@ -580,7 +580,7 @@
         >
           + New
         </button>
-        <button on:click={loadProjects} class="text-xs text-slate-500 hover:text-slate-600 dark:text-slate-300">↻</button>
+        <button on:click={loadProjects} class="text-xs text-slate-500 hover:text-slate-300">↻</button>
       </div>
     </div>
     <div class="p-4 space-y-2 overflow-y-auto flex-1">
@@ -604,7 +604,7 @@
               selectProject(project.id);
             }}
             class="w-full text-left p-3 rounded-lg transition-colors
-              {selectedProject?.id === project.id ? 'bg-blue-600/20 border border-blue-500/50' : 'bg-gray-100 dark:bg-gray-100/50 dark:bg-slate-700/50 hover:bg-gray-100 dark:bg-slate-700 border border-transparent'}"
+              {selectedProject?.id === project.id ? 'bg-blue-600/20 border border-blue-500/50' : 'bg-slate-700/50 hover:bg-slate-700 border border-transparent'}"
           >
             <div class="flex items-center justify-between mb-1">
               <div class="flex items-center gap-2">
@@ -624,7 +624,7 @@
               </div>
             </div>
             <div class="text-xs text-slate-500">{project.path}</div>
-            <div class="text-xs text-slate-500 dark:text-slate-400 mt-1">{getProjectStats(project.id).completed}/{getProjectStats(project.id).total} tasks</div>
+            <div class="text-xs text-slate-400 mt-1">{getProjectStats(project.id).completed}/{getProjectStats(project.id).total} tasks</div>
             {#if project.updated}
               <div class="text-xs text-slate-500 mt-1">Updated {formatRelativeTime(project.updated)}</div>
             {/if}
@@ -632,7 +632,7 @@
         {/each}
       {/if}
     </div>
-    <div class="px-4 py-2 border-t border-gray-200 dark:border-slate-700 text-xs text-slate-500">
+    <div class="px-4 py-2 border-t border-slate-700 text-xs text-slate-500">
       <span class="px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded mr-1">S</span> STATUS.md
       <span class="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded mx-1">P</span> PROJECT.md
       <span class="px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 rounded ml-1">H</span> HANDOFF.md
@@ -640,7 +640,7 @@
   </div>
   
   <!-- Project Detail -->
-  <div class="col-span-2 bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 flex flex-col">
+  <div class="col-span-2 bg-slate-800 rounded-lg border border-slate-700 flex flex-col">
     {#if !selectedProject}
       <div class="flex-1 flex items-center justify-center text-slate-500">
         Select a project to view details
@@ -650,7 +650,7 @@
         Loading project details...
       </div>
     {:else}
-      <div class="px-4 py-3 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between">
+      <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
         <div class="flex items-center gap-3">
           <span class="text-xl">📁</span>
           <div>
@@ -680,7 +680,7 @@
       <div class="p-4 overflow-y-auto flex-1 space-y-6">
         <!-- Actions -->
         <div>
-          <h3 class="text-sm text-slate-500 dark:text-slate-400 mb-2 font-medium">ACTIONS</h3>
+          <h3 class="text-sm text-slate-400 mb-2 font-medium">ACTIONS</h3>
           <div class="flex gap-2 flex-wrap">
             <button 
               on:click={() => showSpawnAgentModal = true}
@@ -688,7 +688,7 @@
             >
               🚀 Spawn Agent
             </button>
-            <button class="px-4 py-2 bg-gray-100 dark:bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors">
+            <button class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors">
               📂 Open in Terminal
             </button>
           </div>
@@ -696,12 +696,12 @@
         
         <!-- Project Agents -->
         <div>
-          <h3 class="text-sm text-slate-500 dark:text-slate-400 mb-2 font-medium flex items-center justify-between">
+          <h3 class="text-sm text-slate-400 mb-2 font-medium flex items-center justify-between">
             <span>AGENTS ({projectAgents.length})</span>
             {#if projectAgents.length > 0}
               <button 
                 on:click={() => selectedProject && selectProject(selectedProject.id)}
-                class="text-xs text-slate-500 hover:text-slate-600 dark:text-slate-300"
+                class="text-xs text-slate-500 hover:text-slate-300"
               >
                 ↻ Refresh
               </button>
@@ -709,7 +709,7 @@
           </h3>
           
           {#if projectAgents.length === 0}
-            <div class="p-4 bg-gray-100 dark:bg-gray-100/50 dark:bg-slate-700/30 rounded-lg text-center text-slate-500 text-sm">
+            <div class="p-4 bg-slate-700/30 rounded-lg text-center text-slate-500 text-sm">
               No agents spawned for this project yet.
               <button 
                 on:click={() => showSpawnAgentModal = true}
@@ -721,16 +721,16 @@
           {:else}
             <div class="space-y-2">
               {#each projectAgents as agent}
-                <div class="p-3 bg-gray-100 dark:bg-gray-100/50 dark:bg-slate-700/50 rounded-lg hover:bg-gray-100 dark:bg-slate-700 transition-colors">
+                <div class="p-3 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors">
                   <div class="flex items-center justify-between mb-1">
                     <div class="flex items-center gap-2">
                       <span>{getAgentStatusIcon(agent.status)}</span>
                       <span class="font-medium text-sm">{agent.label || getShortSessionKey(agent.sessionKey)}</span>
-                      <span class="text-xs px-1.5 py-0.5 bg-slate-600 rounded text-slate-500 dark:text-slate-400">{agent.status}</span>
+                      <span class="text-xs px-1.5 py-0.5 bg-slate-600 rounded text-slate-400">{agent.status}</span>
                     </div>
                     <span class="text-xs text-slate-500">{formatTimeAgo(agent.spawnedAt)}</span>
                   </div>
-                  <div class="text-xs text-slate-500 dark:text-slate-400 mb-2 line-clamp-2">{agent.task}</div>
+                  <div class="text-xs text-slate-400 mb-2 line-clamp-2">{agent.task}</div>
                   <div class="flex items-center justify-between">
                     <span class="text-xs text-slate-500 font-mono">{getShortSessionKey(agent.sessionKey)}</span>
                     <div class="flex gap-2">
@@ -765,10 +765,10 @@
         <!-- Files -->
         {#if selectedProject.files && selectedProject.files.length > 0}
           <div>
-            <h3 class="text-sm text-slate-500 dark:text-slate-400 mb-2 font-medium">FILES</h3>
+            <h3 class="text-sm text-slate-400 mb-2 font-medium">FILES</h3>
             <div class="flex flex-wrap gap-2">
               {#each selectedProject.files as file}
-                <span class="px-2 py-1 bg-gray-100 dark:bg-slate-700 rounded text-sm font-mono">
+                <span class="px-2 py-1 bg-slate-700 rounded text-sm font-mono">
                   {file.endsWith('/') ? '📁' : '📄'} {file}
                 </span>
               {/each}
@@ -779,8 +779,8 @@
         <!-- STATUS.md -->
         {#if selectedProject.statusMd}
           <div>
-            <h3 class="text-sm text-slate-500 dark:text-slate-400 mb-2 font-medium">STATUS.MD</h3>
-            <div class="p-4 bg-gray-50 dark:bg-slate-900 rounded-lg font-mono text-sm whitespace-pre-wrap overflow-x-auto">
+            <h3 class="text-sm text-slate-400 mb-2 font-medium">STATUS.MD</h3>
+            <div class="p-4 bg-slate-900 rounded-lg font-mono text-sm whitespace-pre-wrap overflow-x-auto">
               {selectedProject.statusMd}
             </div>
           </div>
@@ -789,8 +789,8 @@
         <!-- HANDOFF.md -->
         {#if selectedProject.handoffMd}
           <div>
-            <h3 class="text-sm text-slate-500 dark:text-slate-400 mb-2 font-medium">HANDOFF.MD</h3>
-            <div class="p-4 bg-gray-50 dark:bg-slate-900 rounded-lg font-mono text-sm whitespace-pre-wrap overflow-x-auto">
+            <h3 class="text-sm text-slate-400 mb-2 font-medium">HANDOFF.MD</h3>
+            <div class="p-4 bg-slate-900 rounded-lg font-mono text-sm whitespace-pre-wrap overflow-x-auto">
               {selectedProject.handoffMd}
             </div>
           </div>
@@ -799,8 +799,8 @@
         <!-- PROJECT.md -->
         {#if selectedProject.projectMd}
           <div>
-            <h3 class="text-sm text-slate-500 dark:text-slate-400 mb-2 font-medium">PROJECT.MD</h3>
-            <div class="p-4 bg-gray-50 dark:bg-slate-900 rounded-lg font-mono text-sm whitespace-pre-wrap overflow-x-auto max-h-96">
+            <h3 class="text-sm text-slate-400 mb-2 font-medium">PROJECT.MD</h3>
+            <div class="p-4 bg-slate-900 rounded-lg font-mono text-sm whitespace-pre-wrap overflow-x-auto max-h-96">
               {selectedProject.projectMd}
             </div>
           </div>
