@@ -23,6 +23,7 @@ import { commentRoutes } from './routes/comments.js';
 import { createAuthMiddleware } from './middleware/auth.js';
 import { gatewayClient, ApprovalRequest, ApprovalResolved } from './gateway-client.js';
 import { loadAssociations } from './project-agents.js';
+import { onTaskStatusChange } from './stage-agents/index.js';
 import { createTask, updateTask, findTaskBySessionKey, findTaskById } from './task-store.js';
 import { initializeDatabase } from './database.js';
 import { migrateFromJSON } from './migrate.js';
@@ -559,6 +560,13 @@ async function completeTask(sessionKey: string) {
         commitHash: updatedTask!.commitHash,
         linesChanged: updatedTask!.linesChanged,
       });
+
+      // Trigger stage agents (e.g., QA on review transition)
+      if (task.status !== 'review') {
+        onTaskStatusChange(updatedTask!.id, task.status, 'review').catch(err => {
+          console.error('[CompleteTask] Stage agent error:', err.message);
+        });
+      }
 
       // Broadcast the update
       broadcast('task-updated', {
