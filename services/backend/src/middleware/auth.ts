@@ -3,7 +3,7 @@
  */
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { getUserById, User } from '../user-store.js';
+import { getUserById, User, UserRole } from '../user-store.js';
 
 // Extend Fastify types via declaration merging
 declare module 'fastify' {
@@ -37,6 +37,41 @@ export async function requireAuth(
 
   // Attach user to request for downstream handlers
   request.user = user;
+}
+
+/**
+ * Role-based authorization middleware
+ * Usage: { preHandler: requireRole('admin') } or requireRole('member', 'admin')
+ */
+export function requireRole(...allowedRoles: UserRole[]) {
+  return async function roleGuard(
+    request: FastifyRequest,
+    reply: FastifyReply
+  ): Promise<void> {
+    // When auth is disabled, treat as admin
+    if (process.env.DISABLE_AUTH === 'true') {
+      return;
+    }
+
+    // requireAuth must run first to populate request.user
+    if (!request.user) {
+      return reply.status(401).send({ error: 'Not authenticated' });
+    }
+
+    if (!allowedRoles.includes(request.user.role)) {
+      return reply.status(403).send({ error: 'Insufficient permissions' });
+    }
+  };
+}
+
+/**
+ * Check if user can modify a task (admin, or member who created/is assigned to the task)
+ */
+export function canModifyTask(user: User, task: { createdBy?: string | null; assignedTo?: string | null }): boolean {
+  if (user.role === 'admin') return true;
+  if (user.role === 'viewer') return false;
+  // Members can modify tasks they created or are assigned to
+  return user.id === task.createdBy || user.id === task.assignedTo;
 }
 
 /**

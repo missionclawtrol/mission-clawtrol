@@ -17,6 +17,7 @@ import {
 } from '../task-store.js';
 import { db, getRawDb } from '../database.js';
 import { logAudit } from '../audit-store.js';
+import { requireRole, canModifyTask } from '../middleware/auth.js';
 
 const WORKSPACE_PATH = join(process.env.HOME || '', '.openclaw/workspace');
 const WORK_ORDER_TEMPLATE_PATH = join(WORKSPACE_PATH, 'workflow', 'WORK_ORDER_TEMPLATE.md');
@@ -193,7 +194,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // POST /tasks - create a new task
+  // POST /tasks - create a new task (admin + member only)
   fastify.post<{
     Body: {
       title: string;
@@ -217,6 +218,12 @@ export async function taskRoutes(fastify: FastifyInstance) {
         sessionKey = null,
         handoffNotes = null,
       } = request.body;
+
+      // Viewers cannot create tasks
+      const user = (request as any).user;
+      if (user && user.role === 'viewer') {
+        return reply.status(403).send({ error: 'Viewers cannot create tasks' });
+      }
 
       // Validate required fields
       if (!title || !description || !priority || !projectId) {
@@ -286,6 +293,20 @@ export async function taskRoutes(fastify: FastifyInstance) {
     try {
       const { id } = request.params;
       const updates = request.body;
+
+      // Viewers cannot update tasks
+      const user = (request as any).user;
+      if (user && user.role === 'viewer') {
+        return reply.status(403).send({ error: 'Viewers cannot update tasks' });
+      }
+
+      // Members can only update tasks they created or are assigned to
+      if (user && user.role === 'member') {
+        const existingForAuth = await findTaskById(id);
+        if (existingForAuth && !canModifyTask(user, existingForAuth)) {
+          return reply.status(403).send({ error: 'You can only edit tasks you created or are assigned to' });
+        }
+      }
 
       // Validate that we're not trying to update protected fields
       if ('id' in updates || 'createdAt' in updates || 'createdBy' in updates) {
@@ -438,9 +459,19 @@ export async function taskRoutes(fastify: FastifyInstance) {
   }>('/:id', async (request, reply) => {
     try {
       const { id } = request.params;
+
+      // Only admins and task creators can delete
+      const user = (request as any).user;
+      if (user && user.role === 'viewer') {
+        return reply.status(403).send({ error: 'Viewers cannot delete tasks' });
+      }
       
       // Get task before deletion for audit logging
       const task = await findTaskById(id);
+
+      if (user && user.role === 'member' && task && !canModifyTask(user, task)) {
+        return reply.status(403).send({ error: 'You can only delete tasks you created' });
+      }
       
       const success = await deleteTask(id);
 
