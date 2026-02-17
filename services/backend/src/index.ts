@@ -27,6 +27,7 @@ import { onTaskStatusChange } from './stage-agents/index.js';
 import { createTask, updateTask, findTaskBySessionKey, findTaskById } from './task-store.js';
 import { initializeDatabase } from './database.js';
 import { migrateFromJSON } from './migrate.js';
+import { db } from './db/index.js';
 
 const execAsync = promisify(exec);
 
@@ -654,14 +655,68 @@ await fastify.register(authRoutes, { prefix: '/api/auth' });
 await fastify.register(userRoutes, { prefix: '/api/users' });
 await fastify.register(commentRoutes, { prefix: '/api/tasks' });
 
-// Health check
+// Health check with comprehensive system status
 fastify.get('/api/health', async () => {
-  return { 
-    status: 'ok', 
-    timestamp: new Date().toISOString(),
-    gateway: {
-      connected: gatewayClient.isConnected(),
+  const startTime = Date.now();
+  
+  // 1. System uptime
+  const uptime = process.uptime();
+  
+  // 2. Gateway WebSocket connection status
+  const gatewayConnected = gatewayClient.isConnected();
+  
+  // 3. DB connectivity check with response time
+  let dbConnected = false;
+  let dbResponseMs = 0;
+  try {
+    const dbStart = Date.now();
+    await db.query('SELECT COUNT(*) as count FROM tasks');
+    dbResponseMs = Date.now() - dbStart;
+    dbConnected = true;
+  } catch (err) {
+    dbResponseMs = Date.now() - startTime;
+    dbConnected = false;
+  }
+  
+  // 4. Task counts by status
+  let taskCounts = { backlog: 0, todo: 0, 'in-progress': 0, review: 0, done: 0 };
+  try {
+    const rows = await db.query<any>('SELECT status, COUNT(*) as count FROM tasks GROUP BY status');
+    for (const row of rows) {
+      if (row.status in taskCounts) {
+        taskCounts[row.status as keyof typeof taskCounts] = row.count;
+      }
+    }
+  } catch (err) {
+    // Failed to get task counts
+  }
+  
+  // 5. Active agent sessions count
+  const activeAgents = knownSubagentSessions.size;
+  
+  // 6. Overall status calculation
+  let overallStatus: 'healthy' | 'degraded' | 'unhealthy';
+  if (!dbConnected) {
+    overallStatus = 'unhealthy';
+  } else if (dbResponseMs > 200 || !gatewayConnected) {
+    overallStatus = 'degraded';
+  } else {
+    overallStatus = 'healthy';
+  }
+  
+  return {
+    status: overallStatus,
+    uptime,
+    db: {
+      connected: dbConnected,
+      responseMs: dbResponseMs,
     },
+    gateway: {
+      connected: gatewayConnected,
+    },
+    tasks: taskCounts,
+    activeAgents,
+    timestamp: new Date().toISOString(),
   };
 });
 

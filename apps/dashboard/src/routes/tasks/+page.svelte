@@ -215,6 +215,7 @@
   // Kanban columns configuration
   const columns = [
     { id: 'backlog', name: 'Backlog', color: 'bg-gray-500' },
+    { id: 'todo', name: 'Todo', color: 'bg-blue-500' },
     { id: 'in-progress', name: 'In Progress', color: 'bg-yellow-500' },
     { id: 'review', name: 'Review', color: 'bg-purple-500' },
     { id: 'done', name: 'Done', color: 'bg-green-500' },
