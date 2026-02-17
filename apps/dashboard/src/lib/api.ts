@@ -5,6 +5,20 @@ const API_BASE = typeof window !== 'undefined'
   ? `http://${window.location.hostname}:3001/api`
   : 'http://localhost:3001/api';
 
+const REQUEST_TIMEOUT_MS = 8000;
+
+async function fetchWithTimeout(input: RequestInfo, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+
 export interface Agent {
   id: string;
   name: string;
@@ -48,7 +62,7 @@ export interface ActivityEvent {
 // Agents - use roster endpoint for full agent list from config
 export async function fetchAgents(): Promise<Agent[]> {
   try {
-    const res = await fetch(`${API_BASE}/agents/roster`);
+    const res = await fetchWithTimeout(`${API_BASE}/agents/roster`);
     const data = await res.json();
     // Map roster format to Agent interface
     return (data.agents || []).map((a: any) => ({
@@ -69,7 +83,7 @@ export async function fetchAgents(): Promise<Agent[]> {
 
 export async function fetchAgent(id: string): Promise<Agent | null> {
   try {
-    const res = await fetch(`${API_BASE}/agents/${encodeURIComponent(id)}`);
+    const res = await fetchWithTimeout(`${API_BASE}/agents/${encodeURIComponent(id)}`);
     if (!res.ok) return null;
     return await res.json();
   } catch (error) {
@@ -80,7 +94,7 @@ export async function fetchAgent(id: string): Promise<Agent | null> {
 
 export async function sendMessageToAgent(id: string, message: string): Promise<boolean> {
   try {
-    const res = await fetch(`${API_BASE}/agents/${encodeURIComponent(id)}/message`, {
+    const res = await fetchWithTimeout(`${API_BASE}/agents/${encodeURIComponent(id)}/message`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message }),
@@ -95,7 +109,7 @@ export async function sendMessageToAgent(id: string, message: string): Promise<b
 // Projects
 export async function fetchProjects(): Promise<Project[]> {
   try {
-    const res = await fetch(`${API_BASE}/projects`);
+    const res = await fetchWithTimeout(`${API_BASE}/projects`);
     const data = await res.json();
     return data.projects || [];
   } catch (error) {
@@ -106,7 +120,7 @@ export async function fetchProjects(): Promise<Project[]> {
 
 export async function fetchProject(id: string): Promise<Project | null> {
   try {
-    const res = await fetch(`${API_BASE}/projects/${encodeURIComponent(id)}`);
+    const res = await fetchWithTimeout(`${API_BASE}/projects/${encodeURIComponent(id)}`);
     if (!res.ok) return null;
     return await res.json();
   } catch (error) {
@@ -122,7 +136,7 @@ export interface CreateProjectParams {
 
 export async function createProject(params: CreateProjectParams): Promise<{ success: boolean; project?: Project; error?: string }> {
   try {
-    const res = await fetch(`${API_BASE}/projects`, {
+    const res = await fetchWithTimeout(`${API_BASE}/projects`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
@@ -140,7 +154,7 @@ export async function createProject(params: CreateProjectParams): Promise<{ succ
 
 export async function deleteProject(id: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const res = await fetch(`${API_BASE}/projects/${encodeURIComponent(id)}`, {
+    const res = await fetchWithTimeout(`${API_BASE}/projects/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
     if (!res.ok) {
@@ -160,6 +174,7 @@ export interface SpawnAgentParams {
   label?: string;
   model?: string;
   projectId?: string;
+  taskId?: string; // Link to existing task instead of creating new
   timeoutSeconds?: number;
 }
 
@@ -174,7 +189,7 @@ export interface SpawnResult {
 
 export async function spawnAgent(params: SpawnAgentParams): Promise<SpawnResult> {
   try {
-    const res = await fetch(`${API_BASE}/agents/spawn`, {
+    const res = await fetchWithTimeout(`${API_BASE}/agents/spawn`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
@@ -197,7 +212,7 @@ export async function spawnAgent(params: SpawnAgentParams): Promise<SpawnResult>
 
 export async function fetchAgentHistory(id: string, limit = 20): Promise<{ messages?: Array<{ role: string; content: string }>; error?: string }> {
   try {
-    const res = await fetch(`${API_BASE}/agents/${encodeURIComponent(id)}/history?limit=${limit}`);
+    const res = await fetchWithTimeout(`${API_BASE}/agents/${encodeURIComponent(id)}/history?limit=${limit}`);
     if (!res.ok) {
       const data = await res.json();
       return { error: data.error || 'Failed to fetch history' };
@@ -224,7 +239,7 @@ export interface AgentAssociation {
 
 export async function fetchProjectAgents(projectId: string): Promise<AgentAssociation[]> {
   try {
-    const res = await fetch(`${API_BASE}/agents/project/${encodeURIComponent(projectId)}`);
+    const res = await fetchWithTimeout(`${API_BASE}/agents/project/${encodeURIComponent(projectId)}`);
     const data = await res.json();
     return data.agents || [];
   } catch (error) {
@@ -235,7 +250,7 @@ export async function fetchProjectAgents(projectId: string): Promise<AgentAssoci
 
 export async function deleteAgent(sessionKey: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const res = await fetch(`${API_BASE}/agents/${encodeURIComponent(sessionKey)}`, {
+    const res = await fetchWithTimeout(`${API_BASE}/agents/${encodeURIComponent(sessionKey)}`, {
       method: 'DELETE',
     });
     const data = await res.json();
@@ -251,7 +266,7 @@ export async function deleteAgent(sessionKey: string): Promise<{ success: boolea
 
 export async function changeAgentModel(sessionKey: string, model: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const res = await fetch(`${API_BASE}/agents/${encodeURIComponent(sessionKey)}/model`, {
+    const res = await fetchWithTimeout(`${API_BASE}/agents/${encodeURIComponent(sessionKey)}/model`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model }),
@@ -270,7 +285,7 @@ export async function changeAgentModel(sessionKey: string, model: string): Promi
 // Activity
 export async function fetchActivity(limit = 50): Promise<ActivityEvent[]> {
   try {
-    const res = await fetch(`${API_BASE}/activity?limit=${limit}`);
+    const res = await fetchWithTimeout(`${API_BASE}/activity?limit=${limit}`);
     const data = await res.json();
     return data.events || [];
   } catch (error) {
@@ -282,7 +297,7 @@ export async function fetchActivity(limit = 50): Promise<ActivityEvent[]> {
 // Health check
 export async function checkHealth(): Promise<boolean> {
   try {
-    const res = await fetch(`${API_BASE}/health`);
+    const res = await fetchWithTimeout(`${API_BASE}/health`);
     return res.ok;
   } catch {
     return false;
@@ -303,6 +318,7 @@ export interface Task {
   status: 'backlog' | 'todo' | 'in-progress' | 'review' | 'done';
   createdAt?: string;
   updatedAt?: string;
+  completedAt?: string;
   tokens?: {
     input: number;
     output: number;
@@ -323,7 +339,7 @@ export interface Task {
 
 export async function fetchTasks(): Promise<Task[]> {
   try {
-    const res = await fetch(`${API_BASE}/tasks`);
+    const res = await fetchWithTimeout(`${API_BASE}/tasks`);
     const data = await res.json();
     return data.tasks || [];
   } catch (error) {
@@ -343,7 +359,7 @@ export interface CreateTaskParams {
 
 export async function createTask(params: CreateTaskParams): Promise<{ success: boolean; task?: Task; error?: string }> {
   try {
-    const res = await fetch(`${API_BASE}/tasks`, {
+    const res = await fetchWithTimeout(`${API_BASE}/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
@@ -372,7 +388,7 @@ export interface UpdateTaskParams {
 
 export async function updateTask(id: string, params: UpdateTaskParams): Promise<{ success: boolean; task?: Task; error?: string }> {
   try {
-    const res = await fetch(`${API_BASE}/tasks/${encodeURIComponent(id)}`, {
+    const res = await fetchWithTimeout(`${API_BASE}/tasks/${encodeURIComponent(id)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
@@ -390,7 +406,7 @@ export async function updateTask(id: string, params: UpdateTaskParams): Promise<
 
 export async function deleteTask(id: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const res = await fetch(`${API_BASE}/tasks/${encodeURIComponent(id)}`, {
+    const res = await fetchWithTimeout(`${API_BASE}/tasks/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
     if (!res.ok) {
@@ -411,7 +427,7 @@ export interface Settings {
 
 export async function fetchSettings(): Promise<Settings> {
   try {
-    const res = await fetch(`${API_BASE}/settings`);
+    const res = await fetchWithTimeout(`${API_BASE}/settings`);
     if (!res.ok) {
       // Return default if endpoint doesn't exist
       return { humanHourlyRate: 100 };
@@ -423,15 +439,62 @@ export async function fetchSettings(): Promise<Settings> {
   }
 }
 
+// Messaging - Send message to main agent with project context
+export interface SendMessageParams {
+  message: string;
+  projectId?: string;
+}
+
+export interface SendMessageResult {
+  success: boolean;
+  result?: any;
+  sessionKey?: string;
+  projectId?: string | null;
+  error?: string;
+}
+
+export async function sendMessage(params: SendMessageParams): Promise<SendMessageResult> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/message`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.error || 'Failed to send message' };
+    }
+    return { success: true, ...data };
+  } catch (error) {
+    console.error('Failed to send message:', error);
+    return { success: false, error: 'Network error' };
+  }
+}
+
+// Get message history with main agent
+export async function fetchMessageHistory(limit = 20): Promise<{ messages?: Array<{ role: string; content: string }>; error?: string }> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/message/history?limit=${limit}`);
+    if (!res.ok) {
+      const data = await res.json();
+      return { error: data.error || 'Failed to fetch history' };
+    }
+    return await res.json();
+  } catch (error) {
+    console.error('Failed to fetch message history:', error);
+    return { error: 'Network error' };
+  }
+}
+
 // Generic API helper for custom endpoints
 export const api = {
   get: async (path: string) => {
-    const res = await fetch(`${API_BASE}${path}`);
+    const res = await fetchWithTimeout(`${API_BASE}${path}`);
     if (!res.ok) throw new Error(`API error: ${res.status}`);
     return res.json();
   },
   post: async (path: string, body: any) => {
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await fetchWithTimeout(`${API_BASE}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

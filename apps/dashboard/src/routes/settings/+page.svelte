@@ -1,4 +1,13 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
+
+  const API_BASE = typeof window !== 'undefined'
+    ? `http://${window.location.hostname}:3001`
+    : 'http://localhost:3001';
+  const WS_URL = typeof window !== 'undefined'
+    ? `ws://${window.location.hostname}:3001/ws`
+    : 'ws://localhost:3001/ws';
+
   let settings = {
     alerts: {
       browserPush: true,
@@ -14,6 +23,37 @@
     theme: 'dark',
     refreshInterval: 2,
   };
+
+  let gatewayStatus: 'connected' | 'pending' | 'error' = 'pending';
+  let backendStatus: 'connected' | 'pending' | 'error' = 'pending';
+  let wsStatus: 'connected' | 'pending' | 'error' = 'pending';
+
+  onMount(async () => {
+    // Backend API health check
+    try {
+      const res = await fetch(`${API_BASE}/api/health`);
+      backendStatus = res.ok ? 'connected' : 'error';
+      const data = await res.json().catch(() => null);
+      gatewayStatus = data?.gateway?.connected ? 'connected' : 'error';
+    } catch {
+      backendStatus = 'error';
+      gatewayStatus = 'error';
+    }
+
+    // WebSocket check
+    try {
+      const ws = new WebSocket(WS_URL);
+      ws.onopen = () => {
+        wsStatus = 'connected';
+        ws.close();
+      };
+      ws.onerror = () => {
+        wsStatus = 'error';
+      };
+    } catch {
+      wsStatus = 'error';
+    }
+  });
 </script>
 
 <div class="max-w-2xl space-y-6">
@@ -136,15 +176,21 @@
     <div class="space-y-2 text-sm">
       <div class="flex justify-between">
         <span class="text-slate-400">OpenClaw Gateway</span>
-        <span class="text-green-400">● Connected</span>
+        <span class={gatewayStatus === 'connected' ? 'text-green-400' : gatewayStatus === 'error' ? 'text-red-400' : 'text-yellow-400'}>
+          ● {gatewayStatus === 'connected' ? 'Connected' : gatewayStatus === 'error' ? 'Not Connected' : 'Pending'}
+        </span>
       </div>
       <div class="flex justify-between">
         <span class="text-slate-400">WebSocket</span>
-        <span class="text-yellow-400">● Pending</span>
+        <span class={wsStatus === 'connected' ? 'text-green-400' : wsStatus === 'error' ? 'text-red-400' : 'text-yellow-400'}>
+          ● {wsStatus === 'connected' ? 'Connected' : wsStatus === 'error' ? 'Not Connected' : 'Pending'}
+        </span>
       </div>
       <div class="flex justify-between">
         <span class="text-slate-400">Backend API</span>
-        <span class="text-yellow-400">● Not Running</span>
+        <span class={backendStatus === 'connected' ? 'text-green-400' : backendStatus === 'error' ? 'text-red-400' : 'text-yellow-400'}>
+          ● {backendStatus === 'connected' ? 'Connected' : backendStatus === 'error' ? 'Not Running' : 'Pending'}
+        </span>
       </div>
     </div>
   </div>

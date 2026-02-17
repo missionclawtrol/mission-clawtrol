@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { fetchAgents, fetchTasks, checkHealth, type Agent, type Task } from '$lib/api';
   import { connectWebSocket, wsConnected, wsMessages } from '$lib/websocket';
-  
+  //   
   let agents: Agent[] = [];
   let tasks: Task[] = [];
   let backendConnected = false;

@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { afterNavigate } from '$app/navigation';
+  import { page } from '$app/stores';
 
   interface CostSummary {
     totalTasks: number;
@@ -64,34 +66,55 @@
   let loading = true;
   let error = '';
 
+  const REQUEST_TIMEOUT_MS = 8000;
+
+  async function fetchWithTimeout(input: RequestInfo, init?: RequestInit): Promise<Response> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      return await fetch(input, { ...init, signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   async function loadData() {
     loading = true;
     error = '';
     try {
       const API_BASE = `http://${window.location.hostname}:3001/api`;
 
-      const [summaryRes, agentsRes, projectsRes, timeSeriesRes, recentRes] = await Promise.all([
-        fetch(`${API_BASE}/costs/summary`),
-        fetch(`${API_BASE}/costs/by-agent`),
-        fetch(`${API_BASE}/costs/by-project`),
-        fetch(`${API_BASE}/costs/over-time?period=day`),
-        fetch(`${API_BASE}/costs/recent?limit=10`),
+      const results = await Promise.allSettled([
+        fetchWithTimeout(`${API_BASE}/costs/summary`),
+        fetchWithTimeout(`${API_BASE}/costs/by-agent`),
+        fetchWithTimeout(`${API_BASE}/costs/by-project`),
+        fetchWithTimeout(`${API_BASE}/costs/over-time?period=day`),
+        fetchWithTimeout(`${API_BASE}/costs/recent?limit=10`),
       ]);
 
-      if (summaryRes.ok) summary = await summaryRes.json();
-      if (agentsRes.ok) {
+      const [summaryRes, agentsRes, projectsRes, timeSeriesRes, recentRes] = results.map(result =>
+        result.status === 'fulfilled' ? result.value : null
+      );
+
+      if (!summaryRes && !agentsRes && !projectsRes && !timeSeriesRes && !recentRes) {
+        throw new Error('All cost requests failed');
+      }
+
+      if (summaryRes?.ok) summary = await summaryRes.json();
+      if (agentsRes?.ok) {
         const data = await agentsRes.json();
         agents = data.agents || [];
       }
-      if (projectsRes.ok) {
+      if (projectsRes?.ok) {
         const data = await projectsRes.json();
         projects = data.projects || [];
       }
-      if (timeSeriesRes.ok) {
+      if (timeSeriesRes?.ok) {
         const data = await timeSeriesRes.json();
         timeSeries = data.timeSeries || [];
       }
-      if (recentRes.ok) {
+      if (recentRes?.ok) {
         const data = await recentRes.json();
         recentTasks = data.tasks || [];
       }
@@ -150,8 +173,20 @@
   $: maxProjectSavings = projects.length > 0 ? Math.max(...projects.map(p => p.savings)) : 1;
   $: maxTimeSavings = timeSeries.length > 0 ? Math.max(...timeSeries.map(t => t.savings), 1) : 1;
 
+  let lastPath = '';
+
+  // Ensure we always load on route entry (client-side only)
+  $: if (typeof window !== 'undefined' && $page.url.pathname === '/costs' && $page.url.pathname !== lastPath) {
+    lastPath = $page.url.pathname;
+    loadData();
+  }
+
   onMount(() => {
     loadData();
+    afterNavigate(() => {
+      // Re-load on client-side navigation to avoid stale loading state
+      loadData();
+    });
   });
 </script>
 

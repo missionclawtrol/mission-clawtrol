@@ -1,8 +1,8 @@
-// Mission Clawtrol - Task Kanban Board
+// Mission Clawtrol - Work Orders Kanban Board
 
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fetchTasks, createTask, updateTask, deleteTask, fetchProjects, fetchAgents, fetchSettings, type Task, type Project, type Agent, type Settings } from '$lib/api';
+  import { fetchTasks, createTask, updateTask, deleteTask, spawnAgent, fetchProjects, fetchAgents, fetchSettings, type Task, type Project, type Agent, type Settings } from '$lib/api';
   
   // Data
   let tasks: Task[] = [];
@@ -36,8 +36,15 @@
   }
   
   // Watch for project filter changes and save
-  $: if (typeof localStorage !== 'undefined') {
+  $: if (typeof localStorage !== 'undefined' && selectedProjectId !== undefined) {
     saveProjectFilter(selectedProjectId);
+  }
+  
+  // Reload tasks when project filter changes (debounced)
+  let previousProjectId = '';
+  $: if (selectedProjectId !== previousProjectId && !loading) {
+    previousProjectId = selectedProjectId;
+    loadData();
   }
   
   // Form state
@@ -54,7 +61,6 @@
   // Kanban columns configuration
   const columns = [
     { id: 'backlog', name: 'Backlog', color: 'bg-gray-500' },
-    { id: 'todo', name: 'To Do', color: 'bg-blue-500' },
     { id: 'in-progress', name: 'In Progress', color: 'bg-yellow-500' },
     { id: 'review', name: 'Review', color: 'bg-purple-500' },
     { id: 'done', name: 'Done', color: 'bg-green-500' },
@@ -62,27 +68,43 @@
   
   async function loadData() {
     loading = true;
-    const [tasksData, projectsData, agentsData, settingsData] = await Promise.all([
-      fetchTasks(),
-      fetchProjects(),
-      fetchAgents(),
-      fetchSettings(),
-    ]);
-    tasks = tasksData;
-    projects = projectsData;
-    agents = agentsData;
-    settings = settingsData;
-    loading = false;
+    try {
+      const [tasksData, projectsData, agentsData, settingsData] = await Promise.all([
+        fetchTasks(),
+        fetchProjects(),
+        fetchAgents(),
+        fetchSettings(),
+      ]);
+      tasks = tasksData;
+      projects = projectsData;
+      agents = agentsData;
+      settings = settingsData;
+    } catch (err) {
+      console.error('Failed to load tasks view data:', err);
+    } finally {
+      loading = false;
+    }
   }
   
   function getTasksForColumn(columnId: string): Task[] {
-    return tasks.filter(t => {
+    let filtered = tasks.filter(t => {
       // Filter by status
       if (t.status !== columnId) return false;
       // Filter by project if one is selected
       if (selectedProjectId && t.projectId !== selectedProjectId) return false;
       return true;
     });
+    
+    // Sort Done column by completedAt descending (newest first)
+    if (columnId === 'done') {
+      filtered.sort((a, b) => {
+        const dateA = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+        const dateB = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+        return dateB - dateA;
+      });
+    }
+    
+    return filtered;
   }
   
   function getPriorityColor(priority: string): string {
@@ -127,6 +149,24 @@
       return `${hours}h ${minutes}m`;
     }
     return `${hours}h`;
+  }
+
+  function formatCompletedAt(dateStr: string | undefined): string {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) {
+      return `Today at ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+    } else if (diffDays === 1) {
+      return `Yesterday at ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+    } else if (diffDays < 7) {
+      return `${diffDays} days ago`;
+    } else {
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
+    }
   }
   
   function getProjectName(projectId: string): string {
@@ -187,6 +227,36 @@
     }
   }
   
+  async function handleStartWork(task: Task) {
+    const taskDescription = task.description || `Work on: ${task.title}`;
+    
+    const result = await spawnAgent({
+      task: taskDescription,
+      label: task.agentId || 'senior-dev',
+      projectId: task.projectId || 'mission-clawtrol',
+      taskId: task.id, // Link to existing task
+    });
+    
+    if (result.success) {
+      await loadData();
+      showTaskDetail = false;
+      selectedTask = null;
+    } else {
+      alert('Failed to start work: ' + (result.error || 'Unknown error'));
+    }
+  }
+  
+  async function handleAssignAgent(taskId: string, agentId: string | null) {
+    const result = await updateTask(taskId, { agentId });
+    if (result) {
+      await loadData();
+      // Update selectedTask if it's the one we just changed
+      if (selectedTask && selectedTask.id === taskId) {
+        selectedTask = { ...selectedTask, agentId };
+      }
+    }
+  }
+  
   // Drag and drop handlers
   function handleDragStart(task: Task) {
     draggedTask = task;
@@ -234,7 +304,7 @@
     loadData();
     
     // Periodic refresh every 30 seconds (preserves filter)
-    const interval = setInterval(loadData, 30000);
+    // Periodic refresh disabled - caused UX issues
     
     return () => clearInterval(interval);
   });
@@ -384,16 +454,29 @@
         
         <div>
           <h4 class="text-sm text-slate-400 mb-1">Assigned To</h4>
-          <div class="flex items-center gap-2">
-            <span>{getAgentInfo(selectedTask.agentId).emoji}</span>
-            <span class="text-slate-300">{getAgentInfo(selectedTask.agentId).name}</span>
-          </div>
+          <select 
+            class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white"
+            value={selectedTask.agentId || ''}
+            on:change={(e) => handleAssignAgent(selectedTask.id, e.currentTarget.value || null)}
+          >
+            <option value="">Unassigned</option>
+            {#each agents as agent}
+              <option value={agent.id}>{agent.emoji} {agent.name}</option>
+            {/each}
+          </select>
         </div>
         
         <div>
           <h4 class="text-sm text-slate-400 mb-1">Status</h4>
           <div class="text-slate-300 capitalize">{selectedTask.status.replace('_', ' ')}</div>
         </div>
+
+        {#if selectedTask.completedAt}
+          <div>
+            <h4 class="text-sm text-slate-400 mb-1">Completed</h4>
+            <div class="text-slate-300">✅ {formatCompletedAt(selectedTask.completedAt)}</div>
+          </div>
+        {/if}
 
         {#if selectedTask.status === 'done' && selectedTask.linesChanged}
           <div class="pt-2 border-t border-slate-700">
@@ -434,7 +517,7 @@
         {/if}
 
         {#if selectedTask.status === 'done' && selectedTask.estimatedHumanMinutes && selectedTask.runtime}
-          {@const timeSaved = Math.max(0, selectedTask.estimatedHumanMinutes - (selectedTask.runtime / 60000))}
+          {@const timeSaved = Math.round(Math.max(0, selectedTask.estimatedHumanMinutes - (selectedTask.runtime / 60000)))}
           {@const moneySaved = Math.max(0, (selectedTask.humanCost || 0) - (selectedTask.cost || 0))}
           <div class="pt-2 border-t border-slate-700">
             <h4 class="text-sm text-slate-400 mb-2">💰 ROI</h4>
@@ -450,18 +533,30 @@
         {/if}
       </div>
       <div class="px-4 py-3 border-t border-slate-700 flex justify-between gap-2">
-        <button 
-          on:click={() => handleDeleteTask(selectedTask!.id)}
-          class="px-4 py-2 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded text-sm font-medium transition-colors"
-        >
-          🗑️ Delete
-        </button>
-        <button 
-          on:click={closeModals}
-          class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition-colors"
-        >
-          Close
-        </button>
+        {#if (selectedTask.status === 'todo' || selectedTask.status === 'in-progress') && !selectedTask.sessionKey}
+          <button 
+            on:click={() => handleStartWork(selectedTask!)}
+            class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded text-sm font-medium transition-colors"
+          >
+            🚀 Start Work
+          </button>
+        {:else}
+          <div></div>
+        {/if}
+        <div class="flex gap-2">
+          <button 
+            on:click={() => handleDeleteTask(selectedTask!.id)}
+            class="px-4 py-2 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded text-sm font-medium transition-colors"
+          >
+            🗑️ Delete
+          </button>
+          <button 
+            on:click={closeModals}
+            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition-colors"
+          >
+            Close
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -471,7 +566,7 @@
 <div class="space-y-4">
   <!-- Header -->
   <div class="flex items-center justify-between gap-4">
-    <h1 class="text-2xl font-semibold">📋 Tasks</h1>
+    <h1 class="text-2xl font-semibold">📋 Work Orders</h1>
     
     <!-- Project Selector -->
     <div class="flex items-center gap-2 flex-1 max-w-md">
@@ -512,10 +607,10 @@
       <div>Loading tasks...</div>
     </div>
   {:else}
-    <div class="grid grid-cols-5 gap-4 overflow-x-auto pb-4">
+    <div class="flex gap-4 overflow-x-auto pb-4">
       {#each columns as column}
         <div 
-          class="bg-slate-700/30 rounded-lg border border-slate-600 flex flex-col min-w-80 max-h-[calc(100vh-200px)]"
+          class="bg-slate-700/30 rounded-lg border border-slate-600 flex flex-col w-80 flex-shrink-0 max-h-[calc(100vh-200px)]"
           on:dragover={(e) => handleDragOver(column.id, e)}
           on:dragleave={handleDragLeave}
           on:drop={(e) => handleDrop(column.id, e)}
@@ -554,6 +649,15 @@
                   </div>
                 {/if}
 
+                <!-- Completed At (for done tasks) -->
+                {#if task.status === 'done' && task.completedAt}
+                  <div class="mb-2 pb-2 border-b border-slate-700">
+                    <div class="text-xs text-slate-400">
+                      ✅ Completed {formatCompletedAt(task.completedAt)}
+                    </div>
+                  </div>
+                {/if}
+
                 <!-- AI Stats (for completed tasks) -->
                 {#if task.status === 'done' && (task.tokens || task.cost || task.runtime)}
                   <div class="mb-2 pb-2 border-b border-slate-700 flex flex-col gap-1 text-xs text-slate-500">
@@ -573,7 +677,7 @@
 
                 <!-- Savings Info (if human estimate exists) -->
                 {#if task.status === 'done' && task.estimatedHumanMinutes && task.humanCost}
-                  {@const timeSaved = Math.max(0, task.estimatedHumanMinutes - (task.runtime || 0) / 60000)}
+                  {@const timeSaved = Math.round(Math.max(0, task.estimatedHumanMinutes - (task.runtime || 0) / 60000))}
                   {@const moneySaved = Math.max(0, task.humanCost - (task.cost || 0))}
                   {#if timeSaved > 0 || moneySaved > 0}
                     <div class="mb-2 pb-2 border-b border-slate-700 flex flex-col gap-1 text-xs">

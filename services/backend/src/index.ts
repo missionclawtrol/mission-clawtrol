@@ -1,6 +1,8 @@
 import 'dotenv/config';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import cookie from '@fastify/cookie';
+import session from '@fastify/session';
 import websocket from '@fastify/websocket';
 import { WebSocket } from 'ws';
 import { exec } from 'child_process';
@@ -14,6 +16,7 @@ import { sessionRoutes } from './routes/sessions.js';
 import { settingsRoutes } from './routes/settings.js';
 import { costRoutes } from './routes/costs.js';
 import { messageRoutes } from './routes/message.js';
+import { authRoutes } from './routes/auth.js';
 import { gatewayClient, ApprovalRequest, ApprovalResolved } from './gateway-client.js';
 import { loadAssociations } from './project-agents.js';
 import { createTask, updateTask, findTaskBySessionKey, findTaskById } from './task-store.js';
@@ -595,6 +598,18 @@ await fastify.register(cors, {
   origin: true,
 });
 
+await fastify.register(cookie);
+await fastify.register(session, {
+  secret: process.env.SESSION_SECRET || 'dev-secret-change-in-production',
+  cookie: {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+  },
+  saveUninitialized: false,
+});
+
 await fastify.register(websocket);
 
 // Routes
@@ -607,6 +622,7 @@ await fastify.register(sessionRoutes, { prefix: '/api/sessions' });
 await fastify.register(settingsRoutes, { prefix: '/api/settings' });
 await fastify.register(costRoutes, { prefix: '/api/costs' });
 await fastify.register(messageRoutes, { prefix: '/api/message' });
+await fastify.register(authRoutes, { prefix: '/api/auth' });
 
 // Health check
 fastify.get('/api/health', async () => {

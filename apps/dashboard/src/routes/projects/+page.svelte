@@ -34,14 +34,19 @@
   
   async function loadProjects() {
     loading = true;
-    projects = await fetchProjects();
-    allTasks = await fetchTasks();
-    
-    // Select first project by default
-    if (projects.length > 0 && !selectedProject) {
-      await selectProject(projects[0].id);
+    try {
+      projects = await fetchProjects();
+      allTasks = await fetchTasks();
+      
+      // Select first project by default
+      if (projects.length > 0 && !selectedProject) {
+        await selectProject(projects[0].id);
+      }
+    } catch (err) {
+      console.error('Failed to load projects:', err);
+    } finally {
+      loading = false;
     }
-    loading = false;
   }
   
   function getProjectStats(projectId: string) {
@@ -54,13 +59,18 @@
   
   async function selectProject(id: string) {
     loadingDetail = true;
-    const [project, agents] = await Promise.all([
-      fetchProject(id),
-      fetchProjectAgents(id),
-    ]);
-    selectedProject = project;
-    projectAgents = agents;
-    loadingDetail = false;
+    try {
+      const [project, agents] = await Promise.all([
+        fetchProject(id),
+        fetchProjectAgents(id),
+      ]);
+      selectedProject = project;
+      projectAgents = agents;
+    } catch (err) {
+      console.error('Failed to load project details:', err);
+    } finally {
+      loadingDetail = false;
+    }
   }
   
   async function handleCreateProject() {

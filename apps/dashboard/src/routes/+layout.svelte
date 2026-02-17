@@ -7,8 +7,7 @@
   const tabs = [
     { name: 'Overview', href: '/', icon: '🏠' },
     { name: 'Roster', href: '/roster', icon: '👥' },
-    { name: 'Tasks', href: '/tasks', icon: '📋' },
-    { name: 'Approvals', href: '/approvals', icon: '✅' },
+    { name: 'Work Orders', href: '/tasks', icon: '📋' },
     { name: 'Projects', href: '/projects', icon: '📁' },
     { name: 'Costs', href: '/costs', icon: '💰' },
     { name: 'Settings', href: '/settings', icon: '⚙️' },
@@ -22,18 +21,35 @@
     backendConnected = await checkHealth();
   }
   
+  let intervalId: ReturnType<typeof setInterval> | undefined;
+
   onMount(() => {
     checkBackend();
     connectWebSocket();
-    
+
     // Check backend health every 10 seconds
-    const interval = setInterval(checkBackend, 10000);
-    
+    intervalId = window.setInterval(checkBackend, 10000);
+
     return () => {
-      clearInterval(interval);
+      if (intervalId) window.clearInterval(intervalId);
       disconnectWebSocket();
     };
   });
+
+  function handleCostsNav(event: MouseEvent) {
+    // Force a clean reload with a tiny delay so the route change completes
+    event.preventDefault();
+    setTimeout(() => {
+      window.location.href = '/costs';
+    }, 50);
+  }
+
+  function handleProjectsNav(event: MouseEvent) {
+    event.preventDefault();
+    setTimeout(() => {
+      window.location.href = '/projects';
+    }, 50);
+  }
 </script>
 
 <div class="min-h-screen flex flex-col">
@@ -73,6 +89,7 @@
       {#each tabs as tab}
         <a
           href={tab.href}
+          on:click={tab.href === '/costs' ? handleCostsNav : tab.href === '/projects' ? handleProjectsNav : undefined}
           class="px-4 py-3 text-sm font-medium transition-colors relative
             {$page.url.pathname === tab.href 
               ? 'text-blue-400' 

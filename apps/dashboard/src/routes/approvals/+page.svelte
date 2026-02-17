@@ -1,8 +1,12 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
 
-  const API_BASE = 'http://localhost:3001';
-  const WS_URL = 'ws://localhost:3001/ws';
+  const API_BASE = typeof window !== 'undefined'
+    ? `http://${window.location.hostname}:3001`
+    : 'http://localhost:3001';
+  const WS_URL = typeof window !== 'undefined'
+    ? `ws://${window.location.hostname}:3001/ws`
+    : 'ws://localhost:3001/ws';
 
   interface Approval {
     id: string;
