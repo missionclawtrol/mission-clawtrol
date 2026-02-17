@@ -499,8 +499,13 @@
     dragOverColumn = columnId;
   }
   
-  function handleDragLeave() {
-    dragOverColumn = null;
+  function handleDragLeave(e: DragEvent) {
+    // Only clear if we're leaving the column entirely (not entering a child)
+    const relatedTarget = e.relatedTarget as HTMLElement | null;
+    const currentTarget = e.currentTarget as HTMLElement | null;
+    if (currentTarget && relatedTarget && !currentTarget.contains(relatedTarget)) {
+      dragOverColumn = null;
+    }
   }
   
   async function handleDrop(columnId: string, e: DragEvent) {
@@ -508,6 +513,12 @@
     dragOverColumn = null;
     
     if (!draggedTask) return;
+    
+    // No-op if dropping on the same column
+    if (draggedTask.status === columnId) {
+      draggedTask = null;
+      return;
+    }
     
     // Update task status
     const result = await updateTask(draggedTask.id, {
@@ -968,10 +979,10 @@
     <div class="flex gap-4 overflow-x-auto pb-4">
       {#each columns as column}
         <div 
-          class="bg-slate-700/30 rounded-lg border border-slate-600 flex flex-col flex-shrink-0 max-h-[calc(100vh-200px)]"
+          class="bg-slate-700/30 rounded-lg flex flex-col flex-shrink-0 max-h-[calc(100vh-200px)] transition-all {dragOverColumn === column.id ? 'border-2 border-blue-500 shadow-lg shadow-blue-500/30' : 'border border-slate-600'}"
           style="width: {kanbanColumnWidth}px"
           on:dragover={(e) => handleDragOver(column.id, e)}
-          on:dragleave={handleDragLeave}
+          on:dragleave={(e) => handleDragLeave(e)}
           on:drop={(e) => handleDrop(column.id, e)}
         >
           <!-- Column Header -->
@@ -984,13 +995,20 @@
           </div>
           
           <!-- Cards Container -->
-          <div class="flex-1 p-3 space-y-2 overflow-y-auto {dragOverColumn === column.id ? 'bg-slate-600/20' : ''}">
+          <div class="flex-1 p-3 space-y-2 overflow-y-auto {dragOverColumn === column.id ? 'bg-blue-500/10' : ''}">
+            <!-- Drop placeholder -->
+            {#if dragOverColumn === column.id && draggedTask && draggedTask.status !== column.id}
+              <div class="p-3 border-2 border-dashed border-blue-400 rounded-lg bg-blue-500/5 flex items-center justify-center text-sm text-blue-400">
+                Drop here to move task
+              </div>
+            {/if}
+            
             {#each getTasksForColumn(column.id) as task (task.id)}
               <div 
                 draggable="true"
                 on:dragstart={() => handleDragStart(task)}
                 on:click={() => { selectedTask = task; showTaskDetail = true; comments = []; newComment = ''; loadComments(task.id); }}
-                class="p-3 bg-slate-800 rounded-lg border border-slate-600 hover:border-slate-500 cursor-move hover:bg-slate-700/80 transition-colors"
+                class="p-3 bg-slate-800 rounded-lg border border-slate-600 hover:border-slate-500 cursor-move hover:bg-slate-700/80 transition-all {draggedTask && draggedTask.id === task.id ? 'opacity-50 scale-95' : ''}"
               >
                 <!-- Title -->
                 <h3 class="font-semibold text-sm mb-1">{task.title}</h3>
