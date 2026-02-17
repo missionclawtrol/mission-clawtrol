@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mission-clawtrol-postgres-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mission_clawtrol
+      POSTGRES_USER: mission_clawtrol
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - mission-clawtrol-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mission_clawtrol -d mission_clawtrol"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  backend:
+    image: ghcr.io/${GITHUB_REPOSITORY:-mission-clawtrol}/backend:latest
+    container_name: mission-clawtrol-backend-prod
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${PORT:-3001}:3001"
+    environment:
+      # Database
+      DATABASE_URL: ${DATABASE_URL}
+      
+      # Auth
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+      SESSION_SECRET: ${SESSION_SECRET}
+      ALLOWED_ORG: ${ALLOWED_ORG}
+      
+      # Gateway
+      GATEWAY_URL: ${GATEWAY_URL}
+      GATEWAY_TOKEN: ${GATEWAY_TOKEN}
+      
+      # Server
+      PORT: 3001
+      NODE_ENV: production
+      PUBLIC_URL: ${PUBLIC_URL}
+      PUBLIC_API_URL: ${PUBLIC_API_URL}
+      
+      # Optional
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      ENABLE_REQUEST_LOGGING: ${ENABLE_REQUEST_LOGGING:-false}
+    networks:
+      - mission-clawtrol-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  dashboard:
+    image: ghcr.io/${GITHUB_REPOSITORY:-mission-clawtrol}/dashboard:latest
+    container_name: mission-clawtrol-dashboard-prod
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "80:3000"
+    environment:
+      # Public URLs for client-side API calls
+      PUBLIC_API_URL: ${PUBLIC_API_URL}
+      PUBLIC_URL: ${PUBLIC_URL}
+      NODE_ENV: production
+    networks:
+      - mission-clawtrol-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+networks:
+  mission-clawtrol-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
