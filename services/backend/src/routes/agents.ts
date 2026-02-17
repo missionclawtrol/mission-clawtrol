@@ -423,7 +423,18 @@ export async function agentRoutes(fastify: FastifyInstance) {
 
     const enriched = agents.map((agent) => {
       const override = statusBySession.get(agent.sessionKey);
-      return override ? { ...agent, status: override.status as any, completedAt: override.completedAt } : agent;
+      if (override) {
+        return { ...agent, status: override.status as any, completedAt: override.completedAt };
+      }
+      // If no task found or task not done, check if session is stale
+      // Sessions older than 1 hour with no active task are considered completed
+      if (agent.spawnedAt) {
+        const ageMs = Date.now() - agent.spawnedAt;
+        if (ageMs > 3600_000) {
+          return { ...agent, status: 'completed' as any };
+        }
+      }
+      return agent;
     });
 
     return { agents: enriched };
