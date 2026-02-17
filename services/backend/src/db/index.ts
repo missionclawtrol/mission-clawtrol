@@ -5,6 +5,7 @@
 
 import type { Database } from './interface.js';
 import { SqliteDatabase } from './sqlite.js';
+import { PostgresDatabase } from './postgres.js';
 
 let dbInstance: Database | null = null;
 
@@ -20,8 +21,9 @@ export function getDatabase(): Database {
   const databaseUrl = process.env.DATABASE_URL;
 
   if (databaseUrl) {
-    // PostgreSQL mode - not yet implemented
-    throw new Error('Postgres not yet implemented');
+    // PostgreSQL mode
+    dbInstance = new PostgresDatabase(databaseUrl);
+    return dbInstance;
   }
 
   // Default to SQLite
