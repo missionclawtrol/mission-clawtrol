@@ -27,6 +27,7 @@
 
   let saving = false;
   let saveMessage = '';
+  let currentTheme = 'dark';
 
   let gatewayStatus: 'connected' | 'pending' | 'error' = 'pending';
   let backendStatus: 'connected' | 'pending' | 'error' = 'pending';
@@ -58,6 +59,11 @@
   }
 
   onMount(async () => {
+    // Load current theme
+    if (typeof localStorage !== 'undefined') {
+      currentTheme = localStorage.getItem('theme') || 'dark';
+    }
+
     // Load persisted settings
     try {
       const res = await fetch(`${API_BASE}/api/settings`, { credentials: 'include' });
@@ -180,16 +186,30 @@
     <h3 class="font-medium mb-4">🎨 Display</h3>
     
     <div class="space-y-4">
-      <div>
-        <label for="theme-select" class="block text-sm font-medium mb-2">Theme</label>
-        <select 
-          id="theme-select"
-          bind:value={settings.theme}
-          class="bg-gray-100 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded px-3 py-2 text-sm w-full"
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="font-medium">Theme</div>
+          <div class="text-sm text-slate-500 dark:text-slate-400">
+            {currentTheme === 'dark' ? '🌙 Dark mode' : '☀️ Light mode'}
+          </div>
+        </div>
+        <button
+          on:click={() => {
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            currentTheme = newTheme;
+            if (typeof document !== 'undefined') {
+              if (newTheme === 'dark') {
+                document.documentElement.classList.add('dark');
+              } else {
+                document.documentElement.classList.remove('dark');
+              }
+              localStorage.setItem('theme', newTheme);
+            }
+          }}
+          class="px-4 py-2 bg-gray-200 dark:bg-slate-600 hover:bg-gray-300 dark:hover:bg-slate-500 rounded-lg text-sm font-medium transition-colors"
         >
-          <option value="dark">Dark</option>
-          <option value="light">Light (coming soon)</option>
-        </select>
+          Switch to {currentTheme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+        </button>
       </div>
       
       <div>
