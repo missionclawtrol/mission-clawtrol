@@ -598,6 +598,7 @@ async function completeTask(sessionKey: string) {
 // Plugins
 await fastify.register(cors, {
   origin: true,
+  credentials: true,
 });
 
 await fastify.register(cookie);
@@ -615,13 +616,18 @@ await fastify.register(session, {
 await fastify.register(websocket);
 
 // Auth middleware - protect all /api/* routes except health and auth
-const authMiddleware = createAuthMiddleware([
-  /^\/api\/health$/,           // Health check
-  /^\/api\/auth\//,             // Auth routes (login, callback, me, logout)
-  /^\/ws$/,                     // WebSocket endpoint (used by dashboard before login)
-]);
+// Set DISABLE_AUTH=true for local development (skips all auth checks)
+if (process.env.DISABLE_AUTH === 'true') {
+  fastify.log.warn('⚠️  Auth disabled (DISABLE_AUTH=true) — do not use in production');
+} else {
+  const authMiddleware = createAuthMiddleware([
+    /^\/api\/health$/,           // Health check
+    /^\/api\/auth\//,             // Auth routes (login, callback, me, logout)
+    /^\/ws$/,                     // WebSocket endpoint (used by dashboard before login)
+  ]);
 
-fastify.addHook('preHandler', authMiddleware);
+  fastify.addHook('preHandler', authMiddleware);
+}
 
 // Routes
 await fastify.register(agentRoutes, { prefix: '/api/agents' });

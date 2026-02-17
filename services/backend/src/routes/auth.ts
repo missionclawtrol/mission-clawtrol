@@ -189,9 +189,23 @@ export async function authRoutes(fastify: FastifyInstance) {
 
   /**
    * GET /api/auth/me
-   * Returns current user info from session
+   * Returns current user info from session (or mock user when auth disabled)
    */
   fastify.get('/me', async (request: FastifyRequest, reply: FastifyReply) => {
+    // When auth is disabled, return a mock admin user
+    if (process.env.DISABLE_AUTH === 'true') {
+      return {
+        id: 'dev-user',
+        githubLogin: 'dev',
+        name: 'Local Developer',
+        email: 'dev@localhost',
+        avatarUrl: null,
+        role: 'admin',
+        createdAt: new Date().toISOString(),
+        lastLoginAt: new Date().toISOString(),
+      };
+    }
+
     const userId = request.session.get('userId');
 
     if (!userId) {
