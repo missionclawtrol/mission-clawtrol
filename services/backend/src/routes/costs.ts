@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { db, getRawDb } from '../database';
+import { db, getRawDb } from '../database.js';
 
 interface CostSummary {
   totalTasks: number;
