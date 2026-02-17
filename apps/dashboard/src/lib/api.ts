@@ -12,11 +12,21 @@ async function fetchWithTimeout(input: RequestInfo, init?: RequestInit): Promise
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    return await fetch(input, { 
+    const res = await fetch(input, { 
       ...init, 
       signal: controller.signal,
       credentials: 'include', // Required for cookie-based sessions
     });
+
+    // Session expired — redirect to login (skip for auth/me to avoid redirect loops)
+    if (res.status === 401 && typeof window !== 'undefined') {
+      const url = typeof input === 'string' ? input : input.url;
+      if (!url.includes('/auth/me') && !url.includes('/auth/logout')) {
+        window.location.href = '/login';
+      }
+    }
+
+    return res;
   } finally {
     clearTimeout(timeout);
   }
@@ -29,6 +39,17 @@ export interface CurrentUser {
   name?: string;
   email?: string;
   avatarUrl?: string;
+  role?: 'admin' | 'member' | 'viewer';
+}
+
+// Logout
+export async function logout(): Promise<boolean> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/auth/logout`, { method: 'POST' });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 // Fetch current authenticated user
