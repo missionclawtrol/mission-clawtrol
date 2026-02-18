@@ -69,7 +69,7 @@ function rowToTask(row: any): Task {
  */
 export async function loadTasks(): Promise<Task[]> {
   try {
-    const rows = await db.query<any>('SELECT * FROM tasks');
+    const rows = await db.query<any>('SELECT * FROM tasks ORDER BY createdAt DESC');
     return rows.map(rowToTask);
   } catch (error) {
     console.error('Failed to load tasks:', error);
@@ -244,7 +244,7 @@ export async function deleteTask(id: string): Promise<boolean> {
  */
 export async function getTasksByProject(projectId: string): Promise<Task[]> {
   try {
-    const rows = await db.query<any>('SELECT * FROM tasks WHERE projectId = ?', [projectId]);
+    const rows = await db.query<any>('SELECT * FROM tasks WHERE projectId = ? ORDER BY createdAt DESC', [projectId]);
     return rows.map(rowToTask);
   } catch (error) {
     console.error('Failed to get tasks by project:', error);
@@ -257,7 +257,7 @@ export async function getTasksByProject(projectId: string): Promise<Task[]> {
  */
 export async function getTasksByAgent(agentId: string): Promise<Task[]> {
   try {
-    const rows = await db.query<any>('SELECT * FROM tasks WHERE agentId = ?', [agentId]);
+    const rows = await db.query<any>('SELECT * FROM tasks WHERE agentId = ? ORDER BY createdAt DESC', [agentId]);
     return rows.map(rowToTask);
   } catch (error) {
     console.error('Failed to get tasks by agent:', error);
@@ -270,7 +270,7 @@ export async function getTasksByAgent(agentId: string): Promise<Task[]> {
  */
 export async function getTasksByStatus(status: Task['status']): Promise<Task[]> {
   try {
-    const rows = await db.query<any>('SELECT * FROM tasks WHERE status = ?', [status]);
+    const rows = await db.query<any>('SELECT * FROM tasks WHERE status = ? ORDER BY createdAt DESC', [status]);
     return rows.map(rowToTask);
   } catch (error) {
     console.error('Failed to get tasks by status:', error);
