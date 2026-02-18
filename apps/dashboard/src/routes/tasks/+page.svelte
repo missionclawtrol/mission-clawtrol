@@ -261,13 +261,8 @@
     
     // Sort by priority first (P0, P1, P2, P3), then by other criteria
     if (columnId === 'done') {
-      // Sort Done column by priority first, then by completedAt descending (newest first)
+      // Sort Done column by completedAt descending (newest first) — no priority sort
       filtered.sort((a, b) => {
-        // Priority sort (P0 < P1 < P2 < P3 alphabetically)
-        if (a.priority !== b.priority) {
-          return a.priority.localeCompare(b.priority);
-        }
-        // Then by completedAt descending
         const dateA = a.completedAt ? new Date(a.completedAt).getTime() : 0;
         const dateB = b.completedAt ? new Date(b.completedAt).getTime() : 0;
         return dateB - dateA;
