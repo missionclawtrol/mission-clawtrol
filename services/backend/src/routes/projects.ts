@@ -28,55 +28,6 @@ ${description}
 *Working notes and decisions.*
 `;
 
-const STATUS_TEMPLATE = (name: string) => `# Status
-
-**Last Updated:** ${new Date().toISOString().split('T')[0]}
-
-## Current Phase
-
-Phase 1: Setup
-
-## Progress
-
-- [ ] Project created
-- [ ] Goals defined
-- [ ] Implementation started
-
-## Next Steps
-
-1. Define project scope
-2. Assign agents
-3. Begin work
-
-## Blockers
-
-None yet.
-`;
-
-const HANDOFF_TEMPLATE = (name: string) => `# Handoff - ${name}
-
-## Context for New Agents
-
-This document provides context for agents joining this project.
-
-## Key Files
-
-- \`PROJECT.md\` - Project overview and goals
-- \`STATUS.md\` - Current progress and blockers
-
-## Current State
-
-*Describe what's been done and what's next.*
-
-## Important Decisions
-
-*List key decisions made so far.*
-
-## Tips
-
-*Any gotchas or tips for working on this project.*
-`;
-
 // Folders to exclude from project list
 const EXCLUDED_FOLDERS = ['.git', 'node_modules', '.svelte-kit', 'dist', 'build'];
 
@@ -84,9 +35,7 @@ interface Project {
   id: string;
   name: string;
   path: string;
-  hasStatusMd: boolean;
   hasProjectMd: boolean;
-  hasHandoffMd: boolean;
   statusMd?: string;
   projectMd?: string;
   handoffMd?: string;
@@ -119,31 +68,16 @@ export async function projectRoutes(fastify: FastifyInstance) {
         const projectPath = join(WORKSPACE_PATH, entry.name);
         const stats = await stat(projectPath);
         
-        // Check for standard files
-        let hasStatusMd = false;
+        // Check for PROJECT.md (only marker file)
         let hasProjectMd = false;
-        let hasHandoffMd = false;
-        let statusMdPreview = '';
-        
-        try {
-          const statusContent = await readFile(join(projectPath, 'STATUS.md'), 'utf-8');
-          hasStatusMd = true;
-          // Get first 500 chars as preview
-          statusMdPreview = statusContent.slice(0, 500);
-        } catch {}
         
         try {
           await stat(join(projectPath, 'PROJECT.md'));
           hasProjectMd = true;
         } catch {}
         
-        try {
-          await stat(join(projectPath, 'HANDOFF.md'));
-          hasHandoffMd = true;
-        } catch {}
-        
-        // Only include folders that have at least one project marker file
-        if (!hasStatusMd && !hasProjectMd && !hasHandoffMd) {
+        // Only include folders that have PROJECT.md
+        if (!hasProjectMd) {
           continue;
         }
         
@@ -163,10 +97,7 @@ export async function projectRoutes(fastify: FastifyInstance) {
           id: entry.name,
           name: formatProjectName(entry.name),
           path: entry.name + '/',
-          hasStatusMd,
           hasProjectMd,
-          hasHandoffMd,
-          statusMd: statusMdPreview,
           updated: stats.mtime.toISOString(),
           agentCount,
           agentEmojis,
@@ -199,28 +130,16 @@ export async function projectRoutes(fastify: FastifyInstance) {
         
         const folderPath = join(WORKSPACE_PATH, entry.name);
         
-        // Check if any project marker files exist
-        let hasStatusMd = false;
+        // Check if PROJECT.md exists
         let hasProjectMd = false;
-        let hasHandoffMd = false;
-        
-        try {
-          await stat(join(folderPath, 'STATUS.md'));
-          hasStatusMd = true;
-        } catch {}
         
         try {
           await stat(join(folderPath, 'PROJECT.md'));
           hasProjectMd = true;
         } catch {}
         
-        try {
-          await stat(join(folderPath, 'HANDOFF.md'));
-          hasHandoffMd = true;
-        } catch {}
-        
-        // Only include folders that DON'T have any project marker files
-        if (!hasStatusMd && !hasProjectMd && !hasHandoffMd) {
+        // Only include folders that DON'T have PROJECT.md
+        if (!hasProjectMd) {
           importableFolders.push({
             id: entry.name,
             name: formatProjectName(entry.name),
@@ -264,10 +183,8 @@ export async function projectRoutes(fastify: FastifyInstance) {
     try {
       const name = formatProjectName(folderId);
       
-      // Create marker files only if they don't exist
+      // Create PROJECT.md only if it doesn't exist
       const projectMdPath = join(folderPath, 'PROJECT.md');
-      const statusMdPath = join(folderPath, 'STATUS.md');
-      const handoffMdPath = join(folderPath, 'HANDOFF.md');
       
       let createdFiles: string[] = [];
       
@@ -276,20 +193,6 @@ export async function projectRoutes(fastify: FastifyInstance) {
       } catch {
         await writeFile(projectMdPath, PROJECT_TEMPLATE(name, description));
         createdFiles.push('PROJECT.md');
-      }
-      
-      try {
-        await stat(statusMdPath);
-      } catch {
-        await writeFile(statusMdPath, STATUS_TEMPLATE(name));
-        createdFiles.push('STATUS.md');
-      }
-      
-      try {
-        await stat(handoffMdPath);
-      } catch {
-        await writeFile(handoffMdPath, HANDOFF_TEMPLATE(name));
-        createdFiles.push('HANDOFF.md');
       }
 
       // Log to activity feed
@@ -314,9 +217,7 @@ export async function projectRoutes(fastify: FastifyInstance) {
           id: folderId,
           name,
           path: folderId + '/',
-          hasStatusMd: true,
           hasProjectMd: true,
-          hasHandoffMd: true,
         },
         createdFiles,
       };
@@ -334,7 +235,7 @@ export async function projectRoutes(fastify: FastifyInstance) {
     try {
       const stats = await stat(projectPath);
       
-      // Read markdown files
+      // Read markdown files (backward compat: read status/handoff if they exist)
       let statusMd = '', projectMd = '', handoffMd = '';
       
       try { statusMd = await readFile(join(projectPath, 'STATUS.md'), 'utf-8'); } catch {}
@@ -349,9 +250,7 @@ export async function projectRoutes(fastify: FastifyInstance) {
         id,
         name: formatProjectName(id),
         path: id + '/',
-        hasStatusMd: !!statusMd,
         hasProjectMd: !!projectMd,
-        hasHandoffMd: !!handoffMd,
         statusMd,
         projectMd,
         handoffMd,
@@ -497,10 +396,8 @@ export async function projectRoutes(fastify: FastifyInstance) {
       // Create directory
       await mkdir(projectPath, { recursive: true });
 
-      // Create standard files
+      // Create PROJECT.md only
       await writeFile(join(projectPath, 'PROJECT.md'), PROJECT_TEMPLATE(name, description));
-      await writeFile(join(projectPath, 'STATUS.md'), STATUS_TEMPLATE(name));
-      await writeFile(join(projectPath, 'HANDOFF.md'), HANDOFF_TEMPLATE(name));
 
       // Log to activity feed
       logProjectEvent({ action: 'created', projectName: name });
@@ -511,9 +408,7 @@ export async function projectRoutes(fastify: FastifyInstance) {
           id,
           name,
           path: id + '/',
-          hasStatusMd: true,
           hasProjectMd: true,
-          hasHandoffMd: true,
         },
       };
     } catch (error) {

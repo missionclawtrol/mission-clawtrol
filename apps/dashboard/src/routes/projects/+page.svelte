@@ -430,7 +430,7 @@
           <div class="text-center py-8 text-slate-500">Loading folders...</div>
         {:else if importableFolders.length === 0}
           <div class="p-4 bg-blue-500/10 border border-blue-500/30 rounded text-sm text-blue-400">
-            No importable folders found. All workspace folders already have project marker files (PROJECT.md, STATUS.md, or HANDOFF.md).
+            No importable folders found. All workspace folders already have PROJECT.md.
           </div>
         {:else}
           <div>
@@ -469,7 +469,7 @@
           </div>
           
           <p class="text-xs text-slate-500">
-            This will create PROJECT.md, STATUS.md, and HANDOFF.md files in the selected folder without overwriting any existing files.
+            This will create PROJECT.md in the selected folder if it doesn't exist.
           </p>
         {/if}
       </div>
@@ -749,17 +749,6 @@
                 <span>📁</span>
                 <span class="font-medium">{project.name}</span>
               </div>
-              <div class="flex gap-1">
-                {#if project.hasStatusMd}
-                  <span class="text-xs px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded">S</span>
-                {/if}
-                {#if project.hasProjectMd}
-                  <span class="text-xs px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded">P</span>
-                {/if}
-                {#if project.hasHandoffMd}
-                  <span class="text-xs px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 rounded">H</span>
-                {/if}
-              </div>
             </div>
             <div class="text-xs text-slate-500">{project.path}</div>
             <div class="text-xs text-slate-500 dark:text-slate-400 mt-1">{getProjectStats(project.id).completed}/{getProjectStats(project.id).total} tasks</div>
@@ -769,11 +758,6 @@
           </button>
         {/each}
       {/if}
-    </div>
-    <div class="px-4 py-2 border-t border-gray-200 dark:border-slate-700 text-xs text-slate-500">
-      <span class="px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded mr-1">S</span> STATUS.md
-      <span class="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded mx-1">P</span> PROJECT.md
-      <span class="px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 rounded ml-1">H</span> HANDOFF.md
     </div>
   </div>
   
@@ -887,26 +871,6 @@
                   {file.endsWith('/') ? '📁' : '📄'} {file}
                 </span>
               {/each}
-            </div>
-          </div>
-        {/if}
-        
-        <!-- STATUS.md -->
-        {#if selectedProject.statusMd}
-          <div>
-            <h3 class="text-sm text-slate-500 dark:text-slate-400 mb-2 font-medium">STATUS.MD</h3>
-            <div class="p-4 bg-gray-50 dark:bg-slate-900 rounded-lg font-mono text-sm whitespace-pre-wrap overflow-x-auto">
-              {selectedProject.statusMd}
-            </div>
-          </div>
-        {/if}
-        
-        <!-- HANDOFF.md -->
-        {#if selectedProject.handoffMd}
-          <div>
-            <h3 class="text-sm text-slate-500 dark:text-slate-400 mb-2 font-medium">HANDOFF.MD</h3>
-            <div class="p-4 bg-gray-50 dark:bg-slate-900 rounded-lg font-mono text-sm whitespace-pre-wrap overflow-x-auto">
-              {selectedProject.handoffMd}
             </div>
           </div>
         {/if}
