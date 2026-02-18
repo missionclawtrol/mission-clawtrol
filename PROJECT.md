@@ -56,6 +56,7 @@ mission-clawtrol/
 - 📊 **Dashboard Analytics** — Charts, cost tracking, activity timeline
 - 🔔 **Real-time Updates** — WebSocket-powered toasts and live board refresh
 - 🔗 **Webhook System** — Signed webhook notifications for external integrations
+- 📁 **Project Management** — Create new projects or import existing workspace folders with auto-generated templates
 - 🔐 **GitHub OAuth** — Authentication with role-based permissions
 - 🐳 **Docker Ready** — Containerized for production deployment
 
@@ -104,6 +105,9 @@ All endpoints at `http://localhost:3001/api/`:
 | `PATCH /tasks/:id` | Update task (status, assignment, etc.) |
 | `GET/POST /tasks/:id/comments` | Task comments |
 | `GET/POST/PUT/DELETE /webhooks` | Webhook management |
+| `GET /projects` | List all projects |
+| `GET /projects/importable` | List workspace folders available for import |
+| `POST /projects/import` | Import existing folder as project |
 | `GET /users` | Team members |
 | `GET/PUT /settings` | App settings |
 | `GET /audit` | Audit log |
