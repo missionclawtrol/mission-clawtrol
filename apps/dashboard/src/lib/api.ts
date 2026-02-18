@@ -219,6 +219,46 @@ export async function deleteProject(id: string): Promise<{ success: boolean; err
   }
 }
 
+export interface ImportableFolder {
+  id: string;
+  name: string;
+  path: string;
+}
+
+export async function fetchImportableFolders(): Promise<ImportableFolder[]> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/projects/importable`);
+    const data = await res.json();
+    return data.folders || [];
+  } catch (error) {
+    console.error('Failed to fetch importable folders:', error);
+    return [];
+  }
+}
+
+export interface ImportProjectParams {
+  folderId: string;
+  description?: string;
+}
+
+export async function importProject(params: ImportProjectParams): Promise<{ success: boolean; project?: Project; createdFiles?: string[]; error?: string }> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/projects/import`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.error || 'Failed to import project' };
+    }
+    return { success: true, project: data.project, createdFiles: data.createdFiles };
+  } catch (error) {
+    console.error('Failed to import project:', error);
+    return { success: false, error: 'Network error' };
+  }
+}
+
 // Agent spawning
 export interface SpawnAgentParams {
   task?: string;

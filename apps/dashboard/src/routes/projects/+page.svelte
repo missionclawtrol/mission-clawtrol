@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { fetchProjects, fetchProject, createProject, deleteProject, spawnAgent, fetchProjectAgents, fetchProjectAgentSummary, sendMessageToAgent, deleteAgent, changeAgentModel, fetchTasks, type Project, type AgentAssociation, type AgentSummary, type Task } from '$lib/api';
+  import { fetchProjects, fetchProject, createProject, deleteProject, spawnAgent, fetchProjectAgents, fetchProjectAgentSummary, sendMessageToAgent, deleteAgent, changeAgentModel, fetchTasks, fetchImportableFolders, importProject, type Project, type AgentAssociation, type AgentSummary, type Task, type ImportableFolder } from '$lib/api';
   
   let projects: Project[] = [];
   let selectedProject: Project | null = null;
@@ -13,6 +13,7 @@
   
   // Modal states
   let showNewProjectModal = false;
+  let showImportModal = false;
   let showSpawnAgentModal = false;
   let showDeleteConfirm = false;
   let showDeleteAgentConfirm = false;
@@ -23,6 +24,12 @@
   let agentToChangeModel: AgentAssociation | null = null;
   let agentMessage = '';
   let selectedModel = '';
+  
+  // Import modal states
+  let importableFolders: ImportableFolder[] = [];
+  let selectedFolderId = '';
+  let importDescription = '';
+  let loadingImportable = false;
   
   // Form states
   let newProjectName = '';
@@ -102,6 +109,46 @@
       }
     } else {
       formError = result.error || 'Failed to create project';
+    }
+  }
+  
+  async function openImportModal() {
+    showImportModal = true;
+    selectedFolderId = '';
+    importDescription = '';
+    formError = '';
+    
+    loadingImportable = true;
+    importableFolders = await fetchImportableFolders();
+    loadingImportable = false;
+  }
+  
+  async function handleImportProject() {
+    if (!selectedFolderId) {
+      formError = 'Please select a folder to import';
+      return;
+    }
+    
+    formLoading = true;
+    formError = '';
+    
+    const result = await importProject({
+      folderId: selectedFolderId,
+      description: importDescription.trim(),
+    });
+    
+    formLoading = false;
+    
+    if (result.success) {
+      showImportModal = false;
+      selectedFolderId = '';
+      importDescription = '';
+      await loadProjects();
+      if (result.project) {
+        await selectProject(result.project.id);
+      }
+    } else {
+      formError = result.error || 'Failed to import project';
     }
   }
   
@@ -226,6 +273,7 @@
   
   function closeModals() {
     showNewProjectModal = false;
+    showImportModal = false;
     showSpawnAgentModal = false;
     showDeleteConfirm = false;
     showDeleteAgentConfirm = false;
@@ -236,6 +284,8 @@
     agentToChangeModel = null;
     selectedModel = '';
     agentTask = '';
+    selectedFolderId = '';
+    importDescription = '';
     formError = '';
   }
 
@@ -302,7 +352,7 @@
 </script>
 
 <!-- Modal Backdrop -->
-{#if showNewProjectModal || showSpawnAgentModal || showDeleteConfirm || showDeleteAgentConfirm || showModelModal}
+{#if showNewProjectModal || showImportModal || showSpawnAgentModal || showDeleteConfirm || showDeleteAgentConfirm || showModelModal}
   <button 
     class="fixed inset-0 bg-black/50 z-40 cursor-default"
     on:click={closeModals}
@@ -357,6 +407,85 @@
           class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition-colors disabled:opacity-50"
         >
           {formLoading ? 'Creating...' : 'Create Project'}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Import Project Modal -->
+{#if showImportModal}
+  <div class="fixed inset-0 flex items-center justify-center z-50 p-4">
+    <div class="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 w-full max-w-md" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="import-project-title" tabindex="-1">
+      <div class="px-4 py-3 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between">
+        <h2 id="import-project-title" class="font-semibold">📥 Import Existing Folder</h2>
+        <button on:click={closeModals} class="text-slate-500 dark:text-slate-400 hover:text-white">✕</button>
+      </div>
+      <div class="p-4 space-y-4">
+        {#if formError}
+          <div class="p-3 bg-red-500/20 border border-red-500 rounded text-red-400 text-sm">{formError}</div>
+        {/if}
+        
+        {#if loadingImportable}
+          <div class="text-center py-8 text-slate-500">Loading folders...</div>
+        {:else if importableFolders.length === 0}
+          <div class="p-4 bg-blue-500/10 border border-blue-500/30 rounded text-sm text-blue-400">
+            No importable folders found. All workspace folders already have project marker files (PROJECT.md, STATUS.md, or HANDOFF.md).
+          </div>
+        {:else}
+          <div>
+            <label for="import-folder-select" class="block text-sm text-slate-500 dark:text-slate-400 mb-2">Select Folder</label>
+            <div class="space-y-2 max-h-64 overflow-y-auto border border-gray-200 dark:border-slate-700 rounded p-2">
+              {#each importableFolders as folder}
+                <button
+                  on:click={() => selectedFolderId = folder.id}
+                  class="w-full text-left p-3 rounded transition-colors
+                    {selectedFolderId === folder.id ? 'bg-blue-600/20 border border-blue-500/50' : 'bg-gray-100 dark:bg-slate-700/50 hover:bg-slate-700 border border-transparent'}"
+                >
+                  <div class="flex items-center gap-2">
+                    <span>📁</span>
+                    <div class="flex-1">
+                      <div class="font-medium text-sm">{folder.name}</div>
+                      <div class="text-xs text-slate-500">{folder.path}</div>
+                    </div>
+                    {#if selectedFolderId === folder.id}
+                      <span class="text-blue-400">✓</span>
+                    {/if}
+                  </div>
+                </button>
+              {/each}
+            </div>
+          </div>
+          
+          <div>
+            <label for="import-description" class="block text-sm text-slate-500 dark:text-slate-400 mb-1">Description (optional)</label>
+            <textarea 
+              id="import-description"
+              bind:value={importDescription}
+              placeholder="Brief description of the project..."
+              rows="3"
+              class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded focus:border-blue-500 focus:outline-none resize-none"
+            ></textarea>
+          </div>
+          
+          <p class="text-xs text-slate-500">
+            This will create PROJECT.md, STATUS.md, and HANDOFF.md files in the selected folder without overwriting any existing files.
+          </p>
+        {/if}
+      </div>
+      <div class="px-4 py-3 border-t border-gray-200 dark:border-slate-700 flex justify-end gap-2">
+        <button 
+          on:click={closeModals}
+          class="px-4 py-2 bg-gray-100 dark:bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors"
+        >
+          Cancel
+        </button>
+        <button 
+          on:click={handleImportProject}
+          disabled={formLoading || !selectedFolderId || loadingImportable}
+          class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition-colors disabled:opacity-50"
+        >
+          {formLoading ? 'Importing...' : 'Import Project'}
         </button>
       </div>
     </div>
@@ -582,6 +711,12 @@
           class="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs font-medium transition-colors"
         >
           + New
+        </button>
+        <button 
+          on:click={openImportModal}
+          class="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-xs font-medium transition-colors"
+        >
+          📥 Import
         </button>
         <button on:click={loadProjects} class="text-xs text-slate-500 hover:text-slate-600 dark:text-slate-300">↻</button>
       </div>

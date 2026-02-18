@@ -185,6 +185,147 @@ export async function projectRoutes(fastify: FastifyInstance) {
     }
   });
   
+  // Get importable folders (folders without project marker files)
+  fastify.get('/importable', async (request, reply) => {
+    try {
+      const entries = await readdir(WORKSPACE_PATH, { withFileTypes: true });
+      
+      const importableFolders: Array<{ id: string; name: string; path: string }> = [];
+      
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        if (entry.name.startsWith('.')) continue;
+        if (EXCLUDED_FOLDERS.includes(entry.name)) continue;
+        
+        const folderPath = join(WORKSPACE_PATH, entry.name);
+        
+        // Check if any project marker files exist
+        let hasStatusMd = false;
+        let hasProjectMd = false;
+        let hasHandoffMd = false;
+        
+        try {
+          await stat(join(folderPath, 'STATUS.md'));
+          hasStatusMd = true;
+        } catch {}
+        
+        try {
+          await stat(join(folderPath, 'PROJECT.md'));
+          hasProjectMd = true;
+        } catch {}
+        
+        try {
+          await stat(join(folderPath, 'HANDOFF.md'));
+          hasHandoffMd = true;
+        } catch {}
+        
+        // Only include folders that DON'T have any project marker files
+        if (!hasStatusMd && !hasProjectMd && !hasHandoffMd) {
+          importableFolders.push({
+            id: entry.name,
+            name: formatProjectName(entry.name),
+            path: entry.name + '/',
+          });
+        }
+      }
+      
+      // Sort alphabetically
+      importableFolders.sort((a, b) => a.name.localeCompare(b.name));
+      
+      return { folders: importableFolders };
+    } catch (error) {
+      fastify.log.error(error);
+      return { folders: [], error: 'Failed to read workspace' };
+    }
+  });
+  
+  // Import an existing folder as a project
+  fastify.post<{
+    Body: { folderId: string; description?: string };
+  }>('/import', async (request, reply) => {
+    const { folderId, description = '' } = request.body;
+
+    if (!folderId || typeof folderId !== 'string') {
+      return reply.status(400).send({ error: 'Folder ID is required' });
+    }
+
+    const folderPath = join(WORKSPACE_PATH, folderId);
+
+    // Check if folder exists
+    try {
+      const stats = await stat(folderPath);
+      if (!stats.isDirectory()) {
+        return reply.status(400).send({ error: 'Path is not a directory' });
+      }
+    } catch {
+      return reply.status(404).send({ error: 'Folder not found' });
+    }
+
+    try {
+      const name = formatProjectName(folderId);
+      
+      // Create marker files only if they don't exist
+      const projectMdPath = join(folderPath, 'PROJECT.md');
+      const statusMdPath = join(folderPath, 'STATUS.md');
+      const handoffMdPath = join(folderPath, 'HANDOFF.md');
+      
+      let createdFiles: string[] = [];
+      
+      try {
+        await stat(projectMdPath);
+      } catch {
+        await writeFile(projectMdPath, PROJECT_TEMPLATE(name, description));
+        createdFiles.push('PROJECT.md');
+      }
+      
+      try {
+        await stat(statusMdPath);
+      } catch {
+        await writeFile(statusMdPath, STATUS_TEMPLATE(name));
+        createdFiles.push('STATUS.md');
+      }
+      
+      try {
+        await stat(handoffMdPath);
+      } catch {
+        await writeFile(handoffMdPath, HANDOFF_TEMPLATE(name));
+        createdFiles.push('HANDOFF.md');
+      }
+
+      // Log to activity feed
+      logProjectEvent({ 
+        action: 'created', 
+        projectName: name,
+      });
+      
+      addActivity({
+        type: 'project',
+        message: `Imported existing folder as project: ${name}`,
+        project: folderId,
+        severity: 'success',
+        details: {
+          createdFiles,
+        },
+      });
+
+      return {
+        success: true,
+        project: {
+          id: folderId,
+          name,
+          path: folderId + '/',
+          hasStatusMd: true,
+          hasProjectMd: true,
+          hasHandoffMd: true,
+        },
+        createdFiles,
+      };
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({ error: 'Failed to import folder' });
+    }
+  });
+  
   // Get single project with full details
   fastify.get('/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
