@@ -7,7 +7,8 @@
   import { checkHealth, fetchCurrentUser, logout, type CurrentUser } from '$lib/api';
   import { initTaskWebSocket, setCurrentUserId } from '$lib/taskWebSocket';
   import Toast from '$lib/components/Toast.svelte';
-  
+  import { fetchSetupStatus, createFirstProject, type SetupStatus } from '$lib/api';
+
   const tabs = [
     { name: 'Overview', href: '/', icon: '🏠' },
     { name: 'Roster', href: '/roster', icon: '👥' },
@@ -26,6 +27,11 @@
   let authChecked = false;
   let userMenuOpen = false;
   let theme: 'dark' | 'light' = 'dark';
+
+  // Setup banner
+  let setupStatus: SetupStatus | null = null;
+  let showSetupBanner = true;
+  let creatingFirstProject = false;
 
   function toggleUserMenu() {
     userMenuOpen = !userMenuOpen;
@@ -72,6 +78,37 @@
     }
   }
   
+  async function loadSetupStatus() {
+    try {
+      setupStatus = await fetchSetupStatus();
+      // Auto-dismiss if complete
+      if (setupStatus.complete) {
+        showSetupBanner = false;
+      }
+    } catch {
+      // Silently ignore setup status errors
+    }
+  }
+
+  function dismissSetup() {
+    showSetupBanner = false;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('setupBannerDismissed', 'true');
+    }
+  }
+
+  async function handleCreateFirstProject() {
+    creatingFirstProject = true;
+    try {
+      await createFirstProject();
+      await loadSetupStatus();
+    } catch (err) {
+      console.error('Failed to create first project:', err);
+    } finally {
+      creatingFirstProject = false;
+    }
+  }
+
   let intervalId: ReturnType<typeof setInterval> | undefined;
 
   onMount(() => {
@@ -80,6 +117,15 @@
     checkAuth();
     connectWebSocket();
     initTaskWebSocket(); // Initialize task WebSocket listener
+
+    // Load setup banner dismiss state
+    if (typeof localStorage !== 'undefined') {
+      const dismissed = localStorage.getItem('setupBannerDismissed');
+      if (dismissed === 'true') showSetupBanner = false;
+    }
+
+    // Load setup status (non-blocking)
+    loadSetupStatus();
 
     // Check backend health every 10 seconds
     intervalId = window.setInterval(checkBackend, 10000);
@@ -254,6 +300,37 @@
       </div>
     </header>
     
+    <!-- Setup Banner - show when setup incomplete and not dismissed -->
+    {#if showSetupBanner && setupStatus && !setupStatus.complete && currentUser}
+      <div class="bg-blue-600/10 border-b border-blue-500/20 px-6 py-3 flex items-center gap-6">
+        <span class="text-blue-400 font-medium">🚀 Getting started</span>
+        <div class="flex items-center gap-4 text-sm flex-1 flex-wrap">
+          <span class={setupStatus.gatewayConnected ? 'text-green-400' : 'text-slate-500'}>
+            {setupStatus.gatewayConnected ? '✅' : '⬜'} Gateway connected
+          </span>
+          <span class={setupStatus.agents.qa && setupStatus.agents.editor ? 'text-green-400' : 'text-amber-400'}>
+            {setupStatus.agents.qa && setupStatus.agents.editor ? '✅' : '⬜'} Minimum agents
+            {#if !setupStatus.agents.qa || !setupStatus.agents.editor}
+              <a href="/roster" class="ml-1 underline text-blue-400">→ Create</a>
+            {/if}
+          </span>
+          <span class={setupStatus.hasProjects ? 'text-green-400' : 'text-amber-400'}>
+            {setupStatus.hasProjects ? '✅' : '⬜'} First project
+            {#if !setupStatus.hasProjects}
+              <button
+                on:click={handleCreateFirstProject}
+                disabled={creatingFirstProject}
+                class="ml-1 underline text-blue-400 disabled:opacity-50"
+              >
+                {creatingFirstProject ? 'Creating...' : '→ Create'}
+              </button>
+            {/if}
+          </span>
+        </div>
+        <button on:click={dismissSetup} class="text-slate-500 hover:text-white text-sm flex-shrink-0">Dismiss</button>
+      </div>
+    {/if}
+
     <!-- Tab Navigation - only show for authenticated users -->
     {#if currentUser}
       <nav class="bg-gray-50 dark:bg-slate-800/50 border-b border-gray-200 dark:border-slate-700 px-6">

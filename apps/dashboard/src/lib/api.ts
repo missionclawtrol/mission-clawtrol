@@ -765,6 +765,95 @@ export async function fetchAuditLog(params?: FetchAuditParams): Promise<AuditEnt
   }
 }
 
+// ---- Setup / Onboarding ----
+
+export interface SetupStatus {
+  gatewayConnected: boolean;
+  agents: { qa: boolean; editor: boolean };
+  hasProjects: boolean;
+  complete: boolean;
+}
+
+export async function fetchSetupStatus(): Promise<SetupStatus> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/setup/status`);
+    if (!res.ok) throw new Error('Failed to fetch setup status');
+    return res.json();
+  } catch (error) {
+    console.error('Failed to fetch setup status:', error);
+    return { gatewayConnected: false, agents: { qa: false, editor: false }, hasProjects: false, complete: false };
+  }
+}
+
+export async function createMinimumAgents(): Promise<{ created: string[] }> {
+  const res = await fetchWithTimeout(`${API_BASE}/setup/minimum-agents`, { method: 'POST' });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as any).error || 'Failed to create minimum agents');
+  }
+  return res.json();
+}
+
+export async function createFirstProject(): Promise<{ created: boolean; projectId: string }> {
+  const res = await fetchWithTimeout(`${API_BASE}/setup/first-project`, { method: 'POST' });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as any).error || 'Failed to create first project');
+  }
+  return res.json();
+}
+
+export async function fetchAgentsConfig(): Promise<any[]> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/agents-config`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.agents || [];
+  } catch (error) {
+    console.error('Failed to fetch agents config:', error);
+    return [];
+  }
+}
+
+export async function createAgentConfig(data: {
+  id: string;
+  name?: string;
+  model: string;
+  workspace: string;
+}): Promise<void> {
+  const res = await fetchWithTimeout(`${API_BASE}/agents-config`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body as any).error || 'Failed to create agent config');
+  }
+}
+
+export async function updateAgentConfig(id: string, patch: object): Promise<void> {
+  const res = await fetchWithTimeout(`${API_BASE}/agents-config/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body as any).error || 'Failed to update agent config');
+  }
+}
+
+export async function deleteAgentConfig(id: string): Promise<void> {
+  const res = await fetchWithTimeout(`${API_BASE}/agents-config/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body as any).error || 'Failed to delete agent config');
+  }
+}
+
 // Generic API helper for custom endpoints
 export const api = {
   get: async (path: string) => {

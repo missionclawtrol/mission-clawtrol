@@ -256,6 +256,70 @@ export class GatewayClient extends EventEmitter {
     this.ws?.close();
     this.connected = false;
   }
+
+  async getConfig(): Promise<any> {
+    const { readFile } = await import('fs/promises');
+    const { join } = await import('path');
+    const configPath = join(process.env.HOME || '', '.openclaw', 'openclaw.json');
+    const data = await readFile(configPath, 'utf-8');
+    return JSON.parse(data);
+  }
+
+  async patchConfig(patch: object): Promise<any> {
+    const { readFile, writeFile } = await import('fs/promises');
+    const { join } = await import('path');
+    const configPath = join(process.env.HOME || '', '.openclaw', 'openclaw.json');
+    const data = await readFile(configPath, 'utf-8');
+    const config = JSON.parse(data);
+
+    // Deep merge the patch
+    function deepMerge(target: any, source: any): any {
+      const result = { ...target };
+      for (const key of Object.keys(source)) {
+        if (key === 'list' && Array.isArray(source[key])) {
+          // For agents.list: merge by id (append new agents, don't duplicate)
+          const existing: any[] = Array.isArray(target[key]) ? target[key] : [];
+          const incoming: any[] = source[key];
+          const merged = [...existing];
+          for (const item of incoming) {
+            if (item.id && !merged.some((e: any) => e.id === item.id)) {
+              merged.push(item);
+            }
+          }
+          result[key] = merged;
+        } else if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+          result[key] = deepMerge(target[key] || {}, source[key]);
+        } else {
+          result[key] = source[key];
+        }
+      }
+      return result;
+    }
+
+    const merged = deepMerge(config, patch);
+    await writeFile(configPath, JSON.stringify(merged, null, 2), 'utf-8');
+    return merged;
+  }
+
+  async getAgentsList(): Promise<any[]> {
+    const config = await this.getConfig();
+    return config?.agents?.list || [];
+  }
+
+  async createAgent(agent: { id: string; model: string; workspace: string; name?: string }): Promise<void> {
+    await this.patchConfig({ agents: { list: [agent] } });
+  }
+
+  async deleteAgent(agentId: string): Promise<void> {
+    const { readFile, writeFile } = await import('fs/promises');
+    const { join } = await import('path');
+    const configPath = join(process.env.HOME || '', '.openclaw', 'openclaw.json');
+    const data = await readFile(configPath, 'utf-8');
+    const config = JSON.parse(data);
+    const list = (config?.agents?.list || []).filter((a: any) => a.id !== agentId);
+    config.agents.list = list;
+    await writeFile(configPath, JSON.stringify(config, null, 2), 'utf-8');
+  }
 }
 
 // Singleton instance
