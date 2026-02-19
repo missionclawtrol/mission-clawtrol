@@ -103,7 +103,12 @@
   }
 
   function fmtMoney(n: number) {
-    return n < 0.01 ? `$${n.toFixed(4)}` : `$${n.toFixed(2)}`;
+    if (n < 0.01) return `$${n.toFixed(4)}`;
+    return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  }
+
+  function fmtNumber(n: number) {
+    return n.toLocaleString('en-US', { maximumFractionDigits: 1 });
   }
 
   function priorityLabel(p?: number) {
@@ -156,6 +161,15 @@
           </button>
         {/each}
       </div>
+
+      <!-- Print -->
+      <button
+        on:click={() => window.print()}
+        class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors"
+        title="Print report"
+      >
+        🖨️ Print
+      </button>
 
       <!-- Send to Slack -->
       <button
@@ -229,7 +243,7 @@
           <div class="text-xs text-slate-400 mt-1">Tasks Shipped</div>
         </div>
         <div class="text-center">
-          <div class="text-2xl font-bold text-green-400">{Math.round(report.costs.hoursSaved)}h</div>
+          <div class="text-2xl font-bold text-green-400">{fmtNumber(report.costs.hoursSaved)}h</div>
           <div class="text-xs text-slate-400 mt-1">Hours Saved</div>
         </div>
         <div class="text-center">
@@ -237,13 +251,13 @@
           <div class="text-xs text-slate-400 mt-1">ROI</div>
         </div>
         <div class="text-center">
-          <div class="text-2xl font-bold text-emerald-400">${report.costs.savings.toFixed(0)}</div>
+          <div class="text-2xl font-bold text-emerald-400">{fmtMoney(report.costs.savings)}</div>
           <div class="text-xs text-slate-400 mt-1">Net Savings</div>
         </div>
       </div>
       <div class="mt-4 pt-4 border-t border-slate-700 flex flex-wrap gap-6 text-sm text-slate-400">
         <span>AI cost: <span class="text-slate-200">{fmtMoney(report.costs.aiCost)}</span></span>
-        <span>Human equivalent: <span class="text-slate-200">${report.costs.humanCost.toFixed(0)}</span></span>
+        <span>Human equivalent: <span class="text-slate-200">{fmtMoney(report.costs.humanCost)}</span></span>
       </div>
     </div>
 
