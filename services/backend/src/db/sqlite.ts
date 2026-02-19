@@ -126,6 +126,19 @@ export class SqliteDatabase implements IDatabase {
       );
 
       CREATE INDEX IF NOT EXISTS idx_webhooks_enabled ON webhooks(enabled);
+
+      CREATE TABLE IF NOT EXISTS milestones (
+        id TEXT PRIMARY KEY,
+        projectId TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        targetDate TEXT,
+        status TEXT NOT NULL DEFAULT 'open',
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_milestones_projectId ON milestones(projectId);
     `);
 
     // Schema migrations (backward compatibility)
@@ -141,6 +154,7 @@ export class SqliteDatabase implements IDatabase {
     addColumnIfMissing('tasks', 'createdBy', 'TEXT');
     addColumnIfMissing('tasks', 'assignedTo', 'TEXT');
     addColumnIfMissing('tasks', 'dueDate', 'TEXT');
+    addColumnIfMissing('tasks', 'milestoneId', 'TEXT');
 
     // Insert default settings if not exist
     this.db

@@ -164,13 +164,40 @@ function hasReviewChecklist(handoffNotes?: string | null): boolean {
 export async function taskRoutes(fastify: FastifyInstance) {
   // GET /tasks - list all tasks with optional filters
   fastify.get<{
-    Querystring: { projectId?: string; agentId?: string; status?: string };
+    Querystring: { projectId?: string; agentId?: string; status?: string; milestoneId?: string };
   }>('/', async (request, reply) => {
     try {
-      const { projectId, agentId, status } = request.query;
+      const { projectId, agentId, status, milestoneId } = request.query;
       let tasks: Task[];
 
-      if (projectId) {
+      if (milestoneId) {
+        // Filter by milestoneId — custom query via db
+        const rows = await db.query<any>('SELECT * FROM tasks WHERE milestoneId = ? ORDER BY createdAt DESC', [milestoneId]);
+        tasks = rows.map((row: any) => ({
+          id: row.id,
+          title: row.title,
+          description: row.description,
+          status: row.status,
+          priority: row.priority,
+          projectId: row.projectId,
+          agentId: row.agentId,
+          sessionKey: row.sessionKey,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+          completedAt: row.completedAt,
+          handoffNotes: row.handoffNotes,
+          cost: row.cost,
+          model: row.model,
+          runtime: row.runtime,
+          commitHash: row.commitHash,
+          estimatedHumanMinutes: row.estimatedHumanMinutes,
+          humanCost: row.humanCost,
+          createdBy: row.createdBy || null,
+          assignedTo: row.assignedTo || null,
+          dueDate: row.dueDate || null,
+          milestoneId: row.milestoneId || null,
+        }));
+      } else if (projectId) {
         tasks = await getTasksByProject(projectId);
       } else if (agentId) {
         tasks = await getTasksByAgent(agentId);
@@ -223,6 +250,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
       sessionKey?: string | null;
       handoffNotes?: string | null;
       dueDate?: string | null;
+      milestoneId?: string | null;
     };
   }>('/', async (request, reply) => {
     try {
@@ -236,6 +264,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
         sessionKey = null,
         handoffNotes = null,
         dueDate = null,
+        milestoneId = null,
       } = request.body;
 
       // Viewers cannot create tasks
@@ -278,6 +307,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
         dueDate: dueDate || null,
         createdBy,
         assignedTo,
+        milestoneId: milestoneId || null,
       });
 
       const workOrderPath = await createWorkOrderFile(task);

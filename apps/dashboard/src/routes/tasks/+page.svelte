@@ -4,7 +4,7 @@
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { fetchTasks, createTask, updateTask, deleteTask, spawnAgent, fetchProjects, fetchAgents, fetchSettings, fetchUsers, type Task, type Project, type Agent, type Settings, type UserInfo } from '$lib/api';
+  import { fetchTasks, createTask, updateTask, deleteTask, spawnAgent, fetchProjects, fetchAgents, fetchSettings, fetchUsers, fetchMilestones, type Task, type Project, type Agent, type Settings, type UserInfo, type Milestone } from '$lib/api';
   import { onTaskUpdate } from '$lib/taskWebSocket';
   
   // Data
@@ -26,6 +26,10 @@
   let draggedTask: Task | null = null;
   let dragOverColumn: string | null = null;
   
+  // Milestone state
+  let milestones: Milestone[] = [];
+  let selectedMilestoneId = ''; // Empty = all milestones
+
   // Filter state - sync with URL query params
   let searchQuery = '';
   let selectedAssignee = '';
@@ -36,6 +40,15 @@
     searchQuery = $page.url.searchParams.get('q') || '';
     selectedAssignee = $page.url.searchParams.get('assignee') || '';
     selectedProjectId = $page.url.searchParams.get('project') || '';
+    selectedMilestoneId = $page.url.searchParams.get('milestone') || '';
+  }
+
+  // When project filter changes, load milestones for that project
+  $: if (selectedProjectId && !loading) {
+    fetchMilestones(selectedProjectId).then(ms => { milestones = ms; });
+  } else if (!selectedProjectId) {
+    milestones = [];
+    if (!$page.url.searchParams.get('milestone')) selectedMilestoneId = '';
   }
   
   // Get unique assignees from tasks
@@ -53,6 +66,7 @@
     if (searchQuery) params.set('q', searchQuery);
     if (selectedAssignee) params.set('assignee', selectedAssignee);
     if (selectedProjectId) params.set('project', selectedProjectId);
+    if (selectedMilestoneId) params.set('milestone', selectedMilestoneId);
     
     const queryString = params.toString();
     const newUrl = queryString ? `/tasks?${queryString}` : '/tasks';
@@ -65,7 +79,12 @@
     // Clear existing timeout on changes
     clearTimeout(filterTimeout);
     // Only update URL if we're past initial mount (loading is false)
-    if (!loading && (searchQuery !== $page.url.searchParams.get('q') || selectedAssignee !== $page.url.searchParams.get('assignee') || selectedProjectId !== $page.url.searchParams.get('project'))) {
+    if (!loading && (
+      searchQuery !== $page.url.searchParams.get('q') ||
+      selectedAssignee !== $page.url.searchParams.get('assignee') ||
+      selectedProjectId !== $page.url.searchParams.get('project') ||
+      selectedMilestoneId !== ($page.url.searchParams.get('milestone') || '')
+    )) {
       filterTimeout = setTimeout(updateUrlParams, 300);
     }
   }
@@ -75,11 +94,12 @@
     searchQuery = '';
     selectedAssignee = '';
     selectedProjectId = '';
+    selectedMilestoneId = '';
     updateUrlParams();
   }
   
   // Check if any filters are active
-  $: hasActiveFilters = searchQuery || selectedAssignee || selectedProjectId;
+  $: hasActiveFilters = searchQuery || selectedAssignee || selectedProjectId || selectedMilestoneId;
   
   // Persist project filter to localStorage (legacy - now mainly using URL)
   const PROJECT_FILTER_KEY = 'mission-clawtrol-project-filter';
@@ -126,6 +146,12 @@
     if (!selectedProjectId) return true;
     return task.projectId === selectedProjectId;
   }
+
+  // Check if task matches milestone filter
+  function matchesMilestone(task: Task): boolean {
+    if (!selectedMilestoneId) return true;
+    return task.milestoneId === selectedMilestoneId;
+  }
   
   // Form state
   let formError = '';
@@ -138,7 +164,24 @@
     assignedTo: '',
     priority: 'P2' as const,
     dueDate: '',
+    milestoneId: '',
   };
+
+  // Milestones for the new task's project
+  let newTaskMilestones: Milestone[] = [];
+  $: if (newTask.projectId) {
+    fetchMilestones(newTask.projectId).then(ms => { newTaskMilestones = ms; });
+  } else {
+    newTaskMilestones = [];
+  }
+
+  // Milestones for the selected task (detail panel)
+  let selectedTaskMilestones: Milestone[] = [];
+  $: if (selectedTask?.projectId) {
+    fetchMilestones(selectedTask.projectId).then(ms => { selectedTaskMilestones = ms; });
+  } else {
+    selectedTaskMilestones = [];
+  }
   
   // Comments state
   interface TaskComment {
@@ -265,6 +308,8 @@
       if (!matchesAssignee(t)) return false;
       // Filter by search query
       if (!matchesSearch(t)) return false;
+      // Filter by milestone if one is selected
+      if (!matchesMilestone(t)) return false;
       return true;
     });
     
@@ -521,13 +566,14 @@
       priority: newTask.priority,
       status: 'backlog',
       dueDate: newTask.dueDate ? new Date(newTask.dueDate).toISOString() : undefined,
-    });
+      milestoneId: newTask.milestoneId || undefined,
+    } as any);
     
     formLoading = false;
     
     if (result.success) {
       showNewTaskModal = false;
-      newTask = { title: '', description: '', projectId: '', agentId: '', assignedTo: '', priority: 'P2', dueDate: '' };
+      newTask = { title: '', description: '', projectId: '', agentId: '', assignedTo: '', priority: 'P2', dueDate: '', milestoneId: '' };
       await loadData();
     } else {
       formError = result.error || 'Failed to create task';
@@ -625,10 +671,16 @@
     formError = '';
   }
   
-  onMount(() => {
+  onMount(async () => {
     // Filters are now loaded from URL query params via reactive statement
     // Initial load
-    loadData();
+    await loadData();
+
+    // Load milestones if a project filter is set from URL
+    const projectParam = $page.url.searchParams.get('project');
+    if (projectParam) {
+      milestones = await fetchMilestones(projectParam);
+    }
     
     // Register WebSocket callback for real-time updates
     onTaskUpdate(() => {
@@ -748,6 +800,22 @@
             class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded focus:border-blue-500 focus:outline-none"
           />
         </div>
+
+        {#if newTaskMilestones.length > 0}
+          <div>
+            <label for="task-milestone" class="block text-sm text-slate-500 dark:text-slate-400 mb-1">Milestone (Optional)</label>
+            <select
+              id="task-milestone"
+              bind:value={newTask.milestoneId}
+              class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded focus:border-blue-500 focus:outline-none"
+            >
+              <option value="">No milestone</option>
+              {#each newTaskMilestones.filter(m => m.status === 'open') as m}
+                <option value={m.id}>🎯 {m.name}</option>
+              {/each}
+            </select>
+          </div>
+        {/if}
       </div>
       <div class="px-4 py-3 border-t border-gray-200 dark:border-slate-700 flex justify-end gap-2">
         <button 
@@ -867,6 +935,27 @@
             {/if}
           </div>
         </div>
+
+        {#if selectedTaskMilestones.length > 0}
+          <div>
+            <h4 class="text-sm text-slate-500 dark:text-slate-400 mb-1">Milestone</h4>
+            <select
+              class="w-full bg-gray-100 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded px-3 py-2 text-white"
+              value={selectedTask.milestoneId || ''}
+              on:change={async (e) => {
+                const val = e.currentTarget.value || null;
+                await updateTask(selectedTask.id, { milestoneId: val } as any);
+                await loadData();
+                if (selectedTask) selectedTask = { ...selectedTask, milestoneId: val };
+              }}
+            >
+              <option value="">No milestone</option>
+              {#each selectedTaskMilestones.filter(m => m.status === 'open') as m}
+                <option value={m.id}>🎯 {m.name}</option>
+              {/each}
+            </select>
+          </div>
+        {/if}
 
         {#if selectedTask.createdBy}
           <div>
@@ -1095,6 +1184,19 @@
           <option value={project.id}>{project.name}</option>
         {/each}
       </select>
+
+      <!-- Milestone Filter (shown when a project is selected) -->
+      {#if selectedProjectId && milestones.length > 0}
+        <select
+          bind:value={selectedMilestoneId}
+          class="px-3 py-2 bg-gray-100 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded text-sm focus:outline-none focus:border-blue-500 min-w-[140px]"
+        >
+          <option value="">All Milestones</option>
+          {#each milestones as m}
+            <option value={m.id}>🎯 {m.name}</option>
+          {/each}
+        </select>
+      {/if}
       
       <!-- Clear Filters Button -->
       {#if hasActiveFilters}

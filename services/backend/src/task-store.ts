@@ -25,6 +25,7 @@ export interface Task {
   createdBy?: string | null; // User ID who created this task
   assignedTo?: string | null; // User ID this task is assigned to
   dueDate?: string | null; // ISO timestamp for when task is due
+  milestoneId?: string | null; // Milestone this task belongs to
 }
 
 /**
@@ -53,6 +54,7 @@ function rowToTask(row: any): Task {
     createdBy: row.createdBy || null,
     assignedTo: row.assignedTo || null,
     dueDate: row.dueDate || null,
+    milestoneId: row.milestoneId || null,
     linesChanged:
       row.linesAdded !== null || row.linesRemoved !== null || row.linesTotal !== null
         ? {
@@ -125,8 +127,8 @@ export async function createTask(
         id, title, description, status, priority, projectId, agentId, sessionKey, 
         handoffNotes, commitHash, linesAdded, linesRemoved, linesTotal, 
         estimatedHumanMinutes, humanCost, cost, runtime, model, 
-        createdBy, assignedTo, dueDate, createdAt, updatedAt, completedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        createdBy, assignedTo, dueDate, milestoneId, createdAt, updatedAt, completedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         data.title,
@@ -149,6 +151,7 @@ export async function createTask(
         data.createdBy || null,
         data.assignedTo || null,
         data.dueDate || null,
+        data.milestoneId || null,
         now,
         now,
         null,
@@ -190,7 +193,7 @@ export async function updateTask(id: string, updates: Partial<Task>): Promise<Ta
         projectId = ?, agentId = ?, sessionKey = ?, handoffNotes = ?, 
         commitHash = ?, linesAdded = ?, linesRemoved = ?, linesTotal = ?, 
         estimatedHumanMinutes = ?, humanCost = ?, cost = ?, runtime = ?, model = ?,
-        assignedTo = ?, dueDate = ?, updatedAt = ?, completedAt = ?
+        assignedTo = ?, dueDate = ?, milestoneId = ?, updatedAt = ?, completedAt = ?
       WHERE id = ?`,
       [
         updates.title ?? task.title,
@@ -212,6 +215,7 @@ export async function updateTask(id: string, updates: Partial<Task>): Promise<Ta
         updates.model ?? task.model,
         updates.assignedTo !== undefined ? updates.assignedTo : task.assignedTo,
         updates.dueDate !== undefined ? updates.dueDate : task.dueDate,
+        updates.milestoneId !== undefined ? updates.milestoneId : task.milestoneId,
         now,
         completedAt,
         id,

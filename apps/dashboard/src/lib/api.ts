@@ -453,6 +453,7 @@ export interface Task {
   createdByName?: string | null; // Populated client-side
   assignedToName?: string | null; // Populated client-side
   dueDate?: string | null; // ISO timestamp for when task is due
+  milestoneId?: string | null; // Milestone this task belongs to
 }
 
 export interface UserInfo {
@@ -559,6 +560,98 @@ export async function deleteTask(id: string): Promise<{ success: boolean; error?
   } catch (error) {
     console.error('Failed to delete task:', error);
     return { success: false, error: 'Network error' };
+  }
+}
+
+// Milestones
+export interface Milestone {
+  id: string;
+  projectId: string;
+  name: string;
+  description?: string;
+  targetDate?: string;
+  status: 'open' | 'closed';
+  totalTasks: number;
+  doneTasks: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function fetchMilestones(projectId: string): Promise<Milestone[]> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/milestones?projectId=${encodeURIComponent(projectId)}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.milestones || [];
+  } catch (error) {
+    console.error('Failed to fetch milestones:', error);
+    return [];
+  }
+}
+
+export async function fetchAllMilestones(): Promise<(Milestone & { projectName?: string })[]> {
+  try {
+    // Fetch all projects, then milestones for each
+    const projects = await fetchProjects();
+    const results: (Milestone & { projectName?: string })[] = [];
+    await Promise.all(
+      projects.map(async (p) => {
+        const milestones = await fetchMilestones(p.id);
+        milestones.forEach((m) => results.push({ ...m, projectName: p.name }));
+      })
+    );
+    // Sort by targetDate ascending (nulls last)
+    results.sort((a, b) => {
+      if (!a.targetDate && !b.targetDate) return 0;
+      if (!a.targetDate) return 1;
+      if (!b.targetDate) return -1;
+      return a.targetDate.localeCompare(b.targetDate);
+    });
+    return results;
+  } catch (error) {
+    console.error('Failed to fetch all milestones:', error);
+    return [];
+  }
+}
+
+export async function createMilestone(data: {
+  projectId: string;
+  name: string;
+  description?: string;
+  targetDate?: string;
+}): Promise<Milestone> {
+  const res = await fetchWithTimeout(`${API_BASE}/milestones`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to create milestone');
+  }
+  return res.json();
+}
+
+export async function updateMilestone(id: string, data: Partial<Milestone>): Promise<Milestone> {
+  const res = await fetchWithTimeout(`${API_BASE}/milestones/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to update milestone');
+  }
+  return res.json();
+}
+
+export async function deleteMilestone(id: string): Promise<void> {
+  const res = await fetchWithTimeout(`${API_BASE}/milestones/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to delete milestone');
   }
 }
 

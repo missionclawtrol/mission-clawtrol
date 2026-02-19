@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { fetchProjects, fetchProject, createProject, deleteProject, spawnAgent, fetchProjectAgents, fetchProjectAgentSummary, sendMessageToAgent, deleteAgent, changeAgentModel, fetchTasks, fetchImportableFolders, importProject, type Project, type AgentAssociation, type AgentSummary, type Task, type ImportableFolder } from '$lib/api';
+  import { fetchProjects, fetchProject, createProject, deleteProject, spawnAgent, fetchProjectAgents, fetchProjectAgentSummary, sendMessageToAgent, deleteAgent, changeAgentModel, fetchTasks, fetchImportableFolders, importProject, fetchMilestones, createMilestone, updateMilestone, deleteMilestone, type Project, type AgentAssociation, type AgentSummary, type Task, type ImportableFolder, type Milestone } from '$lib/api';
   
   let projects: Project[] = [];
   let selectedProject: Project | null = null;
@@ -11,6 +11,15 @@
   let loading = true;
   let loadingDetail = false;
   
+  // Milestone state
+  let milestones: Milestone[] = [];
+  let showNewMilestoneForm = false;
+  let newMilestoneName = '';
+  let newMilestoneDescription = '';
+  let newMilestoneTargetDate = '';
+  let milestoneFormLoading = false;
+  let milestoneFormError = '';
+
   // Cost data
   interface ProjectCost {
     projectId: string;
@@ -79,12 +88,16 @@
   async function selectProject(id: string) {
     loadingDetail = true;
     projectCost = null;
+    milestones = [];
+    showNewMilestoneForm = false;
     try {
-      const [project, agents, summary] = await Promise.all([
+      const [project, agents, summary, ms] = await Promise.all([
         fetchProject(id),
         fetchProjectAgents(id),
         fetchProjectAgentSummary(id),
+        fetchMilestones(id),
       ]);
+      milestones = ms;
       selectedProject = project;
       projectAgents = agents;
       agentSummary = summary;
@@ -377,6 +390,69 @@
     return uuid.slice(0, 8);
   }
   
+  function formatMilestoneDate(dateStr?: string): string {
+    if (!dateStr) return 'No date';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function getMilestoneProgress(m: Milestone): number {
+    if (!m.totalTasks) return 0;
+    return Math.round((m.doneTasks / m.totalTasks) * 100);
+  }
+
+  function isMilestoneOverdue(m: Milestone): boolean {
+    if (!m.targetDate || m.status === 'closed') return false;
+    return new Date(m.targetDate) < new Date();
+  }
+
+  async function handleCreateMilestone() {
+    if (!selectedProject || !newMilestoneName.trim()) {
+      milestoneFormError = 'Milestone name is required';
+      return;
+    }
+    milestoneFormLoading = true;
+    milestoneFormError = '';
+    try {
+      const m = await createMilestone({
+        projectId: selectedProject.id,
+        name: newMilestoneName.trim(),
+        description: newMilestoneDescription.trim() || undefined,
+        targetDate: newMilestoneTargetDate || undefined,
+      });
+      milestones = [...milestones, m];
+      showNewMilestoneForm = false;
+      newMilestoneName = '';
+      newMilestoneDescription = '';
+      newMilestoneTargetDate = '';
+    } catch (e: any) {
+      milestoneFormError = e.message || 'Failed to create milestone';
+    } finally {
+      milestoneFormLoading = false;
+    }
+  }
+
+  async function handleToggleMilestoneStatus(m: Milestone) {
+    try {
+      const updated = await updateMilestone(m.id, {
+        status: m.status === 'open' ? 'closed' : 'open',
+      });
+      milestones = milestones.map(x => x.id === m.id ? updated : x);
+    } catch (e: any) {
+      console.error('Failed to toggle milestone status:', e);
+    }
+  }
+
+  async function handleDeleteMilestone(m: Milestone) {
+    if (!confirm(`Delete milestone "${m.name}"?`)) return;
+    try {
+      await deleteMilestone(m.id);
+      milestones = milestones.filter(x => x.id !== m.id);
+    } catch (e: any) {
+      alert(e.message || 'Failed to delete milestone');
+    }
+  }
+
   onMount(() => {
     loadProjects();
   });
@@ -847,6 +923,116 @@
           </div>
         </div>
         
+        <!-- Milestones -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-sm text-slate-500 dark:text-slate-400 font-medium">🎯 MILESTONES</h3>
+            <button
+              on:click={() => { showNewMilestoneForm = !showNewMilestoneForm; milestoneFormError = ''; }}
+              class="text-xs px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded transition-colors"
+            >
+              + New
+            </button>
+          </div>
+
+          {#if showNewMilestoneForm}
+            <div class="mb-3 p-3 bg-gray-50 dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-700 space-y-2">
+              {#if milestoneFormError}
+                <div class="text-xs text-red-400">{milestoneFormError}</div>
+              {/if}
+              <input
+                type="text"
+                bind:value={newMilestoneName}
+                placeholder="Milestone name (e.g. v1.1 Release)"
+                class="w-full px-2 py-1.5 text-sm bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded focus:border-blue-500 focus:outline-none"
+              />
+              <textarea
+                bind:value={newMilestoneDescription}
+                placeholder="Description (optional)"
+                rows="2"
+                class="w-full px-2 py-1.5 text-sm bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded focus:border-blue-500 focus:outline-none resize-none"
+              ></textarea>
+              <input
+                type="date"
+                bind:value={newMilestoneTargetDate}
+                class="w-full px-2 py-1.5 text-sm bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded focus:border-blue-500 focus:outline-none"
+              />
+              <div class="flex gap-2 justify-end">
+                <button
+                  on:click={() => { showNewMilestoneForm = false; milestoneFormError = ''; }}
+                  class="px-3 py-1 text-xs bg-gray-100 dark:bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+                >Cancel</button>
+                <button
+                  on:click={handleCreateMilestone}
+                  disabled={milestoneFormLoading}
+                  class="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 rounded transition-colors disabled:opacity-50"
+                >{milestoneFormLoading ? 'Saving...' : 'Save'}</button>
+              </div>
+            </div>
+          {/if}
+
+          {#if milestones.length === 0}
+            <div class="p-3 bg-gray-100 dark:bg-slate-700/30 rounded-lg text-center text-sm text-slate-500 dark:text-slate-400 italic">
+              No milestones yet
+            </div>
+          {:else}
+            <div class="space-y-2">
+              {#each milestones.filter(m => m.status === 'open') as m}
+                {@const progress = getMilestoneProgress(m)}
+                {@const overdue = isMilestoneOverdue(m)}
+                <div class="p-3 bg-gray-100 dark:bg-slate-700/50 rounded-lg">
+                  <div class="flex items-start justify-between mb-1">
+                    <button
+                      on:click={() => goto(`/tasks?milestone=${m.id}`)}
+                      class="font-medium text-sm text-blue-400 hover:text-blue-300 text-left truncate flex-1"
+                    >{m.name}</button>
+                    <div class="flex items-center gap-1 ml-2 flex-shrink-0">
+                      <button
+                        on:click={() => handleToggleMilestoneStatus(m)}
+                        title="Close milestone"
+                        class="text-xs text-slate-500 hover:text-green-400"
+                      >✓</button>
+                      <button
+                        on:click={() => handleDeleteMilestone(m)}
+                        title="Delete milestone"
+                        class="text-xs text-slate-500 hover:text-red-400"
+                      >✕</button>
+                    </div>
+                  </div>
+                  <div class="text-xs {overdue ? 'text-red-400' : 'text-slate-500 dark:text-slate-400'} mb-2">
+                    {overdue ? '⚠️ ' : '📅 '}{formatMilestoneDate(m.targetDate)}
+                  </div>
+                  <div class="w-full bg-gray-200 dark:bg-slate-600 rounded-full h-1.5 mb-1">
+                    <div class="bg-blue-500 h-1.5 rounded-full" style="width: {progress}%"></div>
+                  </div>
+                  <div class="text-xs text-slate-500 dark:text-slate-400">{m.doneTasks}/{m.totalTasks} done · {progress}%</div>
+                </div>
+              {/each}
+
+              {#if milestones.some(m => m.status === 'closed')}
+                <div class="mt-2">
+                  {#each milestones.filter(m => m.status === 'closed') as m}
+                    <div class="flex items-center gap-2 p-2 opacity-50">
+                      <span class="text-xs text-green-400">✓</span>
+                      <span class="text-xs text-slate-500 truncate flex-1">{m.name}</span>
+                      <button
+                        on:click={() => handleToggleMilestoneStatus(m)}
+                        title="Reopen"
+                        class="text-xs text-slate-500 hover:text-blue-400"
+                      >↩</button>
+                      <button
+                        on:click={() => handleDeleteMilestone(m)}
+                        title="Delete"
+                        class="text-xs text-slate-500 hover:text-red-400"
+                      >✕</button>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          {/if}
+        </div>
+
         <!-- Cost Savings -->
         <div>
           <h3 class="text-sm text-slate-500 dark:text-slate-400 mb-2 font-medium">💰 COST SAVINGS</h3>
