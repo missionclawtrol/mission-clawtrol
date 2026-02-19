@@ -131,7 +131,7 @@
     const query = searchQuery.toLowerCase();
     return (
       task.title.toLowerCase().includes(query) ||
-      (task.description && task.description.toLowerCase().includes(query))
+      (task.description?.toLowerCase().includes(query) ?? false)
     );
   }
   
@@ -350,6 +350,7 @@
 
   function getTaskAge(task: Task): { label: string; level: 'warn' | 'alert' } | null {
     if (task.status === 'done') return null;
+    if (!task.updatedAt) return null;
     const ageMs = Date.now() - new Date(task.updatedAt).getTime();
     const hours = ageMs / (1000 * 60 * 60);
     const days = hours / 24;
@@ -877,7 +878,7 @@
           <select 
             class="w-full bg-gray-100 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded px-3 py-2 text-white"
             value={selectedTask.agentId || ''}
-            on:change={(e) => handleAssignAgent(selectedTask.id, e.currentTarget.value || null)}
+            on:change={(e) => handleAssignAgent(selectedTask!.id, e.currentTarget.value || null)}
           >
             <option value="">No agent</option>
             {#each agents as agent}
@@ -893,7 +894,7 @@
             value={selectedTask.assignedTo || ''}
             on:change={async (e) => {
               const val = e.currentTarget.value || null;
-              await updateTask(selectedTask.id, { assignedTo: val });
+              await updateTask(selectedTask!.id, { assignedTo: val });
               await loadData();
               if (selectedTask) selectedTask = { ...selectedTask, assignedTo: val };
             }}
@@ -914,7 +915,7 @@
               on:change={async (e) => {
                 const val = e.currentTarget.value;
                 const isoDate = val ? new Date(val).toISOString() : null;
-                await updateTask(selectedTask.id, { dueDate: isoDate });
+                await updateTask(selectedTask!.id, { dueDate: isoDate });
                 await loadData();
                 if (selectedTask) selectedTask = { ...selectedTask, dueDate: isoDate };
               }}
@@ -923,7 +924,7 @@
             {#if selectedTask.dueDate}
               <button
                 on:click={async () => {
-                  await updateTask(selectedTask.id, { dueDate: null });
+                  await updateTask(selectedTask!.id, { dueDate: null });
                   await loadData();
                   if (selectedTask) selectedTask = { ...selectedTask, dueDate: null };
                 }}
@@ -944,7 +945,7 @@
               value={selectedTask.milestoneId || ''}
               on:change={async (e) => {
                 const val = e.currentTarget.value || null;
-                await updateTask(selectedTask.id, { milestoneId: val } as any);
+                await updateTask(selectedTask!.id, { milestoneId: val } as any);
                 await loadData();
                 if (selectedTask) selectedTask = { ...selectedTask, milestoneId: val };
               }}

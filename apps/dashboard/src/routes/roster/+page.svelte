@@ -209,7 +209,7 @@
                 <p class="text-sm text-gray-500">{agent.fullName}</p>
               </div>
             </div>
-            <span class={`inline-block w-3 h-3 rounded-full ${getStatusColor(agent.status)}`} />
+            <span class={`inline-block w-3 h-3 rounded-full ${getStatusColor(agent.status)}`}></span>
           </div>
           
           <!-- Status badge -->

@@ -86,6 +86,7 @@ export interface Project {
   id: string;
   name: string;
   path: string;
+  description?: string;
   hasStatusMd?: boolean;
   hasProjectMd?: boolean;
   hasHandoffMd?: boolean;
@@ -425,7 +426,7 @@ export interface Task {
   description?: string;
   projectId: string;
   projectName?: string;
-  agentId?: string;
+  agentId?: string | null;
   agentName?: string;
   agentEmoji?: string;
   priority: 'P0' | 'P1' | 'P2' | 'P3';
@@ -442,6 +443,7 @@ export interface Task {
   model?: string; // which model was used
   runtime?: number; // milliseconds
   commitHash?: string; // Git commit hash for this task
+  sessionKey?: string;
   linesChanged?: {
     added: number;
     removed: number;
@@ -460,6 +462,7 @@ export interface Task {
 export interface UserInfo {
   id: string;
   githubLogin: string;
+  username?: string;
   name: string | null;
   email: string | null;
   avatarUrl: string | null;
@@ -494,7 +497,7 @@ export interface CreateTaskParams {
   projectId: string;
   agentId?: string;
   priority: 'P0' | 'P1' | 'P2' | 'P3';
-  status?: 'backlog' | 'todo' | 'in_progress' | 'review' | 'done';
+  status?: 'backlog' | 'todo' | 'in-progress' | 'review' | 'done';
   dueDate?: string;
   assignedTo?: string;
 }
@@ -520,9 +523,9 @@ export async function createTask(params: CreateTaskParams): Promise<{ success: b
 export interface UpdateTaskParams {
   title?: string;
   description?: string;
-  agentId?: string;
+  agentId?: string | null;
   priority?: 'P0' | 'P1' | 'P2' | 'P3';
-  status?: 'backlog' | 'todo' | 'in_progress' | 'review' | 'done';
+  status?: 'backlog' | 'todo' | 'in-progress' | 'review' | 'done';
   estimatedHumanMinutes?: number;
   humanHourlyRate?: number;
   complexity?: 'simple' | 'medium' | 'complex';
@@ -659,6 +662,7 @@ export async function deleteMilestone(id: string): Promise<void> {
 // Settings
 export interface Settings {
   humanHourlyRate: number;
+  kanbanColumnWidth?: number;
 }
 
 export async function fetchSettings(): Promise<Settings> {

@@ -923,7 +923,7 @@
             <span class="text-xs text-slate-500">Updated {formatRelativeTime(selectedProject.updated)}</span>
           {/if}
           <button 
-            on:click={() => goto(`/projects/${selectedProject.id}`)}
+            on:click={() => goto(`/projects/${selectedProject?.id}`)}
             class="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs font-medium transition-colors"
           >
             View Full →
