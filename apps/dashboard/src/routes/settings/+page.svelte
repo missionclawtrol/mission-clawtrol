@@ -23,6 +23,7 @@
     theme: 'dark',
     refreshInterval: 2,
     kanbanColumnWidth: 384,
+    humanHourlyRate: 100,
   };
 
   let saving = false;
@@ -43,7 +44,7 @@
         credentials: 'include',
         body: JSON.stringify({
           kanbanColumnWidth: settings.kanbanColumnWidth,
-          humanHourlyRate: settings.alerts?.audioVolume, // preserve existing
+          humanHourlyRate: settings.humanHourlyRate,
         }),
       });
       if (res.ok) {
@@ -70,6 +71,7 @@
       if (res.ok) {
         const data = await res.json();
         if (data.kanbanColumnWidth) settings.kanbanColumnWidth = data.kanbanColumnWidth;
+        if (data.humanHourlyRate) settings.humanHourlyRate = data.humanHourlyRate;
       }
     } catch {}
 
@@ -181,6 +183,27 @@
     </div>
   </div>
   
+  <!-- Cost Estimation Settings -->
+  <div class="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-4">
+    <h3 class="font-medium mb-4">💰 Cost Estimation</h3>
+    
+    <div class="space-y-4">
+      <div>
+        <label for="human-hourly-rate" class="block text-sm font-medium mb-2">Human Hourly Rate ($)</label>
+        <input 
+          id="human-hourly-rate"
+          type="number" 
+          min="1" 
+          max="10000"
+          step="1"
+          bind:value={settings.humanHourlyRate}
+          class="bg-gray-100 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded px-3 py-2 text-sm w-32"
+        >
+        <div class="text-sm text-slate-500 dark:text-slate-400 mt-1">Used to estimate cost savings vs. human developer time</div>
+      </div>
+    </div>
+  </div>
+
   <!-- Display Settings -->
   <div class="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-4">
     <h3 class="font-medium mb-4">🎨 Display</h3>
