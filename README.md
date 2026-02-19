@@ -38,6 +38,27 @@ npm run dev
 
 Open http://localhost:5173
 
+## OpenClaw Agent Setup
+
+Mission Clawtrol integrates with [OpenClaw](https://github.com/openclaw/openclaw) agents to automate task creation, QA, and heartbeat checks. After starting the backend, add these two snippets to your agent files:
+
+**In `AGENTS.md`** (task creation workflow section):
+```
+If Mission Clawtrol is running (http://localhost:3001), fetch workflow rules at session start:
+`GET http://localhost:3001/api/workflow`
+Follow the returned rules exactly for task creation, done criteria, and agent linking.
+```
+
+**In `HEARTBEAT.md`**:
+```
+## Mission Clawtrol Checks
+If Mission Clawtrol is running (http://localhost:3001), fetch the current checklist:
+`GET http://localhost:3001/api/workflow/heartbeat-prompt`
+Follow it exactly.
+```
+
+That's it — the workflow rules live in Mission Clawtrol and are served at runtime. No other config needed. See [`skill/SKILL.md`](skill/SKILL.md) for the full skill reference.
+
 ## Production Deployment
 
 ```bash
