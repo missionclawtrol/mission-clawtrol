@@ -27,6 +27,29 @@ Fetch and follow the current heartbeat checklist:
 GET http://localhost:3001/api/workflow/heartbeat-prompt
 ```
 
+## First-time Setup
+
+After installing Mission Clawtrol, add these two lines to your agent files so it's automatically used:
+
+**In `AGENTS.md`** (task creation workflow section):
+```
+If Mission Clawtrol is running (http://localhost:3001), fetch workflow rules at session start:
+`GET http://localhost:3001/api/workflow`
+Follow the returned rules exactly for task creation, done criteria, and agent linking.
+```
+
+**In `HEARTBEAT.md`**:
+```
+## Mission Clawtrol Checks
+If Mission Clawtrol is running (http://localhost:3001), fetch the current checklist:
+`GET http://localhost:3001/api/workflow/heartbeat-prompt`
+Follow it exactly.
+```
+
+That's it. The workflow rules themselves live in Mission Clawtrol — no other configuration needed.
+
+---
+
 ## Task API Quick Reference
 
 - `GET /api/tasks` — all tasks
