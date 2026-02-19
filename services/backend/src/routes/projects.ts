@@ -43,6 +43,13 @@ interface Project {
   updated: string;
   agentCount?: number;
   agentEmojis?: string[];
+  repoUrl?: string | null;
+}
+
+function extractRepoUrl(content: string): string | null {
+  // Matches both **Repo:** https://... and **Repo**: https://... and **Repo** https://...
+  const match = content.match(/\*\*(?:repo|github|repository):?\*\*:?\s*(https?:\/\/[^\s\n]+)/i);
+  return match ? match[1] : null;
 }
 
 function formatProjectName(folderName: string): string {
@@ -92,6 +99,15 @@ export async function projectRoutes(fastify: FastifyInstance) {
         } catch {
           // No AGENTS.md or error reading it
         }
+
+        // Extract repoUrl from PROJECT.md
+        let repoUrl: string | null = null;
+        try {
+          const projectMdContent = await readFile(join(projectPath, 'PROJECT.md'), 'utf-8');
+          repoUrl = extractRepoUrl(projectMdContent);
+        } catch {
+          // No PROJECT.md or unreadable
+        }
         
         projects.push({
           id: entry.name,
@@ -101,6 +117,7 @@ export async function projectRoutes(fastify: FastifyInstance) {
           updated: stats.mtime.toISOString(),
           agentCount,
           agentEmojis,
+          repoUrl,
         });
       }
       
@@ -246,6 +263,8 @@ export async function projectRoutes(fastify: FastifyInstance) {
       const allFiles = await readdir(projectPath);
       const files = allFiles.filter(f => !f.startsWith('.') && f !== 'node_modules');
       
+      const repoUrl = projectMd ? extractRepoUrl(projectMd) : null;
+
       return {
         id,
         name: formatProjectName(id),
@@ -256,6 +275,7 @@ export async function projectRoutes(fastify: FastifyInstance) {
         handoffMd,
         files,
         updated: stats.mtime.toISOString(),
+        repoUrl,
       };
     } catch (error) {
       fastify.log.error(error);

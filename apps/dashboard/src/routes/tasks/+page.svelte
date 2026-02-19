@@ -15,6 +15,9 @@
   let settings: Settings = { humanHourlyRate: 100 };
   let kanbanColumnWidth = 384; // default w-96
   let loading = true;
+
+  // Project → repoUrl lookup (populated after projects load)
+  let projectRepoUrls: Record<string, string> = {};
   
   // UI state
   let showNewTaskModal = false;
@@ -239,6 +242,12 @@
       users = usersData;
       settings = settingsData;
       if (settingsData.kanbanColumnWidth) kanbanColumnWidth = settingsData.kanbanColumnWidth;
+
+      // Build project → repoUrl lookup
+      projectRepoUrls = {};
+      projects.forEach(p => {
+        if (p.repoUrl) projectRepoUrls[p.id] = p.repoUrl;
+      });
     } catch (err) {
       console.error('Failed to load tasks view data:', err);
     } finally {
@@ -921,6 +930,26 @@
             </div>
           </div>
         {/if}
+        <!-- Commit Hash -->
+        {#if selectedTask.commitHash && selectedTask.commitHash !== 'NO_COMMIT'}
+          {@const repoUrl = projectRepoUrls[selectedTask.projectId]}
+          <div class="pt-2 border-t border-gray-200 dark:border-slate-700">
+            <h4 class="text-sm text-slate-500 dark:text-slate-400 mb-2">🔗 Commit</h4>
+            <div class="flex items-center gap-2 text-sm">
+              {#if repoUrl}
+                <a href="{repoUrl}/commit/{selectedTask.commitHash}" target="_blank" rel="noopener"
+                   class="font-mono text-blue-400 hover:underline text-xs">
+                  {selectedTask.commitHash.slice(0, 8)}
+                </a>
+                <a href="{repoUrl}/commit/{selectedTask.commitHash}" target="_blank" rel="noopener"
+                   class="text-xs text-slate-500 hover:text-blue-400 transition-colors">↗ View diff</a>
+              {:else}
+                <span class="font-mono text-slate-400 text-xs">{selectedTask.commitHash.slice(0, 8)}</span>
+              {/if}
+            </div>
+          </div>
+        {/if}
+
         <!-- Comments Section -->
         <div class="pt-2 border-t border-gray-200 dark:border-slate-700">
           <h4 class="text-sm text-slate-500 dark:text-slate-400 mb-2">💬 Comments ({comments.length})</h4>
@@ -1150,6 +1179,25 @@
                     {#if getModelDisplayName(task.model)}
                       <span class="text-slate-500 dark:text-slate-400">🤖 {getModelDisplayName(task.model)}</span>
                     {/if}
+                  </div>
+                {/if}
+
+                <!-- Commit Hash Badge (for done tasks) -->
+                {#if task.status === 'done' && task.commitHash && task.commitHash !== 'NO_COMMIT'}
+                  {@const shortHash = task.commitHash.slice(0, 8)}
+                  {@const repoUrl = projectRepoUrls[task.projectId]}
+                  <div class="mb-2 pb-2 border-b border-gray-200 dark:border-slate-700">
+                    <div class="mt-1">
+                      {#if repoUrl}
+                        <a href="{repoUrl}/commit/{task.commitHash}" target="_blank" rel="noopener"
+                           class="text-xs font-mono text-blue-400 hover:text-blue-300 hover:underline"
+                           on:click|stopPropagation>
+                          🔗 {shortHash}
+                        </a>
+                      {:else}
+                        <span class="text-xs font-mono text-slate-500">{shortHash}</span>
+                      {/if}
+                    </div>
                   </div>
                 {/if}
 

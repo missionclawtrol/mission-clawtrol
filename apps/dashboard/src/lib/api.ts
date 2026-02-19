@@ -94,6 +94,7 @@ export interface Project {
   handoffMd?: string;
   files?: string[];
   updated?: string;
+  repoUrl?: string | null;
 }
 
 export interface ActivityEvent {

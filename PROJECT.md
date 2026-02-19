@@ -2,6 +2,8 @@
 
 **AI-powered task management for multi-agent teams**
 
+**Repo:** https://github.com/goldie-health/mission-clawtrol
+
 ## What It Is
 
 Mission Clawtrol is a kanban-style task management platform built for teams that use AI agents alongside human developers. It connects to [OpenClaw](https://github.com/openclaw/openclaw) to orchestrate AI agent workflows — assigning tasks, tracking progress, and automating quality assurance.
