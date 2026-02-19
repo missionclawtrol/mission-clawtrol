@@ -85,7 +85,6 @@ async function handleReviewStage(taskId: string): Promise<void> {
         args: {
           agentId: 'qa',
           task: qaPrompt,
-          model: 'anthropic/claude-sonnet-4-5',
           cleanup: 'delete',
           runTimeoutSeconds: Math.floor(QA_TIMEOUT_MS / 1000),
         },
@@ -252,7 +251,6 @@ async function handleDoneStage(taskId: string): Promise<void> {
         args: {
           agentId: 'editor',
           task: docsPrompt,
-          model: 'anthropic/claude-sonnet-4-5',
           cleanup: 'delete',
           runTimeoutSeconds: 120,
         },
