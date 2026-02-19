@@ -165,7 +165,8 @@
 
   function truncateId(id: string | null | undefined): string {
     if (!id) return 'N/A';
-    return id.slice(0, 8);
+    // Format kebab-case ids into readable names
+    return id.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   }
 
   // Calculate max savings for bar charts
