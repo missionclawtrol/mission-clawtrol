@@ -255,6 +255,18 @@
           <div class="text-xs text-slate-400 mt-1">Net Savings</div>
         </div>
       </div>
+      {#if report.shipped.length > 0}
+        {@const allShipped = report.shipped.flatMap(p => p.tasks)}
+        {@const bugs = allShipped.filter(t => t.type === 'bug').length}
+        {@const features = allShipped.filter(t => t.type === 'feature').length}
+        {#if bugs > 0 || features > 0}
+          <div class="mt-3 text-sm text-slate-400">
+            {#if features > 0}<span class="text-blue-400">✨ {features} feature{features !== 1 ? 's' : ''}</span>{/if}
+            {#if features > 0 && bugs > 0} · {/if}
+            {#if bugs > 0}<span class="text-red-400">🐛 {bugs} bug{bugs !== 1 ? 's' : ''} fixed</span>{/if}
+          </div>
+        {/if}
+      {/if}
       <div class="mt-4 pt-4 border-t border-slate-700 flex flex-wrap gap-6 text-sm text-slate-400">
         <span>AI cost: <span class="text-slate-200">{fmtMoney(report.costs.aiCost)}</span></span>
         <span>Human equivalent: <span class="text-slate-200">{fmtMoney(report.costs.humanCost)}</span></span>

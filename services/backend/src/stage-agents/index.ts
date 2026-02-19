@@ -219,9 +219,10 @@ async function handleDoneStage(taskId: string): Promise<void> {
   const task = await findTaskById(taskId);
   if (!task) return;
 
-  // Skip if no commit (nothing changed in the codebase)
-  if (!task.commitHash) {
-    console.log(`[StageAgent] Skipping docs update for task ${taskId}: no commit hash`);
+  // Docs-type tasks always get editor review, even without a commit hash
+  const shouldRunEditor = task.commitHash || task.type === 'docs';
+  if (!shouldRunEditor) {
+    console.log(`[StageAgent] Skipping docs update for task ${taskId}: no commit hash and not a docs task`);
     return;
   }
 

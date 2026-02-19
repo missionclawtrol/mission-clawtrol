@@ -34,6 +34,7 @@
   let searchQuery = '';
   let selectedAssignee = '';
   let selectedProjectId = ''; // Empty = all projects
+  let filterType = ''; // Empty = all types
   
   // Sync filters from URL on mount and when URL changes
   $: {
@@ -41,6 +42,7 @@
     selectedAssignee = $page.url.searchParams.get('assignee') || '';
     selectedProjectId = $page.url.searchParams.get('project') || '';
     selectedMilestoneId = $page.url.searchParams.get('milestone') || '';
+    filterType = $page.url.searchParams.get('type') || '';
   }
 
   // When project filter changes, load milestones for that project
@@ -67,6 +69,7 @@
     if (selectedAssignee) params.set('assignee', selectedAssignee);
     if (selectedProjectId) params.set('project', selectedProjectId);
     if (selectedMilestoneId) params.set('milestone', selectedMilestoneId);
+    if (filterType) params.set('type', filterType);
     
     const queryString = params.toString();
     const newUrl = queryString ? `/tasks?${queryString}` : '/tasks';
@@ -83,7 +86,8 @@
       searchQuery !== $page.url.searchParams.get('q') ||
       selectedAssignee !== $page.url.searchParams.get('assignee') ||
       selectedProjectId !== $page.url.searchParams.get('project') ||
-      selectedMilestoneId !== ($page.url.searchParams.get('milestone') || '')
+      selectedMilestoneId !== ($page.url.searchParams.get('milestone') || '') ||
+      filterType !== ($page.url.searchParams.get('type') || '')
     )) {
       filterTimeout = setTimeout(updateUrlParams, 300);
     }
@@ -95,11 +99,12 @@
     selectedAssignee = '';
     selectedProjectId = '';
     selectedMilestoneId = '';
+    filterType = '';
     updateUrlParams();
   }
   
   // Check if any filters are active
-  $: hasActiveFilters = searchQuery || selectedAssignee || selectedProjectId || selectedMilestoneId;
+  $: hasActiveFilters = searchQuery || selectedAssignee || selectedProjectId || selectedMilestoneId || filterType;
   
   // Persist project filter to localStorage (legacy - now mainly using URL)
   const PROJECT_FILTER_KEY = 'mission-clawtrol-project-filter';
@@ -156,6 +161,7 @@
   // Form state
   let formError = '';
   let formLoading = false;
+  let newTaskType: string = 'feature';
   let newTask = {
     title: '',
     description: '',
@@ -166,6 +172,24 @@
     dueDate: '',
     milestoneId: '',
   };
+
+  function getTypeBadge(type: string | null | undefined): { icon: string; label: string; classes: string } | null {
+    if (!type) return null;
+    const map: Record<string, { icon: string; label: string; classes: string }> = {
+      feature: { icon: '✨', label: 'Feature', classes: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
+      bug: { icon: '🐛', label: 'Bug', classes: 'bg-red-500/20 text-red-400 border-red-500/30' },
+      chore: { icon: '🔧', label: 'Chore', classes: 'bg-slate-500/20 text-slate-400 border-slate-500/30' },
+      spike: { icon: '🔬', label: 'Spike', classes: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
+      docs: { icon: '📝', label: 'Docs', classes: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
+    };
+    return map[type] || null;
+  }
+
+  // Check if task matches type filter
+  function matchesType(task: Task): boolean {
+    if (!filterType) return true;
+    return task.type === filterType;
+  }
 
   // Milestones for the new task's project
   let newTaskMilestones: Milestone[] = [];
@@ -310,6 +334,8 @@
       if (!matchesSearch(t)) return false;
       // Filter by milestone if one is selected
       if (!matchesMilestone(t)) return false;
+      // Filter by type if one is selected
+      if (!matchesType(t)) return false;
       return true;
     });
     
@@ -568,6 +594,7 @@
       status: 'backlog',
       dueDate: newTask.dueDate ? new Date(newTask.dueDate).toISOString() : undefined,
       milestoneId: newTask.milestoneId || undefined,
+      type: newTaskType as any,
     } as any);
     
     formLoading = false;
@@ -575,6 +602,7 @@
     if (result.success) {
       showNewTaskModal = false;
       newTask = { title: '', description: '', projectId: '', agentId: '', assignedTo: '', priority: 'P2', dueDate: '', milestoneId: '' };
+      newTaskType = 'feature';
       await loadData();
     } else {
       formError = result.error || 'Failed to create task';
@@ -725,6 +753,21 @@
           />
         </div>
         
+        <div>
+          <label for="task-type" class="block text-sm text-slate-500 dark:text-slate-400 mb-1">Type</label>
+          <select
+            id="task-type"
+            bind:value={newTaskType}
+            class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg text-sm focus:border-blue-500 focus:outline-none"
+          >
+            <option value="feature">✨ Feature</option>
+            <option value="bug">🐛 Bug</option>
+            <option value="chore">🔧 Chore</option>
+            <option value="spike">🔬 Spike</option>
+            <option value="docs">📝 Docs</option>
+          </select>
+        </div>
+
         <div>
           <label for="task-description" class="block text-sm text-slate-500 dark:text-slate-400 mb-1">Description</label>
           <textarea 
@@ -970,6 +1013,24 @@
           <div class="text-slate-600 dark:text-slate-300 capitalize">{selectedTask.status.replace('_', ' ')}</div>
         </div>
 
+        <div class="flex items-center gap-2">
+          <span class="text-slate-500 text-sm w-24">Type</span>
+          <select
+            value={selectedTask?.type || 'feature'}
+            on:change={async (e) => {
+              await updateTask(selectedTask!.id, { type: e.currentTarget.value as any });
+              await loadData();
+            }}
+            class="px-2 py-1 text-xs bg-slate-700 border border-slate-600 rounded"
+          >
+            <option value="feature">✨ Feature</option>
+            <option value="bug">🐛 Bug</option>
+            <option value="chore">🔧 Chore</option>
+            <option value="spike">🔬 Spike</option>
+            <option value="docs">📝 Docs</option>
+          </select>
+        </div>
+
         {#if selectedTask.completedAt}
           <div>
             <h4 class="text-sm text-slate-500 dark:text-slate-400 mb-1">Completed</h4>
@@ -1198,6 +1259,16 @@
           {/each}
         </select>
       {/if}
+
+      <!-- Type Filter -->
+      <select bind:value={filterType} class="px-3 py-1.5 text-sm bg-gray-100 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:border-blue-500">
+        <option value="">All Types</option>
+        <option value="feature">✨ Feature</option>
+        <option value="bug">🐛 Bug</option>
+        <option value="chore">🔧 Chore</option>
+        <option value="spike">🔬 Spike</option>
+        <option value="docs">📝 Docs</option>
+      </select>
       
       <!-- Clear Filters Button -->
       {#if hasActiveFilters}
@@ -1260,9 +1331,17 @@
                 on:click={() => { selectedTask = task; showTaskDetail = true; comments = []; newComment = ''; loadComments(task.id); }}
                 class="p-3 bg-white dark:bg-slate-800 rounded-lg border border-gray-300 dark:border-slate-600 hover:border-slate-500 cursor-move hover:bg-gray-100 dark:bg-slate-700/80 transition-all {draggedTask && draggedTask.id === task.id ? 'opacity-50 scale-95' : ''}"
               >
-                <!-- Title + Age Badge -->
+                <!-- Title + Age Badge + Type Badge -->
                 <div class="flex items-start gap-2 mb-1">
                   <h3 class="font-semibold text-sm flex-1">{task.title}</h3>
+                  {#if task.type}
+                    {@const badge = getTypeBadge(task.type)}
+                    {#if badge}
+                      <span class="text-xs px-1.5 py-0.5 rounded-full border flex-shrink-0 {badge.classes}">
+                        {badge.icon} {badge.label}
+                      </span>
+                    {/if}
+                  {/if}
                   {#if task.status !== 'done'}
                     {@const age = getTaskAge(task)}
                     {#if age}

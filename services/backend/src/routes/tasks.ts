@@ -164,10 +164,10 @@ function hasReviewChecklist(handoffNotes?: string | null): boolean {
 export async function taskRoutes(fastify: FastifyInstance) {
   // GET /tasks - list all tasks with optional filters
   fastify.get<{
-    Querystring: { projectId?: string; agentId?: string; status?: string; milestoneId?: string };
+    Querystring: { projectId?: string; agentId?: string; status?: string; milestoneId?: string; type?: string };
   }>('/', async (request, reply) => {
     try {
-      const { projectId, agentId, status, milestoneId } = request.query;
+      const { projectId, agentId, status, milestoneId, type } = request.query;
       let tasks: Task[];
 
       if (milestoneId) {
@@ -196,6 +196,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
           assignedTo: row.assignedTo || null,
           dueDate: row.dueDate || null,
           milestoneId: row.milestoneId || null,
+          type: row.type || null,
         }));
       } else if (projectId) {
         tasks = await getTasksByProject(projectId);
@@ -210,6 +211,15 @@ export async function taskRoutes(fastify: FastifyInstance) {
         tasks = await getTasksByStatus(status as Task['status']);
       } else {
         tasks = await loadTasks();
+      }
+
+      // Filter by type if provided
+      if (type) {
+        const validTypes = ['feature', 'bug', 'chore', 'spike', 'docs'];
+        if (!validTypes.includes(type)) {
+          return reply.status(400).send({ error: 'Invalid type' });
+        }
+        tasks = tasks.filter(t => t.type === type);
       }
 
       return { tasks, count: tasks.length };
@@ -251,6 +261,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
       handoffNotes?: string | null;
       dueDate?: string | null;
       milestoneId?: string | null;
+      type?: Task['type'];
     };
   }>('/', async (request, reply) => {
     try {
@@ -265,6 +276,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
         handoffNotes = null,
         dueDate = null,
         milestoneId = null,
+        type = null,
       } = request.body;
 
       // Viewers cannot create tasks
@@ -308,6 +320,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
         createdBy,
         assignedTo,
         milestoneId: milestoneId || null,
+        type: type || null,
       });
 
       const workOrderPath = await createWorkOrderFile(task);

@@ -457,6 +457,7 @@ export interface Task {
   assignedToName?: string | null; // Populated client-side
   dueDate?: string | null; // ISO timestamp for when task is due
   milestoneId?: string | null; // Milestone this task belongs to
+  type?: 'feature' | 'bug' | 'chore' | 'spike' | 'docs' | null; // Task type for bug tracking
 }
 
 export interface UserInfo {
@@ -500,6 +501,7 @@ export interface CreateTaskParams {
   status?: 'backlog' | 'todo' | 'in-progress' | 'review' | 'done';
   dueDate?: string;
   assignedTo?: string;
+  type?: 'feature' | 'bug' | 'chore' | 'spike' | 'docs' | null;
 }
 
 export async function createTask(params: CreateTaskParams): Promise<{ success: boolean; task?: Task; error?: string }> {
@@ -531,6 +533,7 @@ export interface UpdateTaskParams {
   complexity?: 'simple' | 'medium' | 'complex';
   dueDate?: string | null;
   assignedTo?: string | null;
+  type?: 'feature' | 'bug' | 'chore' | 'spike' | 'docs' | null;
 }
 
 export async function updateTask(id: string, params: UpdateTaskParams): Promise<{ success: boolean; task?: Task; error?: string }> {
@@ -916,6 +919,7 @@ export interface ReportTask {
   completedAt?: string;
   updatedAt?: string;
   createdAt?: string;
+  type?: 'feature' | 'bug' | 'chore' | 'spike' | 'docs' | null;
 }
 
 export interface ReportMilestone {
