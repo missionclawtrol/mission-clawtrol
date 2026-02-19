@@ -95,6 +95,7 @@ export interface Project {
   files?: string[];
   updated?: string;
   repoUrl?: string | null;
+  reportChannel?: string | null;
 }
 
 export interface ActivityEvent {
@@ -896,4 +897,76 @@ export async function testWebhook(id: string): Promise<void> {
     console.error('testWebhook error:', err);
     throw err;
   }
+}
+
+// ---- Weekly Report ----
+
+export interface ReportTask {
+  id: string;
+  title: string;
+  status: string;
+  priority?: number;
+  agentId?: string;
+  projectId?: string;
+  projectName?: string;
+  completedAt?: string;
+  updatedAt?: string;
+  createdAt?: string;
+}
+
+export interface ReportMilestone {
+  id: string;
+  name: string;
+  status: string;
+  targetDate?: string;
+  totalTasks: number;
+  doneTasks: number;
+  progress: number;
+}
+
+export interface WeeklyReport {
+  period: { from: string; to: string; days: number };
+  projectId: string | null;
+  shipped: Array<{ projectId: string; projectName: string; taskCount: number; tasks: ReportTask[] }>;
+  inProgress: ReportTask[];
+  inReview: ReportTask[];
+  upcoming: ReportTask[];
+  costs: {
+    aiCost: number;
+    humanCost: number;
+    savings: number;
+    roi: string;
+    hoursSaved: number;
+    tasksCompleted: number;
+  };
+  milestones: ReportMilestone[];
+  flags: string[];
+}
+
+export async function fetchWeeklyReport(days = 7, projectId?: string): Promise<WeeklyReport> {
+  const params = new URLSearchParams({ days: String(days) });
+  if (projectId) params.set('projectId', projectId);
+  const res = await fetchWithTimeout(`${API_BASE}/reports/weekly?${params}`);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as any).error || `Failed to fetch weekly report: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function sendWeeklyReport(params?: {
+  channelId?: string;
+  projectId?: string;
+  days?: number;
+}): Promise<{ ok: boolean; ts?: string }> {
+  const res = await fetchWithTimeout(`${API_BASE}/reports/weekly/send`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params || {}),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as any).error || `Failed to send weekly report: ${res.status}`);
+  }
+  return res.json();
 }

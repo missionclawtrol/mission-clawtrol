@@ -44,12 +44,19 @@ interface Project {
   agentCount?: number;
   agentEmojis?: string[];
   repoUrl?: string | null;
+  reportChannel?: string | null;
 }
 
 function extractRepoUrl(content: string): string | null {
   // Matches both **Repo:** https://... and **Repo**: https://... and **Repo** https://...
   const match = content.match(/\*\*(?:repo|github|repository):?\*\*:?\s*(https?:\/\/[^\s\n]+)/i);
   return match ? match[1] : null;
+}
+
+export function extractReportChannel(content: string): string | null {
+  // Matches **Report Channel:** C0XXXXXXXXX (Slack channel ID)
+  const match = content.match(/\*\*Report Channel:?\*\*:?\s*([A-Z0-9]+)/i);
+  return match ? match[1].trim() : null;
 }
 
 function formatProjectName(folderName: string): string {
@@ -100,11 +107,13 @@ export async function projectRoutes(fastify: FastifyInstance) {
           // No AGENTS.md or error reading it
         }
 
-        // Extract repoUrl from PROJECT.md
+        // Extract repoUrl and reportChannel from PROJECT.md
         let repoUrl: string | null = null;
+        let reportChannel: string | null = null;
         try {
           const projectMdContent = await readFile(join(projectPath, 'PROJECT.md'), 'utf-8');
           repoUrl = extractRepoUrl(projectMdContent);
+          reportChannel = extractReportChannel(projectMdContent);
         } catch {
           // No PROJECT.md or unreadable
         }
@@ -118,6 +127,7 @@ export async function projectRoutes(fastify: FastifyInstance) {
           agentCount,
           agentEmojis,
           repoUrl,
+          reportChannel,
         });
       }
       
@@ -264,6 +274,7 @@ export async function projectRoutes(fastify: FastifyInstance) {
       const files = allFiles.filter(f => !f.startsWith('.') && f !== 'node_modules');
       
       const repoUrl = projectMd ? extractRepoUrl(projectMd) : null;
+      const reportChannel = projectMd ? extractReportChannel(projectMd) : null;
 
       return {
         id,
@@ -276,6 +287,7 @@ export async function projectRoutes(fastify: FastifyInstance) {
         files,
         updated: stats.mtime.toISOString(),
         repoUrl,
+        reportChannel,
       };
     } catch (error) {
       fastify.log.error(error);

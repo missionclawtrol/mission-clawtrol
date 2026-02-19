@@ -13,6 +13,7 @@
     { name: 'Roster', href: '/roster', icon: '👥' },
     { name: 'Work Orders', href: '/tasks', icon: '📋' },
     { name: 'Milestones', href: '/milestones', icon: '🎯' },
+    { name: 'Reports', href: '/reports', icon: '📊' },
     { name: 'Projects', href: '/projects', icon: '📁' },
     { name: 'Costs', href: '/costs', icon: '💰' },
     { name: 'Team', href: '/team', icon: '🔐' },
