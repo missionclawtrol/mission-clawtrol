@@ -732,12 +732,12 @@
 <!-- New Task Modal -->
 {#if showNewTaskModal}
   <div class="fixed inset-0 flex items-center justify-center z-50 p-4">
-    <div class="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 w-full max-w-md" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="new-task-title" tabindex="-1">
-      <div class="px-4 py-3 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between">
+    <div class="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 w-full max-w-md max-h-[90vh] flex flex-col" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="new-task-title" tabindex="-1">
+      <div class="px-4 py-3 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between flex-shrink-0">
         <h2 id="new-task-title" class="font-semibold">New Task</h2>
         <button on:click={closeModals} class="text-slate-500 dark:text-slate-400 hover:text-white">✕</button>
       </div>
-      <div class="p-4 space-y-4">
+      <div class="p-4 space-y-4 overflow-y-auto flex-1">
         {#if formError}
           <div class="p-3 bg-red-500/20 border border-red-500 rounded text-red-400 text-sm">{formError}</div>
         {/if}
@@ -861,7 +861,7 @@
           </div>
         {/if}
       </div>
-      <div class="px-4 py-3 border-t border-gray-200 dark:border-slate-700 flex justify-end gap-2">
+      <div class="px-4 py-3 border-t border-gray-200 dark:border-slate-700 flex justify-end gap-2 flex-shrink-0">
         <button 
           on:click={closeModals}
           class="px-4 py-2 bg-gray-100 dark:bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium transition-colors"
