@@ -302,6 +302,26 @@
       default: return 'bg-gray-500';
     }
   }
+
+  function getTaskAge(task: Task): { label: string; level: 'warn' | 'alert' } | null {
+    if (task.status === 'done') return null;
+    const ageMs = Date.now() - new Date(task.updatedAt).getTime();
+    const hours = ageMs / (1000 * 60 * 60);
+    const days = hours / 24;
+    const fmt = (h: number) => h < 24 ? `${Math.floor(h)}h` : `${Math.floor(h / 24)}d`;
+
+    if (task.status === 'review') {
+      if (hours >= 24) return { label: fmt(hours), level: 'alert' };
+      if (hours >= 4) return { label: fmt(hours), level: 'warn' };
+    } else if (task.status === 'in-progress') {
+      if (days >= 2) return { label: fmt(hours), level: 'alert' };
+      if (days >= 1) return { label: fmt(hours), level: 'warn' };
+    } else if (task.status === 'todo' || task.status === 'backlog') {
+      if (days >= 7) return { label: fmt(hours), level: 'alert' };
+      if (days >= 3) return { label: fmt(hours), level: 'warn' };
+    }
+    return null;
+  }
   
   function formatTokens(total: number): string {
     if (total >= 1_000_000) {
@@ -1137,8 +1157,18 @@
                 on:click={() => { selectedTask = task; showTaskDetail = true; comments = []; newComment = ''; loadComments(task.id); }}
                 class="p-3 bg-white dark:bg-slate-800 rounded-lg border border-gray-300 dark:border-slate-600 hover:border-slate-500 cursor-move hover:bg-gray-100 dark:bg-slate-700/80 transition-all {draggedTask && draggedTask.id === task.id ? 'opacity-50 scale-95' : ''}"
               >
-                <!-- Title -->
-                <h3 class="font-semibold text-sm mb-1">{task.title}</h3>
+                <!-- Title + Age Badge -->
+                <div class="flex items-start gap-2 mb-1">
+                  <h3 class="font-semibold text-sm flex-1">{task.title}</h3>
+                  {#if task.status !== 'done'}
+                    {@const age = getTaskAge(task)}
+                    {#if age}
+                      <span class="text-xs font-mono px-1.5 py-0.5 rounded-full border flex-shrink-0 {age.level === 'alert' ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-amber-500/20 text-amber-400 border-amber-500/30'}">
+                        {age.label}
+                      </span>
+                    {/if}
+                  {/if}
+                </div>
                 
                 <!-- Project Name -->
                 <p class="text-xs text-slate-500 dark:text-slate-400 mb-2">{task.projectName || getProjectName(task.projectId)}</p>
