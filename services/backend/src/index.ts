@@ -726,8 +726,37 @@ gatewayClient.on('agent', async (payload: any) => {
     // Clean up session tracking on completion signals
     if (hasCompletionMarker(data.text) || stream === 'complete' || stream === 'done' || (stream === 'lifecycle' && data.phase === 'end')) {
       console.log('[SubagentHandler] Session completed, cleaning up tracking:', sessionKey);
+
+      // Extract cost from transcript and update the task
+      const taskId = subagentTaskIds.get(sessionKey);
+      if (taskId) {
+        try {
+          const costData = await getSessionCostFromTranscript(sessionKey);
+          if (costData && (costData.cost > 0 || costData.tokens.total > 0)) {
+            const task = await findTaskBySessionKey(sessionKey);
+            if (task && !task.cost) {
+              await updateTask(task.id, {
+                cost: costData.cost || undefined,
+                tokens: costData.tokens.total > 0 ? costData.tokens : undefined,
+                model: costData.model || undefined,
+                runtime: costData.runtime || undefined,
+              });
+              console.log('[SubagentHandler] Updated task cost from transcript:', {
+                taskId: task.id,
+                cost: costData.cost,
+                tokens: costData.tokens,
+                model: costData.model,
+              });
+            }
+          }
+        } catch (err) {
+          console.error('[SubagentHandler] Failed to extract cost from transcript:', err);
+        }
+      }
+
       sessionLastActivity.delete(sessionKey);
       knownSubagentSessions.delete(sessionKey);
+      subagentTaskIds.delete(sessionKey);
       subagentTextBuffers.delete(sessionKey);
     }
   } catch (err) {
