@@ -1,0 +1,8 @@
+{
+  "name": "mission-clawtrol",
+  "version": "1.0.0",
+  "description": "Task and project management for OpenClaw agents — self-contained workflow rules via API",
+  "skill": {
+    "entry": "SKILL.md"
+  }
+}
