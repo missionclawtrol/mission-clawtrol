@@ -11,6 +11,17 @@
   let loading = true;
   let loadingDetail = false;
   
+  // Cost data
+  interface ProjectCost {
+    projectId: string;
+    tasks: number;
+    lines: number;
+    aiCost: number;
+    humanCost: number;
+    savings: number;
+  }
+  let projectCost: ProjectCost | null = null;
+  
   // Modal states
   let showNewProjectModal = false;
   let showImportModal = false;
@@ -67,6 +78,7 @@
   
   async function selectProject(id: string) {
     loadingDetail = true;
+    projectCost = null;
     try {
       const [project, agents, summary] = await Promise.all([
         fetchProject(id),
@@ -76,11 +88,30 @@
       selectedProject = project;
       projectAgents = agents;
       agentSummary = summary;
+      // Fetch cost data for this project
+      try {
+        const costRes = await fetch(`http://${window.location.hostname}:3001/api/costs/by-project`);
+        if (costRes.ok) {
+          const costData = await costRes.json();
+          projectCost = (costData.projects || []).find((p: ProjectCost) => p.projectId === id) || null;
+        }
+      } catch (e) {
+        console.warn('Failed to load cost data:', e);
+      }
     } catch (err) {
       console.error('Failed to load project details:', err);
     } finally {
       loadingDetail = false;
     }
+  }
+  
+  function formatCostCurrency(value: number): string {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: value >= 100 ? 0 : 2,
+      maximumFractionDigits: value >= 100 ? 0 : 2,
+    }).format(value);
   }
   
   async function handleCreateProject() {
@@ -814,6 +845,41 @@
               📂 Open in Terminal
             </button>
           </div>
+        </div>
+        
+        <!-- Cost Savings -->
+        <div>
+          <h3 class="text-sm text-slate-500 dark:text-slate-400 mb-2 font-medium">💰 COST SAVINGS</h3>
+          {#if projectCost && projectCost.tasks > 0}
+            <div class="p-3 bg-gray-100 dark:bg-slate-700/50 rounded-lg space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-sm text-slate-500 dark:text-slate-400">Saved</span>
+                <span class="text-lg font-bold text-green-400">{formatCostCurrency(projectCost.savings)}</span>
+              </div>
+              <div class="flex items-center justify-between text-sm">
+                <span class="text-slate-500 dark:text-slate-400">AI Cost</span>
+                <span class="text-slate-600 dark:text-slate-300">{formatCostCurrency(projectCost.aiCost)}</span>
+              </div>
+              {#if projectCost.aiCost > 0}
+                <div class="flex items-center justify-between text-sm">
+                  <span class="text-slate-500 dark:text-slate-400">ROI</span>
+                  <span class="text-yellow-400 font-medium">{(projectCost.humanCost / projectCost.aiCost).toFixed(1)}x</span>
+                </div>
+              {/if}
+              <div class="flex items-center justify-between text-sm">
+                <span class="text-slate-500 dark:text-slate-400">Hours saved</span>
+                <span class="text-slate-600 dark:text-slate-300">{(projectCost.humanCost / 100).toFixed(1)} hrs</span>
+              </div>
+              <div class="flex items-center justify-between text-sm">
+                <span class="text-slate-500 dark:text-slate-400">Tasks completed</span>
+                <span class="text-slate-600 dark:text-slate-300">{projectCost.tasks}</span>
+              </div>
+            </div>
+          {:else}
+            <div class="p-3 bg-gray-100 dark:bg-slate-700/30 rounded-lg text-center text-sm text-slate-500 dark:text-slate-400 italic">
+              No completed tasks yet
+            </div>
+          {/if}
         </div>
         
         <!-- Agent Roster (deduplicated from tasks) -->

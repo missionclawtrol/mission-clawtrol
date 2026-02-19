@@ -11,6 +11,17 @@
   let formLoading = false;
   let formError = '';
   
+  // Cost data
+  interface ProjectCost {
+    projectId: string;
+    tasks: number;
+    lines: number;
+    aiCost: number;
+    humanCost: number;
+    savings: number;
+  }
+  let projectCost: ProjectCost | null = null;
+  
   // Modal states
   let showAddTaskModal = false;
   let showGenerateTasksModal = false;
@@ -41,6 +52,28 @@
     if (!projectId) return;
     const allTasks = await fetchTasks();
     tasks = allTasks.filter(t => t.projectId === projectId);
+  }
+  
+  async function loadCosts() {
+    if (!projectId) return;
+    try {
+      const res = await fetch(`http://${window.location.hostname}:3001/api/costs/by-project`);
+      if (res.ok) {
+        const data = await res.json();
+        projectCost = (data.projects || []).find((p: ProjectCost) => p.projectId === projectId) || null;
+      }
+    } catch (e) {
+      console.warn('Failed to load cost data:', e);
+    }
+  }
+  
+  function formatCostCurrency(value: number): string {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: value >= 100 ? 0 : 2,
+      maximumFractionDigits: value >= 100 ? 0 : 2,
+    }).format(value);
   }
   
   function getTaskStats() {
@@ -239,6 +272,7 @@
   onMount(() => {
     loadProject();
     loadTasks();
+    loadCosts();
   });
 </script>
 
@@ -488,6 +522,39 @@
             {getTaskStats().percentage}%
           </span>
         </div>
+      {/if}
+    </div>
+    
+    <!-- Cost Savings Card -->
+    <div class="bg-slate-800 border-b border-slate-700 px-6 py-4">
+      <h2 class="text-sm text-slate-400 font-medium mb-3">💰 COST SAVINGS</h2>
+      {#if projectCost && projectCost.tasks > 0}
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div class="p-3 bg-slate-700/50 rounded-lg">
+            <div class="text-xs text-slate-400 mb-1">Saved</div>
+            <div class="text-xl font-bold text-green-400">{formatCostCurrency(projectCost.savings)}</div>
+          </div>
+          <div class="p-3 bg-slate-700/50 rounded-lg">
+            <div class="text-xs text-slate-400 mb-1">AI Cost</div>
+            <div class="text-base font-semibold text-slate-200">{formatCostCurrency(projectCost.aiCost)}</div>
+          </div>
+          {#if projectCost.aiCost > 0}
+            <div class="p-3 bg-slate-700/50 rounded-lg">
+              <div class="text-xs text-slate-400 mb-1">ROI</div>
+              <div class="text-base font-semibold text-yellow-400">{(projectCost.humanCost / projectCost.aiCost).toFixed(1)}x</div>
+            </div>
+          {/if}
+          <div class="p-3 bg-slate-700/50 rounded-lg">
+            <div class="text-xs text-slate-400 mb-1">Hours saved</div>
+            <div class="text-base font-semibold text-slate-200">{(projectCost.humanCost / 100).toFixed(1)} hrs</div>
+          </div>
+          <div class="p-3 bg-slate-700/50 rounded-lg">
+            <div class="text-xs text-slate-400 mb-1">Tasks completed</div>
+            <div class="text-base font-semibold text-slate-200">{projectCost.tasks}</div>
+          </div>
+        </div>
+      {:else}
+        <p class="text-sm text-slate-500 italic">No completed tasks yet</p>
       {/if}
     </div>
     
