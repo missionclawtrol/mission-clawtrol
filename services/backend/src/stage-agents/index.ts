@@ -219,12 +219,6 @@ async function handleDoneStage(taskId: string): Promise<void> {
   const task = await findTaskById(taskId);
   if (!task) return;
 
-  // Skip non-mission-clawtrol tasks
-  if (task.projectId !== 'mission-clawtrol') {
-    console.log(`[StageAgent] Skipping docs update for non-MC task ${taskId}`);
-    return;
-  }
-
   // Skip if no commit (nothing changed in the codebase)
   if (!task.commitHash) {
     console.log(`[StageAgent] Skipping docs update for task ${taskId}: no commit hash`);
@@ -300,13 +294,13 @@ You are a docs agent. A task just completed in Mission Clawtrol. Your job is to 
 
 1. Read the current PROJECT.md:
 \`\`\`bash
-cat ~/.openclaw/workspace/mission-clawtrol/PROJECT.md
+cat ~/.openclaw/workspace/${task.projectId || 'mission-clawtrol'}/PROJECT.md
 \`\`\`
 
 2. Check what changed in this commit:
 \`\`\`bash
-git -C ~/.openclaw/workspace/mission-clawtrol diff --stat ${task.commitHash}^..${task.commitHash}
-git -C ~/.openclaw/workspace/mission-clawtrol log --oneline -1 ${task.commitHash}
+git -C ~/.openclaw/workspace/${task.projectId || 'mission-clawtrol'} diff --stat ${task.commitHash}^..${task.commitHash}
+git -C ~/.openclaw/workspace/${task.projectId || 'mission-clawtrol'} log --oneline -1 ${task.commitHash}
 \`\`\`
 
 3. Determine if PROJECT.md needs updating. It needs an update if the task:
@@ -328,7 +322,7 @@ git -C ~/.openclaw/workspace/mission-clawtrol log --oneline -1 ${task.commitHash
    - Be concise — one or two lines per feature
    - Commit the change:
    \`\`\`bash
-   cd ~/.openclaw/workspace/mission-clawtrol
+   cd ~/.openclaw/workspace/${task.projectId || 'mission-clawtrol'}
    git add PROJECT.md
    git commit -m "docs: update PROJECT.md for ${task.title}"
    \`\`\`

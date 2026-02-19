@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { join } from 'path';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
@@ -899,7 +900,7 @@ gatewayClient.on('subagent-completed', async (payload: any) => {
     }
     
     // Fallback: if no explicit hash found, query git log for recent commits since task started
-    const repoPath = '/home/chris/.openclaw/workspace/mission-clawtrol';
+    const repoPath = join(process.env.HOME || '', '.openclaw', 'workspace', task.projectId || 'mission-clawtrol');
     if (!commitHash && task.createdAt) {
       const taskStartTime = new Date(task.createdAt);
       taskStartTime.setSeconds(taskStartTime.getSeconds() - 5);

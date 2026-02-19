@@ -7,7 +7,7 @@ import { EventEmitter } from 'events';
 import { randomUUID } from 'crypto';
 
 const GATEWAY_URL = process.env.GATEWAY_URL || 'ws://127.0.0.1:18789';
-const GATEWAY_TOKEN = process.env.GATEWAY_TOKEN || '7e83848aa3816ca3b0ebfb8e0155e6bd8a36e5ea1ee77a0e';
+const GATEWAY_TOKEN = process.env.GATEWAY_TOKEN || '';
 const PROTOCOL_VERSION = 3;
 
 export interface ApprovalRequest {
@@ -46,6 +46,10 @@ export class GatewayClient extends EventEmitter {
     if (this.connected) return;
 
     return new Promise((resolve, reject) => {
+      if (!GATEWAY_TOKEN) {
+        console.warn('[GatewayClient] WARNING: GATEWAY_TOKEN not set. Agent automation will not work. Set GATEWAY_TOKEN env var to your OpenClaw gateway token.');
+      }
+
       console.log(`[GatewayClient] Connecting to ${GATEWAY_URL}...`);
       
       this.ws = new WebSocket(GATEWAY_URL);

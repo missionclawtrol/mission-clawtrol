@@ -59,6 +59,37 @@ Follow it exactly.
 
 That's it — the workflow rules live in Mission Clawtrol and are served at runtime. No other config needed. See [`skill/SKILL.md`](skill/SKILL.md) for the full skill reference.
 
+## Required OpenClaw Agents
+
+Mission Clawtrol automates two stages of the task lifecycle. You must have these agent IDs configured in OpenClaw:
+
+| Agent ID | Purpose | When it runs |
+|----------|---------|-------------|
+| `qa` | Reviews handoff notes and verifies done criteria | Every time a task moves to Review |
+| `editor` | Reads the commit diff and updates PROJECT.md | Every time a task is marked Done |
+
+Both agents use whatever model is configured for them in OpenClaw. If an agent is unavailable, MC logs a warning and the task stays in its current state for manual review.
+
+**Minimum viable OpenClaw agent config:**
+```yaml
+agents:
+  - id: qa
+    model: anthropic/claude-haiku-4-5
+  - id: editor
+    model: anthropic/claude-haiku-4-5
+```
+
+## PROJECT.md Conventions
+
+Mission Clawtrol reads special fields from each project's `PROJECT.md` to unlock features:
+
+| Field | Example | Enables |
+|-------|---------|---------|
+| `**Repo:** <url>` | `**Repo:** https://github.com/org/repo` | Clickable commit hash links on task cards |
+| `**Report Channel:** <id>` | `**Report Channel:** C0AGS13AABS` | Send to Slack on Reports page |
+
+A project is detected by the presence of a `PROJECT.md` file in its workspace folder (`~/.openclaw/workspace/<project-id>/PROJECT.md`).
+
 ## Production Deployment
 
 ```bash
