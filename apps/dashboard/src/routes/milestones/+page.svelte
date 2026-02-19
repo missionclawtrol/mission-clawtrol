@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { fetchAllMilestones, type Milestone } from '$lib/api';
+  import { fetchAllMilestones, updateMilestone, type Milestone } from '$lib/api';
 
   let milestones: (Milestone & { projectName?: string })[] = [];
   let loading = true;
@@ -31,6 +31,15 @@
   function isOverdue(dateStr?: string): boolean {
     if (!dateStr) return false;
     return new Date(dateStr) < new Date();
+  }
+
+  async function handleReopen(milestone: Milestone) {
+    try {
+      const updated = await updateMilestone(milestone.id, { status: 'open' });
+      milestones = milestones.map(m => m.id === updated.id ? { ...updated, projectName: m.projectName } : m);
+    } catch (e) {
+      console.error('Failed to reopen milestone:', e);
+    }
   }
 
   onMount(load);
@@ -124,12 +133,20 @@
                 <span class="text-sm font-medium text-slate-600 dark:text-slate-300">{milestone.name}</span>
                 <span class="text-xs text-slate-500">📁 {milestone.projectName || milestone.projectId}</span>
                 <span class="text-xs text-slate-500">{milestone.doneTasks}/{milestone.totalTasks} tasks</span>
-                <button
-                  on:click={() => goto(`/tasks?milestone=${milestone.id}`)}
-                  class="ml-auto text-xs text-slate-500 hover:text-blue-400"
-                >
-                  View →
-                </button>
+                <div class="ml-auto flex items-center gap-2">
+                  <button
+                    on:click={() => handleReopen(milestone)}
+                    class="text-xs text-slate-500 hover:text-blue-400 px-2 py-0.5 border border-slate-600 rounded"
+                  >
+                    Reopen
+                  </button>
+                  <button
+                    on:click={() => goto(`/tasks?milestone=${milestone.id}`)}
+                    class="text-xs text-slate-500 hover:text-blue-400"
+                  >
+                    View →
+                  </button>
+                </div>
               </div>
             {/each}
           </div>

@@ -19,6 +19,12 @@
   let newMilestoneTargetDate = '';
   let milestoneFormLoading = false;
   let milestoneFormError = '';
+  // Edit state
+  let editingMilestoneId: string | null = null;
+  let editMilestoneName = '';
+  let editMilestoneDescription = '';
+  let editMilestoneTargetDate = '';
+  let editMilestoneLoading = false;
 
   // Cost data
   interface ProjectCost {
@@ -440,6 +446,31 @@
       milestones = milestones.map(x => x.id === m.id ? updated : x);
     } catch (e: any) {
       console.error('Failed to toggle milestone status:', e);
+    }
+  }
+
+  function startEditMilestone(m: Milestone) {
+    editingMilestoneId = m.id;
+    editMilestoneName = m.name;
+    editMilestoneDescription = m.description || '';
+    editMilestoneTargetDate = m.targetDate ? m.targetDate.slice(0, 10) : '';
+  }
+
+  async function handleSaveEditMilestone() {
+    if (!editingMilestoneId || !editMilestoneName.trim()) return;
+    editMilestoneLoading = true;
+    try {
+      const updated = await updateMilestone(editingMilestoneId, {
+        name: editMilestoneName.trim(),
+        description: editMilestoneDescription.trim() || undefined,
+        targetDate: editMilestoneTargetDate || undefined,
+      });
+      milestones = milestones.map(x => x.id === updated.id ? updated : x);
+      editingMilestoneId = null;
+    } catch (e: any) {
+      console.error('Failed to update milestone:', e);
+    } finally {
+      editMilestoneLoading = false;
     }
   }
 
@@ -981,31 +1012,71 @@
                 {@const progress = getMilestoneProgress(m)}
                 {@const overdue = isMilestoneOverdue(m)}
                 <div class="p-3 bg-gray-100 dark:bg-slate-700/50 rounded-lg">
-                  <div class="flex items-start justify-between mb-1">
-                    <button
-                      on:click={() => goto(`/tasks?milestone=${m.id}`)}
-                      class="font-medium text-sm text-blue-400 hover:text-blue-300 text-left truncate flex-1"
-                    >{m.name}</button>
-                    <div class="flex items-center gap-1 ml-2 flex-shrink-0">
-                      <button
-                        on:click={() => handleToggleMilestoneStatus(m)}
-                        title="Close milestone"
-                        class="text-xs text-slate-500 hover:text-green-400"
-                      >✓</button>
-                      <button
-                        on:click={() => handleDeleteMilestone(m)}
-                        title="Delete milestone"
-                        class="text-xs text-slate-500 hover:text-red-400"
-                      >✕</button>
+                  {#if editingMilestoneId === m.id}
+                    <!-- Edit form -->
+                    <div class="space-y-2">
+                      <input
+                        type="text"
+                        bind:value={editMilestoneName}
+                        class="w-full px-2 py-1 text-sm bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded focus:border-blue-500 focus:outline-none"
+                        placeholder="Milestone name"
+                      />
+                      <textarea
+                        bind:value={editMilestoneDescription}
+                        rows="2"
+                        class="w-full px-2 py-1 text-sm bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded focus:border-blue-500 focus:outline-none resize-none"
+                        placeholder="Description (optional)"
+                      ></textarea>
+                      <input
+                        type="date"
+                        bind:value={editMilestoneTargetDate}
+                        class="w-full px-2 py-1 text-sm bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded focus:border-blue-500 focus:outline-none"
+                      />
+                      <div class="flex gap-2 justify-end">
+                        <button
+                          on:click={() => editingMilestoneId = null}
+                          class="px-2 py-1 text-xs bg-gray-100 dark:bg-slate-700 hover:bg-slate-600 rounded"
+                        >Cancel</button>
+                        <button
+                          on:click={handleSaveEditMilestone}
+                          disabled={editMilestoneLoading}
+                          class="px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 rounded disabled:opacity-50"
+                        >{editMilestoneLoading ? 'Saving...' : 'Save'}</button>
+                      </div>
                     </div>
-                  </div>
-                  <div class="text-xs {overdue ? 'text-red-400' : 'text-slate-500 dark:text-slate-400'} mb-2">
-                    {overdue ? '⚠️ ' : '📅 '}{formatMilestoneDate(m.targetDate)}
-                  </div>
-                  <div class="w-full bg-gray-200 dark:bg-slate-600 rounded-full h-1.5 mb-1">
-                    <div class="bg-blue-500 h-1.5 rounded-full" style="width: {progress}%"></div>
-                  </div>
-                  <div class="text-xs text-slate-500 dark:text-slate-400">{m.doneTasks}/{m.totalTasks} done · {progress}%</div>
+                  {:else}
+                    <!-- View mode -->
+                    <div class="flex items-start justify-between mb-1">
+                      <button
+                        on:click={() => goto(`/tasks?milestone=${m.id}`)}
+                        class="font-medium text-sm text-blue-400 hover:text-blue-300 text-left truncate flex-1"
+                      >{m.name}</button>
+                      <div class="flex items-center gap-1 ml-2 flex-shrink-0">
+                        <button
+                          on:click={() => startEditMilestone(m)}
+                          title="Edit milestone"
+                          class="text-xs text-slate-500 hover:text-blue-400"
+                        >✎</button>
+                        <button
+                          on:click={() => handleToggleMilestoneStatus(m)}
+                          title="Close milestone"
+                          class="text-xs text-slate-500 hover:text-green-400"
+                        >✓</button>
+                        <button
+                          on:click={() => handleDeleteMilestone(m)}
+                          title="Delete milestone"
+                          class="text-xs text-slate-500 hover:text-red-400"
+                        >✕</button>
+                      </div>
+                    </div>
+                    <div class="text-xs {overdue ? 'text-red-400' : 'text-slate-500 dark:text-slate-400'} mb-2">
+                      {overdue ? '⚠️ ' : '📅 '}{formatMilestoneDate(m.targetDate)}
+                    </div>
+                    <div class="w-full bg-gray-200 dark:bg-slate-600 rounded-full h-1.5 mb-1">
+                      <div class="bg-blue-500 h-1.5 rounded-full" style="width: {progress}%"></div>
+                    </div>
+                    <div class="text-xs text-slate-500 dark:text-slate-400">{m.doneTasks}/{m.totalTasks} done · {progress}%</div>
+                  {/if}
                 </div>
               {/each}
 
