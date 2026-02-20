@@ -187,8 +187,18 @@
     }
   }
 
-  function formatTime(timestamp: string | null): string {
-    if (!timestamp) return 'Never';
+  function formatStatusLabel(status: string): string {
+    switch (status) {
+      case 'online': return 'Active';
+      case 'idle': return 'Idle';
+      case 'offline': return 'Inactive';
+      default: return status;
+    }
+  }
+
+  function formatTime(timestamp: string | null, status?: string): string {
+    if (status === 'online') return 'Active now';
+    if (!timestamp) return 'No completed tasks yet';
     const date = new Date(timestamp);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
@@ -364,7 +374,7 @@
           <!-- Status badge -->
           <div class="mb-3">
             <span class={`inline-block px-2 py-1 text-xs font-medium rounded-full ${getStatusBadge(agent.status)}`}>
-              {agent.status}
+              {formatStatusLabel(agent.status)}
             </span>
           </div>
 
@@ -378,7 +388,7 @@
 
           <!-- Last active -->
           <div class="mb-4 text-sm text-slate-400">
-            <span class="font-medium">Last active:</span> {formatTime(agent.lastActive)}
+            <span class="font-medium">Last active:</span> {formatTime(agent.lastActive, agent.status)}
           </div>
 
           <!-- Mention patterns -->
@@ -440,7 +450,7 @@
         <div class="text-2xl font-bold text-green-400">
           {agents.filter(a => a.status === 'online').length}
         </div>
-        <div class="text-sm text-green-500">Online</div>
+        <div class="text-sm text-green-500">Active</div>
       </div>
       <div class="p-4 bg-yellow-500/10 rounded-lg">
         <div class="text-2xl font-bold text-yellow-400">
@@ -452,7 +462,7 @@
         <div class="text-2xl font-bold text-slate-400">
           {agents.filter(a => a.status === 'offline').length}
         </div>
-        <div class="text-sm text-slate-500">Offline</div>
+        <div class="text-sm text-slate-500">Inactive</div>
       </div>
     </div>
   {/if}
@@ -581,7 +591,7 @@
             <div class="p-3 bg-slate-900 rounded-lg">
               <div class="text-xs text-slate-500 mb-1">Status</div>
               <span class={`inline-block px-2 py-1 text-sm font-medium rounded-full ${getStatusBadge(selectedAgent.status)}`}>
-                {selectedAgent.status}
+                {formatStatusLabel(selectedAgent.status)}
               </span>
             </div>
             <div class="p-3 bg-slate-900 rounded-lg">
@@ -593,7 +603,7 @@
 
           <div class="p-3 bg-slate-900 rounded-lg">
             <div class="text-xs text-slate-500 mb-1">Last Active</div>
-            <div class="text-sm">{formatTime(selectedAgent.lastActive)}</div>
+            <div class="text-sm">{formatTime(selectedAgent.lastActive, selectedAgent.status)}</div>
             {#if selectedAgent.lastActive}
               <div class="text-xs text-slate-500 mt-1">{new Date(selectedAgent.lastActive).toLocaleString()}</div>
             {/if}

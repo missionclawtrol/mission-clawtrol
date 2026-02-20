@@ -1,11 +1,12 @@
 // Mission Clawtrol - Work Orders Kanban Board
 
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { fetchTasks, createTask, updateTask, deleteTask, spawnAgent, fetchProjects, fetchAgents, fetchSettings, fetchUsers, fetchMilestones, type Task, type Project, type Agent, type Settings, type UserInfo, type Milestone } from '$lib/api';
   import { onTaskUpdate } from '$lib/taskWebSocket';
+  import { sendWSMessage, addWSMessageCallback } from '$lib/websocket';
   
   // Data
   let tasks: Task[] = [];
@@ -25,6 +26,27 @@
   let selectedTask: Task | null = null;
   let draggedTask: Task | null = null;
   let dragOverColumn: string | null = null;
+
+  // Activity stream state
+  interface ActivityEntry {
+    id: string;
+    type: 'lifecycle-start' | 'text' | 'complete';
+    timestamp: string;
+    text?: string;
+    expanded: boolean;
+  }
+  let activityEntries: ActivityEntry[] = [];
+  let activityCurrentText = '';
+  let activityTab: 'details' | 'activity' = 'details';
+  let activityScrollEl: HTMLElement | null = null;
+  let activityUserScrolled = false;
+  let activityFinished = false;
+  let activityCount = 0;
+  // Batch text deltas via requestAnimationFrame
+  let activityPendingDelta = '';
+  let activityRafPending = false;
+  // Cleanup fn for WS callback
+  let removeActivityCallback: (() => void) | null = null;
   
   // Milestone state
   let milestones: Milestone[] = [];
@@ -693,7 +715,113 @@
     draggedTask = null;
   }
   
+  // ── Activity Stream ──────────────────────────────────────────────
+
+  function resetActivityState() {
+    activityEntries = [];
+    activityCurrentText = '';
+    activityPendingDelta = '';
+    activityRafPending = false;
+    activityFinished = false;
+    activityCount = 0;
+    activityUserScrolled = false;
+  }
+
+  function scrollActivityToBottom() {
+    if (!activityUserScrolled && activityScrollEl) {
+      requestAnimationFrame(() => {
+        if (activityScrollEl) activityScrollEl.scrollTop = activityScrollEl.scrollHeight;
+      });
+    }
+  }
+
+  function handleActivityMsg(msg: any) {
+    const { stream, data } = msg;
+    if (!showTaskDetail || !selectedTask) return;
+
+    if (stream === 'assistant' && data?.delta) {
+      activityPendingDelta += data.delta;
+      activityCount++;
+      if (!activityRafPending) {
+        activityRafPending = true;
+        requestAnimationFrame(() => {
+          activityCurrentText += activityPendingDelta;
+          activityPendingDelta = '';
+          activityRafPending = false;
+          scrollActivityToBottom();
+        });
+      }
+    } else if (stream === 'lifecycle') {
+      if (data?.phase === 'start') {
+        activityEntries = [...activityEntries, {
+          id: crypto.randomUUID(),
+          type: 'lifecycle-start',
+          timestamp: msg.timestamp,
+          expanded: false,
+        }];
+        activityCount++;
+        scrollActivityToBottom();
+      } else if (data?.phase === 'end') {
+        // Finalize any pending text
+        if (activityPendingDelta) {
+          activityCurrentText += activityPendingDelta;
+          activityPendingDelta = '';
+        }
+        if (activityCurrentText) {
+          activityEntries = [...activityEntries, {
+            id: crypto.randomUUID(),
+            type: 'text',
+            timestamp: msg.timestamp,
+            text: activityCurrentText,
+            expanded: false,
+          }];
+          activityCurrentText = '';
+        }
+        activityFinished = true;
+        activityCount++;
+        scrollActivityToBottom();
+      }
+    } else if (stream === 'complete') {
+      // Session fully done
+      if (activityCurrentText || activityPendingDelta) {
+        activityCurrentText += activityPendingDelta;
+        activityPendingDelta = '';
+        activityEntries = [...activityEntries, {
+          id: crypto.randomUUID(),
+          type: 'text',
+          timestamp: msg.timestamp,
+          text: activityCurrentText,
+          expanded: false,
+        }];
+        activityCurrentText = '';
+      }
+      activityFinished = true;
+      scrollActivityToBottom();
+    }
+  }
+
+  function openTaskDetail(task: Task) {
+    selectedTask = task;
+    showTaskDetail = true;
+    comments = [];
+    newComment = '';
+    loadComments(task.id);
+    resetActivityState();
+
+    if (task.status === 'in-progress' && task.sessionKey) {
+      activityTab = 'activity'; // auto-switch to live activity
+      sendWSMessage({ type: 'watch-task', taskId: task.id });
+    } else {
+      activityTab = 'details';
+    }
+  }
+
   function closeModals() {
+    // Stop watching task activity if we were watching
+    if (selectedTask?.status === 'in-progress' && selectedTask?.sessionKey) {
+      sendWSMessage({ type: 'unwatch-task', taskId: selectedTask.id });
+    }
+    resetActivityState();
     showNewTaskModal = false;
     showTaskDetail = false;
     selectedTask = null;
@@ -716,6 +844,21 @@
       console.log('[Tasks] WebSocket task update received, refreshing...');
       loadData();
     });
+
+    // Register direct activity stream callback
+    removeActivityCallback = addWSMessageCallback((msg) => {
+      if (msg.type === 'task-activity' && showTaskDetail && selectedTask && msg.taskId === selectedTask.id) {
+        handleActivityMsg(msg);
+      }
+    });
+  });
+
+  onDestroy(() => {
+    removeActivityCallback?.();
+    // Unwatch if detail was open when component was destroyed
+    if (selectedTask?.status === 'in-progress' && selectedTask?.sessionKey) {
+      sendWSMessage({ type: 'unwatch-task', taskId: selectedTask.id });
+    }
   });
 </script>
 
@@ -884,11 +1027,92 @@
 {#if showTaskDetail && selectedTask}
   <div class="fixed inset-0 flex items-center justify-center z-50 p-4">
     <div class="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 w-full max-w-lg max-h-[85vh] flex flex-col" on:click|stopPropagation on:keydown|stopPropagation role="dialog" aria-modal="true" aria-labelledby="task-detail-title" tabindex="-1">
-      <div class="px-4 py-3 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between">
+      <div class="px-4 py-3 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between flex-shrink-0">
         <h2 id="task-detail-title" class="font-semibold">Task Details</h2>
         <button on:click={closeModals} class="text-slate-500 dark:text-slate-400 hover:text-white">✕</button>
       </div>
-      <div class="p-4 space-y-4 overflow-y-auto">
+
+      <!-- Tabs (only for in-progress tasks with a session) -->
+      {#if selectedTask.status === 'in-progress' && selectedTask.sessionKey}
+        <div class="flex border-b border-gray-200 dark:border-slate-700 flex-shrink-0 bg-white dark:bg-slate-800">
+          <button
+            class="px-4 py-2 text-sm font-medium border-b-2 transition-colors {activityTab === 'details' ? 'border-blue-500 text-blue-500' : 'border-transparent text-slate-500 hover:text-slate-200'}"
+            on:click={() => activityTab = 'details'}
+          >Details</button>
+          <button
+            class="px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 {activityTab === 'activity' ? 'border-blue-500 text-blue-500' : 'border-transparent text-slate-500 hover:text-slate-200'}"
+            on:click={() => activityTab = 'activity'}
+          >
+            Live Activity
+            {#if activityCount > 0}
+              <span class="bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">{activityCount > 99 ? '99+' : activityCount}</span>
+            {/if}
+          </button>
+        </div>
+      {/if}
+
+      <!-- Activity panel (shown when activity tab active) -->
+      {#if activityTab === 'activity' && selectedTask.status === 'in-progress' && selectedTask.sessionKey}
+        <div
+          class="flex-1 overflow-y-auto bg-gray-950 min-h-0 font-mono text-xs p-3 space-y-1"
+          bind:this={activityScrollEl}
+          on:scroll={(e) => {
+            const el = e.currentTarget;
+            activityUserScrolled = el.scrollHeight - el.scrollTop - el.clientHeight > 50;
+          }}
+        >
+          {#if activityEntries.length === 0 && !activityCurrentText}
+            <div class="flex flex-col items-center justify-center h-32 text-slate-600 gap-2">
+              <span class="text-2xl animate-pulse">⚡</span>
+              <span>Waiting for agent activity…</span>
+            </div>
+          {:else}
+            {#each activityEntries as entry (entry.id)}
+              {#if entry.type === 'lifecycle-start'}
+                <div class="text-green-500 py-1">🚀 Agent started <span class="text-slate-600">{new Date(entry.timestamp).toLocaleTimeString()}</span></div>
+              {:else if entry.type === 'text'}
+                <div class="mb-2">
+                  <div class="text-slate-600 mb-0.5">{new Date(entry.timestamp).toLocaleTimeString()}</div>
+                  {#if entry.expanded || (entry.text?.length ?? 0) <= 400}
+                    <pre class="whitespace-pre-wrap text-slate-300 font-sans leading-relaxed">{entry.text}</pre>
+                  {:else}
+                    <pre class="whitespace-pre-wrap text-slate-300 font-sans leading-relaxed">{entry.text?.slice(0, 400)}…</pre>
+                    <button
+                      class="text-blue-400 hover:underline mt-0.5"
+                      on:click={() => { entry.expanded = true; activityEntries = activityEntries; }}
+                    >Show more</button>
+                  {/if}
+                </div>
+              {:else if entry.type === 'complete'}
+                <div class="text-green-400 border-t border-slate-800 pt-2 mt-2">✅ Agent session complete</div>
+              {/if}
+            {/each}
+
+            <!-- Live streaming text with cursor -->
+            {#if activityCurrentText}
+              <div class="mb-2">
+                <div class="text-slate-600 mb-0.5">live</div>
+                <pre class="whitespace-pre-wrap text-slate-200 font-sans leading-relaxed">{activityCurrentText.length > 800 ? '…' + activityCurrentText.slice(-800) : activityCurrentText}<span class="text-blue-400 animate-pulse">▋</span></pre>
+              </div>
+            {/if}
+
+            {#if activityFinished && !activityCurrentText}
+              <div class="text-slate-600 text-center pt-3 pb-1 border-t border-slate-800 mt-2">— session ended —</div>
+            {/if}
+          {/if}
+
+          <!-- Scroll-to-bottom button -->
+          {#if activityUserScrolled}
+            <button
+              class="sticky bottom-2 left-1/2 -translate-x-1/2 block mx-auto bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs px-3 py-1 rounded-full shadow"
+              on:click={() => { activityUserScrolled = false; scrollActivityToBottom(); }}
+            >↓ Jump to bottom</button>
+          {/if}
+        </div>
+
+      <!-- Details panel (default) -->
+      {:else}
+      <div class="p-4 space-y-4 overflow-y-auto flex-1">
         <div>
           <h3 class="font-semibold text-lg">{selectedTask.title}</h3>
         </div>
@@ -1176,7 +1400,8 @@
           {/if}
         </div>
       </div>
-      <div class="px-4 py-3 border-t border-gray-200 dark:border-slate-700 flex justify-between gap-2">
+      {/if}<!-- end activity/details panel -->
+      <div class="px-4 py-3 border-t border-gray-200 dark:border-slate-700 flex justify-between gap-2 flex-shrink-0">
         {#if (selectedTask.status === 'todo' || selectedTask.status === 'in-progress') && !selectedTask.sessionKey}
           <button 
             on:click={() => handleStartWork(selectedTask!)}
@@ -1328,7 +1553,7 @@
               <div 
                 draggable="true"
                 on:dragstart={() => handleDragStart(task)}
-                on:click={() => { selectedTask = task; showTaskDetail = true; comments = []; newComment = ''; loadComments(task.id); }}
+                on:click={() => openTaskDetail(task)}
                 class="p-3 bg-white dark:bg-slate-800 rounded-lg border border-gray-300 dark:border-slate-600 hover:border-slate-500 cursor-move hover:bg-gray-100 dark:bg-slate-700/80 transition-all {draggedTask && draggedTask.id === task.id ? 'opacity-50 scale-95' : ''}"
               >
                 <!-- Title + Age Badge + Type Badge -->

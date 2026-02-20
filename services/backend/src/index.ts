@@ -45,6 +45,9 @@ const fastify = Fastify({
 // Track connected dashboard clients
 const dashboardClients = new Set<WebSocket>();
 
+// Track clients watching specific task activity streams
+const taskWatchers = new Map<string, Set<WebSocket>>(); // taskId -> Set<WebSocket>
+
 // Track known subagent sessions to detect when they start/complete
 const knownSubagentSessions = new Map<string, { agentId: string; title: string; startedAt: number }>();
 const subagentTaskIds = new Map<string, string>(); // sessionKey -> taskId
@@ -623,6 +626,29 @@ fastify.register(async function (fastify) {
             gatewayConnected: gatewayClient.isConnected(),
           }));
         }
+        
+        // Handle task activity watching
+        else if (data.type === 'watch-task') {
+          const taskId = data.taskId;
+          if (taskId) {
+            if (!taskWatchers.has(taskId)) taskWatchers.set(taskId, new Set());
+            taskWatchers.get(taskId)!.add(socket);
+            console.log('[ActivityStream] Client watching task:', taskId);
+            socket.send(JSON.stringify({ 
+              type: 'watching-task', 
+              taskId,
+              timestamp: new Date().toISOString(),
+            }));
+          }
+        }
+        
+        else if (data.type === 'unwatch-task') {
+          const taskId = data.taskId;
+          if (taskId && taskWatchers.has(taskId)) {
+            taskWatchers.get(taskId)!.delete(socket);
+            console.log('[ActivityStream] Client unwatching task:', taskId);
+          }
+        }
       } catch (err) {
         console.error('Error parsing WebSocket message:', err);
       }
@@ -631,6 +657,10 @@ fastify.register(async function (fastify) {
     socket.on('close', () => {
       console.log('Dashboard client disconnected');
       dashboardClients.delete(socket);
+      // Remove from all task watchers
+      for (const [, watchers] of taskWatchers) {
+        watchers.delete(socket);
+      }
     });
     
     // Send initial connection message
@@ -720,6 +750,29 @@ gatewayClient.on('agent', async (payload: any) => {
         taskId: existingTask.id,
         title: existingTask.title,
       });
+    }
+
+    // Relay activity events to dashboard watchers
+    const watchTaskId = subagentTaskIds.get(sessionKey);
+    if (watchTaskId) {
+      const watchers = taskWatchers.get(watchTaskId);
+      if (watchers && watchers.size > 0) {
+        const activityMsg = JSON.stringify({
+          type: 'task-activity',
+          taskId: watchTaskId,
+          stream,
+          data: {
+            delta: data.delta,
+            phase: data.phase,
+          },
+          timestamp: new Date().toISOString(),
+        });
+        for (const watcher of watchers) {
+          if (watcher.readyState === WebSocket.OPEN) {
+            watcher.send(activityMsg);
+          }
+        }
+      }
     }
 
     // Accumulate text for completion detection

@@ -165,6 +165,19 @@ export async function agentRoutes(fastify: FastifyInstance) {
           let lastActive: string | null = null;
           let activeSession: string | null = null;
           
+          // Use last completed task time as "last active" source of truth
+          try {
+            const lastCompleted = await db.queryOne<{ completedAt: string | null }>(
+              'SELECT completedAt FROM tasks WHERE agentId = ? AND completedAt IS NOT NULL ORDER BY completedAt DESC LIMIT 1',
+              [def.id]
+            );
+            if (lastCompleted?.completedAt) {
+              lastActive = new Date(lastCompleted.completedAt).toISOString();
+            }
+          } catch (err) {
+            // ignore DB errors for lastActive
+          }
+          
           try {
             const sessionsData = await readFile(sessionsPath, 'utf-8');
             const sessions = JSON.parse(sessionsData) as Record<string, SessionData>;
@@ -176,7 +189,6 @@ export async function agentRoutes(fastify: FastifyInstance) {
             if (session) {
               const sessionStatus = determineStatus(session);
               status = sessionStatus === 'working' ? 'online' : sessionStatus === 'idle' ? 'idle' : 'offline';
-              lastActive = new Date(session.updatedAt).toISOString();
               activeSession = mainSessionKey;
             }
           } catch (err) {

@@ -13,6 +13,18 @@ export interface WSMessage {
 export const wsConnected: Writable<boolean> = writable(false);
 export const wsMessages: Writable<WSMessage[]> = writable([]);
 
+// Direct message callback registry (bypasses Svelte reactivity batching)
+type MessageCallback = (message: WSMessage) => void;
+const messageCallbacks: MessageCallback[] = [];
+
+export function addWSMessageCallback(callback: MessageCallback): () => void {
+  messageCallbacks.push(callback);
+  return () => {
+    const idx = messageCallbacks.indexOf(callback);
+    if (idx >= 0) messageCallbacks.splice(idx, 1);
+  };
+}
+
 let socket: WebSocket | null = null;
 let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -36,12 +48,20 @@ export function connectWebSocket() {
     socket.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
-        console.log('WS message:', message);
+        // Only log non-activity messages (activity floods the console)
+        if (message.type !== 'task-activity') {
+          console.log('WS message:', message);
+        }
         
         wsMessages.update(msgs => {
           const updated = [message, ...msgs];
           return updated.slice(0, 100); // Keep last 100 messages
         });
+
+        // Dispatch to direct callbacks (guaranteed per-message, no batching)
+        for (const cb of [...messageCallbacks]) {
+          try { cb(message); } catch (e) { console.error('WS callback error:', e); }
+        }
       } catch (error) {
         console.error('Failed to parse WS message:', error);
       }
