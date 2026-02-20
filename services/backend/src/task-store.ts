@@ -190,6 +190,16 @@ export async function updateTask(id: string, updates: Partial<Task>): Promise<Ta
       completedAt = now;
     }
 
+    // sessionKey has a UNIQUE constraint — if the new sessionKey is already held by
+    // a different task, clear it there first to avoid a constraint violation.
+    // This happens when an agent finishes one task and is assigned to another.
+    if (updates.sessionKey && updates.sessionKey !== task.sessionKey) {
+      await db.execute(
+        'UPDATE tasks SET sessionKey = NULL WHERE sessionKey = ? AND id != ?',
+        [updates.sessionKey, id]
+      );
+    }
+
     await db.execute(
       `UPDATE tasks SET 
         title = ?, description = ?, status = ?, priority = ?, 
