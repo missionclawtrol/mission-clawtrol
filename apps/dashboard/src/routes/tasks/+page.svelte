@@ -52,20 +52,15 @@
   let milestones: Milestone[] = [];
   let selectedMilestoneId = ''; // Empty = all milestones
 
-  // Filter state - sync with URL query params
+  // Filter state - initialized from URL on mount, then managed as local state
+  // NOTE: These are plain let variables (not reactive $: declarations) so that
+  // bind:value on filter dropdowns works correctly in Svelte 5. The reactive
+  // $: URL sync block was removed because in Svelte 5 it overrides bind:value,
+  // preventing the filter dropdowns from updating the displayed work orders.
   let searchQuery = '';
   let selectedAssignee = '';
   let selectedProjectId = ''; // Empty = all projects
   let filterType = ''; // Empty = all types
-  
-  // Sync filters from URL on mount and when URL changes
-  $: {
-    searchQuery = $page.url.searchParams.get('q') || '';
-    selectedAssignee = $page.url.searchParams.get('assignee') || '';
-    selectedProjectId = $page.url.searchParams.get('project') || '';
-    selectedMilestoneId = $page.url.searchParams.get('milestone') || '';
-    filterType = $page.url.searchParams.get('type') || '';
-  }
 
   // When project filter changes, load milestones for that project
   $: if (selectedProjectId && !loading) {
@@ -829,7 +824,15 @@
   }
   
   onMount(async () => {
-    // Filters are now loaded from URL query params via reactive statement
+    // Initialize filter state from URL query params on mount
+    // (These are local state variables — not reactive $: declarations — so
+    //  bind:value on the dropdowns works correctly in Svelte 5.)
+    searchQuery = $page.url.searchParams.get('q') || '';
+    selectedAssignee = $page.url.searchParams.get('assignee') || '';
+    selectedProjectId = $page.url.searchParams.get('project') || '';
+    selectedMilestoneId = $page.url.searchParams.get('milestone') || '';
+    filterType = $page.url.searchParams.get('type') || '';
+
     // Initial load
     await loadData();
 
