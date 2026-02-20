@@ -6,7 +6,15 @@ Mission Clawtrol is your project and task management system. It tracks tasks, ag
 
 ## On Session Start
 
-Fetch and follow your workflow rules:
+**Step 1 — Get full situational awareness:**
+
+```
+GET http://localhost:3001/api/context
+```
+
+This returns all active projects with their current tasks, recent completions, blockers, and next-up items. Review this before doing anything else so you know where things stand.
+
+**Step 2 — Fetch and follow your workflow rules:**
 
 ```
 GET http://localhost:3001/api/workflow

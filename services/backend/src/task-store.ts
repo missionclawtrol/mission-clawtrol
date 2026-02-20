@@ -27,6 +27,8 @@ export interface Task {
   dueDate?: string | null; // ISO timestamp for when task is due
   milestoneId?: string | null; // Milestone this task belongs to
   type?: 'feature' | 'bug' | 'chore' | 'spike' | 'docs' | null; // Task type for bug tracking
+  blocked?: boolean | null; // Whether this task is currently blocked
+  blockerNote?: string | null; // Description of what is blocking this task
 }
 
 /**
@@ -65,6 +67,8 @@ function rowToTask(row: any): Task {
             total: row.linesTotal ?? 0,
           }
         : undefined,
+    blocked: row.blocked != null ? Boolean(row.blocked) : null,
+    blockerNote: row.blockerNote || null,
   };
 }
 
@@ -129,8 +133,9 @@ export async function createTask(
         id, title, description, status, priority, projectId, agentId, sessionKey, 
         handoffNotes, commitHash, linesAdded, linesRemoved, linesTotal, 
         estimatedHumanMinutes, humanCost, cost, runtime, model, 
-        createdBy, assignedTo, dueDate, milestoneId, type, createdAt, updatedAt, completedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        createdBy, assignedTo, dueDate, milestoneId, type, blocked, blockerNote,
+        createdAt, updatedAt, completedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         data.title,
@@ -155,6 +160,8 @@ export async function createTask(
         data.dueDate || null,
         data.milestoneId || null,
         data.type || null,
+        data.blocked ? 1 : 0,
+        data.blockerNote || null,
         now,
         now,
         null,
@@ -200,13 +207,20 @@ export async function updateTask(id: string, updates: Partial<Task>): Promise<Ta
       );
     }
 
+    // Determine blocked value
+    const blockedValue = updates.blocked !== undefined
+      ? (updates.blocked ? 1 : 0)
+      : (task.blocked ? 1 : 0);
+
     await db.execute(
       `UPDATE tasks SET 
         title = ?, description = ?, status = ?, priority = ?, 
         projectId = ?, agentId = ?, sessionKey = ?, handoffNotes = ?, 
         commitHash = ?, linesAdded = ?, linesRemoved = ?, linesTotal = ?, 
         estimatedHumanMinutes = ?, humanCost = ?, cost = ?, runtime = ?, model = ?,
-        assignedTo = ?, dueDate = ?, milestoneId = ?, type = ?, updatedAt = ?, completedAt = ?
+        assignedTo = ?, dueDate = ?, milestoneId = ?, type = ?,
+        blocked = ?, blockerNote = ?,
+        updatedAt = ?, completedAt = ?
       WHERE id = ?`,
       [
         updates.title ?? task.title,
@@ -230,6 +244,8 @@ export async function updateTask(id: string, updates: Partial<Task>): Promise<Ta
         updates.dueDate !== undefined ? updates.dueDate : task.dueDate,
         updates.milestoneId !== undefined ? updates.milestoneId : task.milestoneId,
         updates.type !== undefined ? updates.type : task.type,
+        blockedValue,
+        updates.blockerNote !== undefined ? updates.blockerNote : task.blockerNote,
         now,
         completedAt,
         id,

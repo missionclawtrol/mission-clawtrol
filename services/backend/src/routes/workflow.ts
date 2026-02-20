@@ -1,6 +1,10 @@
 import { FastifyInstance } from 'fastify';
 
 const workflowRules = {
+  sessionStart: {
+    fetchContext: 'GET http://localhost:3001/api/context',
+    instruction: 'On every session start, fetch /api/context to orient yourself on active projects, recent work, and blockers before doing anything else.',
+  },
   taskCreationWorkflow: {
     description: 'MANDATORY steps when creating any task',
     steps: [

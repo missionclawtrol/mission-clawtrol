@@ -24,6 +24,7 @@ import { commentRoutes } from './routes/comments.js';
 import { webhookRoutes } from './routes/webhooks.js';
 import { workflowRoutes } from './routes/workflow.js';
 import { milestoneRoutes } from './routes/milestones.js';
+import { contextRoutes } from './routes/context.js';
 import { reportRoutes } from './routes/reports.js';
 import { setupRoutes } from './routes/setup.js';
 import { agentsConfigRoutes } from './routes/agents-config.js';
@@ -520,6 +521,7 @@ await fastify.register(milestoneRoutes, { prefix: '/api/milestones' });
 await fastify.register(reportRoutes, { prefix: '/api/reports' });
 await fastify.register(setupRoutes, { prefix: '/api/setup' });
 await fastify.register(agentsConfigRoutes, { prefix: '/api/agents-config' });
+await fastify.register(contextRoutes, { prefix: '/api/context' });
 
 // Health check with comprehensive system status
 fastify.get('/api/health', async () => {
