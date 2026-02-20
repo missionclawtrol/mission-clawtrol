@@ -12,7 +12,7 @@ import { agentRoutes } from './routes/agents.js';
 import { projectRoutes } from './routes/projects.js';
 import { activityRoutes, logApprovalEvent, setBroadcastFunction } from './routes/activity.js';
 import { approvalRoutes } from './routes/approvals.js';
-import { taskRoutes, setBroadcastFn, setSessionCleanupFn } from './routes/tasks.js';
+import { taskRoutes, setBroadcastFn, setSessionCleanupFn, setSessionRegistrationFn } from './routes/tasks.js';
 import { auditRoutes } from './routes/audit.js';
 import { sessionRoutes } from './routes/sessions.js';
 import { settingsRoutes } from './routes/settings.js';
@@ -48,6 +48,15 @@ const dashboardClients = new Set<WebSocket>();
 
 // Track clients watching specific task activity streams
 const taskWatchers = new Map<string, Set<WebSocket>>(); // taskId -> Set<WebSocket>
+
+// Ring buffer of recent activity events per task (last 100 entries) for replay on watcher connect
+const ACTIVITY_BUFFER_MAX = 100;
+interface ActivityBufferEntry {
+  stream: string;
+  data: { delta?: any; phase?: any };
+  timestamp: string;
+}
+const taskActivityBuffer = new Map<string, ActivityBufferEntry[]>(); // taskId -> recent events
 
 // Track known subagent sessions to detect when they start/complete
 const knownSubagentSessions = new Map<string, { agentId: string; title: string; startedAt: number }>();
@@ -606,6 +615,16 @@ setSessionCleanupFn((oldSessionKey: string) => {
   subagentTextBuffers.delete(oldSessionKey);
 });
 
+// Wire up eager session registration — called when a task is PATCH'd with a new sessionKey
+// so we start capturing events immediately, before the first agent event arrives
+setSessionRegistrationFn((sessionKey: string, taskId: string, agentId: string, title: string) => {
+  console.log(`[EagerRegistration] Pre-registering session: ${sessionKey} for task: ${taskId}`);
+  knownSubagentSessions.set(sessionKey, { agentId, title, startedAt: Date.now() });
+  subagentTaskIds.set(sessionKey, taskId);
+  subagentTextBuffers.set(sessionKey, '');
+  subagentTitleExtracted.set(sessionKey, true); // Don't overwrite the user-provided title
+});
+
 // Note: completeTask poller removed — agents are responsible for moving their own
 // tasks to review. Stuck in-progress tasks are visible on the board for manual triage.
 
@@ -641,6 +660,24 @@ fastify.register(async function (fastify) {
               taskId,
               timestamp: new Date().toISOString(),
             }));
+
+            // Replay buffered events so the watcher doesn't miss anything that happened before connecting
+            const buffer = taskActivityBuffer.get(taskId) || [];
+            if (buffer.length > 0) {
+              console.log(`[ActivityStream] Replaying ${buffer.length} buffered events for task:`, taskId);
+              for (const evt of buffer) {
+                if (socket.readyState === WebSocket.OPEN) {
+                  socket.send(JSON.stringify({
+                    type: 'task-activity',
+                    taskId,
+                    replayed: true,
+                    stream: evt.stream,
+                    data: evt.data,
+                    timestamp: evt.timestamp,
+                  }));
+                }
+              }
+            }
           }
         }
         
@@ -754,20 +791,27 @@ gatewayClient.on('agent', async (payload: any) => {
       });
     }
 
-    // Relay activity events to dashboard watchers
+    // Relay activity events to dashboard watchers and buffer for replay
     const watchTaskId = subagentTaskIds.get(sessionKey);
     if (watchTaskId) {
+      const eventTimestamp = new Date().toISOString();
+      const eventData = { delta: data.delta, phase: data.phase };
+
+      // Push to ring buffer (cap at ACTIVITY_BUFFER_MAX)
+      if (!taskActivityBuffer.has(watchTaskId)) taskActivityBuffer.set(watchTaskId, []);
+      const buf = taskActivityBuffer.get(watchTaskId)!;
+      buf.push({ stream, data: eventData, timestamp: eventTimestamp });
+      if (buf.length > ACTIVITY_BUFFER_MAX) buf.shift();
+
+      // Relay to live watchers
       const watchers = taskWatchers.get(watchTaskId);
       if (watchers && watchers.size > 0) {
         const activityMsg = JSON.stringify({
           type: 'task-activity',
           taskId: watchTaskId,
           stream,
-          data: {
-            delta: data.delta,
-            phase: data.phase,
-          },
-          timestamp: new Date().toISOString(),
+          data: eventData,
+          timestamp: eventTimestamp,
         });
         for (const watcher of watchers) {
           if (watcher.readyState === WebSocket.OPEN) {
@@ -786,6 +830,15 @@ gatewayClient.on('agent', async (payload: any) => {
     // Clean up session tracking on completion signals
     if (hasCompletionMarker(data.text) || stream === 'complete' || stream === 'done' || (stream === 'lifecycle' && data.phase === 'end')) {
       console.log('[SubagentHandler] Session completed, cleaning up tracking:', sessionKey);
+      
+      // Schedule buffer cleanup after 5 minutes so late-connecting watchers can still replay
+      const bufferTaskId = subagentTaskIds.get(sessionKey);
+      if (bufferTaskId) {
+        setTimeout(() => {
+          taskActivityBuffer.delete(bufferTaskId);
+          console.log('[ActivityBuffer] Cleaned up buffer for task:', bufferTaskId);
+        }, 5 * 60 * 1000);
+      }
 
       // Extract cost from transcript and update the task
       const taskId = subagentTaskIds.get(sessionKey);
@@ -1047,6 +1100,14 @@ gatewayClient.on('subagent-completed', async (payload: any) => {
     if (timer) {
       clearTimeout(timer);
       subagentTitleTimers.delete(sessionKey);
+    }
+
+    // Schedule buffer cleanup after 5 minutes (keep for late-connecting watchers)
+    if (task) {
+      setTimeout(() => {
+        taskActivityBuffer.delete(task.id);
+        console.log('[ActivityBuffer] Cleaned up buffer for completed task:', task.id);
+      }, 5 * 60 * 1000);
     }
   } catch (err) {
     console.error('[SubagentHandler] Error handling subagent-completed:', err);

@@ -25,6 +25,12 @@ import { dispatchWebhookEvent } from '../webhook-dispatcher.js';
 // Broadcast function will be injected from index.ts
 let broadcastFn: ((type: string, payload: unknown) => void) | null = null;
 
+// Eager session registration — called when a task is assigned a new sessionKey via PATCH
+let sessionRegistrationFn: ((sessionKey: string, taskId: string, agentId: string, title: string) => void) | null = null;
+export function setSessionRegistrationFn(fn: (sessionKey: string, taskId: string, agentId: string, title: string) => void) {
+  sessionRegistrationFn = fn;
+}
+
 export function setBroadcastFn(fn: (type: string, payload: unknown) => void) {
   broadcastFn = fn;
 }
@@ -462,6 +468,13 @@ export async function taskRoutes(fastify: FastifyInstance) {
       }
 
       const task = await updateTask(id, updates);
+
+      // Eagerly register the new sessionKey so events are captured from the very first message
+      if (task && updates.sessionKey && updates.sessionKey !== oldTask?.sessionKey && sessionRegistrationFn) {
+        const agentId = (updates as any).agentId ?? oldTask?.agentId ?? 'unknown';
+        console.log(`[Tasks] Eagerly registering session: ${updates.sessionKey} for task: ${task.id}`);
+        sessionRegistrationFn(updates.sessionKey, task.id, agentId, task.title);
+      }
 
       if (!task) {
         return reply.status(404).send({ error: 'Task not found' });
