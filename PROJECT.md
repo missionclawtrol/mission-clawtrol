@@ -61,6 +61,8 @@ mission-clawtrol/
 - 📁 **Project Management** — Create new projects or import existing workspace folders with auto-generated templates
 - 🔐 **GitHub OAuth** — Authentication with role-based permissions
 - 🐳 **Docker Ready** — Containerized for production deployment
+- 🧭 **Agent Context API** — `GET /api/context` gives agents full situational awareness on session start (active milestones, blockers, recent completions, next-up tasks)
+- 🚧 **Blocker Tracking** — Tasks can be flagged as blocked (with a note); surfaced automatically in the context API
 
 ## Quick Start
 
@@ -113,6 +115,8 @@ All endpoints at `http://localhost:3001/api/`:
 | `GET /users` | Team members |
 | `GET/PUT /settings` | App settings |
 | `GET /audit` | Audit log |
+| `GET /context` | Full agent context — active projects, milestones, blockers, recent/next tasks |
+| `GET /context/:projectId` | Scoped agent context for a single project |
 
 ## License
 
