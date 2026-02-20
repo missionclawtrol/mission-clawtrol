@@ -123,6 +123,10 @@
   // Check if any filters are active
   $: hasActiveFilters = searchQuery || selectedAssignee || selectedProjectId || selectedMilestoneId || filterType;
   
+  // Force kanban re-render when any filter changes
+  // (getTasksForColumn is a function call in the template — Svelte can't track its reactive deps)
+  $: filterKey = `${selectedProjectId}|${selectedAssignee}|${searchQuery}|${selectedMilestoneId}|${filterType}`;
+  
   // Persist project filter to localStorage (legacy - now mainly using URL)
   const PROJECT_FILTER_KEY = 'mission-clawtrol-project-filter';
   
@@ -339,7 +343,7 @@
     }
   }
   
-  function getTasksForColumn(columnId: string): Task[] {
+  function getTasksForColumn(columnId: string, _reactiveKey?: string): Task[] {
     let filtered = tasks.filter(t => {
       // Filter by status
       if (t.status !== columnId) return false;
@@ -1539,7 +1543,7 @@
             <div class="w-3 h-3 rounded-full {column.color}"></div>
             <h2 class="font-semibold text-sm">{column.name}</h2>
             <span class="ml-auto text-xs text-slate-500 dark:text-slate-400 bg-gray-100 dark:bg-slate-700 px-2 py-1 rounded">
-              {getTasksForColumn(column.id).length}
+              {getTasksForColumn(column.id, filterKey).length}
             </span>
           </div>
           
@@ -1552,7 +1556,7 @@
               </div>
             {/if}
             
-            {#each getTasksForColumn(column.id) as task (task.id)}
+            {#each getTasksForColumn(column.id, filterKey) as task (task.id)}
               <div 
                 draggable="true"
                 on:dragstart={() => handleDragStart(task)}
@@ -1696,7 +1700,7 @@
             {/each}
             
             <!-- Empty State -->
-            {#if getTasksForColumn(column.id).length === 0}
+            {#if getTasksForColumn(column.id, filterKey).length === 0}
               <div class="flex items-center justify-center h-32 text-slate-500 text-xs">
                 No tasks
               </div>
