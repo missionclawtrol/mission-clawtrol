@@ -158,6 +158,8 @@ export class SqliteDatabase implements IDatabase {
     addColumnIfMissing('tasks', 'type', 'TEXT');
     addColumnIfMissing('tasks', 'blocked', 'INTEGER DEFAULT 0');
     addColumnIfMissing('tasks', 'blockerNote', 'TEXT');
+    addColumnIfMissing('tasks', 'tokensIn', 'INTEGER');
+    addColumnIfMissing('tasks', 'tokensOut', 'INTEGER');
 
     // Insert default settings if not exist
     this.db

@@ -371,7 +371,7 @@
     {#if report.milestones.length > 0}
       <div class="bg-slate-800 border border-slate-700 rounded-xl p-5">
         <h2 class="text-slate-300 font-semibold mb-4">🎯 Milestones</h2>
-        <div class="space-y-4">
+        <div class="space-y-5">
           {#each report.milestones as m}
             <div>
               <div class="flex items-center justify-between mb-1">
@@ -389,6 +389,25 @@
                   style="width: {m.progress}%"
                 ></div>
               </div>
+              <!-- Milestone cost sub-row -->
+              {#if (m.aiCost && m.aiCost > 0) || (m.totalTokens && m.totalTokens > 0)}
+                <div class="flex flex-wrap gap-4 mt-1.5 text-xs text-slate-500">
+                  {#if m.aiCost && m.aiCost > 0}
+                    <span>AI: <span class="text-slate-300">{fmtMoney(m.aiCost)}</span></span>
+                  {/if}
+                  {#if m.savings && m.savings > 0}
+                    <span>Saved: <span class="text-green-400">{fmtMoney(m.savings)}</span></span>
+                  {/if}
+                  {#if m.totalTokens && m.totalTokens > 0}
+                    <span>🧠 <span class="text-amber-400">{fmtNumber(m.totalTokens)}</span> tokens</span>
+                  {/if}
+                  {#if m.runtimeSeconds && m.runtimeSeconds > 0}
+                    {@const mins = Math.floor(m.runtimeSeconds / 60)}
+                    {@const secs = m.runtimeSeconds % 60}
+                    <span>⏱ <span class="text-slate-300">{mins > 0 ? `${mins}m ` : ''}{secs}s</span></span>
+                  {/if}
+                </div>
+              {/if}
             </div>
           {/each}
         </div>

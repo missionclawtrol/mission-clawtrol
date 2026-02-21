@@ -19,6 +19,10 @@
     aiCost: number;
     humanCost: number;
     savings: number;
+    tokensIn?: number;
+    tokensOut?: number;
+    totalTokens?: number;
+    runtimeSeconds?: number;
   }
   let projectCost: ProjectCost | null = null;
   let humanHourlyRate = 100;
@@ -564,6 +568,22 @@
             <div class="text-xs text-slate-400 mb-1">Tasks completed</div>
             <div class="text-base font-semibold text-slate-200">{projectCost.tasks}</div>
           </div>
+          {#if projectCost.totalTokens && projectCost.totalTokens > 0}
+            <div class="p-3 bg-slate-700/50 rounded-lg col-span-2 sm:col-span-2">
+              <div class="text-xs text-slate-400 mb-1">🧠 Tokens Used</div>
+              <div class="text-base font-semibold text-amber-400">
+                {projectCost.totalTokens >= 1_000_000 
+                  ? `${(projectCost.totalTokens / 1_000_000).toFixed(1)}M` 
+                  : projectCost.totalTokens >= 1_000 
+                    ? `${Math.round(projectCost.totalTokens / 1_000)}K` 
+                    : projectCost.totalTokens}
+              </div>
+              <div class="text-xs text-slate-500 mt-0.5">
+                {projectCost.tokensIn != null ? `${Math.round((projectCost.tokensIn || 0) / 1000)}K in` : ''} 
+                {projectCost.tokensOut != null ? `/ ${Math.round((projectCost.tokensOut || 0) / 1000)}K out` : ''}
+              </div>
+            </div>
+          {/if}
         </div>
       {:else}
         <p class="text-sm text-slate-500 italic">No completed tasks yet</p>

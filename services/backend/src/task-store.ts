@@ -15,6 +15,8 @@ export interface Task {
   completedAt: string | null;
   handoffNotes: string | null;
   tokens?: { input: number; output: number; total: number };
+  tokensIn?: number; // input token count (persisted)
+  tokensOut?: number; // output token count (persisted)
   cost?: number; // estimated USD
   model?: string; // which model was used
   runtime?: number; // milliseconds
@@ -51,6 +53,11 @@ function rowToTask(row: any): Task {
     cost: row.cost,
     model: row.model,
     runtime: row.runtime,
+    tokensIn: row.tokensIn ?? undefined,
+    tokensOut: row.tokensOut ?? undefined,
+    tokens: (row.tokensIn != null || row.tokensOut != null)
+      ? { input: row.tokensIn ?? 0, output: row.tokensOut ?? 0, total: (row.tokensIn ?? 0) + (row.tokensOut ?? 0) }
+      : undefined,
     commitHash: row.commitHash,
     estimatedHumanMinutes: row.estimatedHumanMinutes,
     humanCost: row.humanCost,
@@ -132,10 +139,10 @@ export async function createTask(
       `INSERT INTO tasks (
         id, title, description, status, priority, projectId, agentId, sessionKey, 
         handoffNotes, commitHash, linesAdded, linesRemoved, linesTotal, 
-        estimatedHumanMinutes, humanCost, cost, runtime, model, 
+        estimatedHumanMinutes, humanCost, cost, runtime, model, tokensIn, tokensOut,
         createdBy, assignedTo, dueDate, milestoneId, type, blocked, blockerNote,
         createdAt, updatedAt, completedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         data.title,
@@ -155,6 +162,8 @@ export async function createTask(
         data.cost || null,
         data.runtime || null,
         data.model || null,
+        data.tokensIn ?? data.tokens?.input ?? null,
+        data.tokensOut ?? data.tokens?.output ?? null,
         data.createdBy || null,
         data.assignedTo || null,
         data.dueDate || null,
@@ -212,12 +221,25 @@ export async function updateTask(id: string, updates: Partial<Task>): Promise<Ta
       ? (updates.blocked ? 1 : 0)
       : (task.blocked ? 1 : 0);
 
+    // Resolve tokensIn/tokensOut from updates (support both flat and nested tokens)
+    const newTokensIn = updates.tokensIn !== undefined
+      ? updates.tokensIn
+      : updates.tokens?.input !== undefined
+        ? updates.tokens.input
+        : task.tokensIn;
+    const newTokensOut = updates.tokensOut !== undefined
+      ? updates.tokensOut
+      : updates.tokens?.output !== undefined
+        ? updates.tokens.output
+        : task.tokensOut;
+
     await db.execute(
       `UPDATE tasks SET 
         title = ?, description = ?, status = ?, priority = ?, 
         projectId = ?, agentId = ?, sessionKey = ?, handoffNotes = ?, 
         commitHash = ?, linesAdded = ?, linesRemoved = ?, linesTotal = ?, 
         estimatedHumanMinutes = ?, humanCost = ?, cost = ?, runtime = ?, model = ?,
+        tokensIn = ?, tokensOut = ?,
         assignedTo = ?, dueDate = ?, milestoneId = ?, type = ?,
         blocked = ?, blockerNote = ?,
         updatedAt = ?, completedAt = ?
@@ -240,6 +262,8 @@ export async function updateTask(id: string, updates: Partial<Task>): Promise<Ta
         updates.cost ?? task.cost,
         updates.runtime ?? task.runtime,
         updates.model ?? task.model,
+        newTokensIn ?? null,
+        newTokensOut ?? null,
         updates.assignedTo !== undefined ? updates.assignedTo : task.assignedTo,
         updates.dueDate !== undefined ? updates.dueDate : task.dueDate,
         updates.milestoneId !== undefined ? updates.milestoneId : task.milestoneId,

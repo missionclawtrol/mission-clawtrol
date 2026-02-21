@@ -10,6 +10,9 @@ interface CostSummary {
   totalHumanMinutes: number;
   netSavings: number;
   hoursSaved: number;
+  totalTokensIn: number;
+  totalTokensOut: number;
+  totalTokens: number;
 }
 
 interface AgentCost {
@@ -19,6 +22,10 @@ interface AgentCost {
   aiCost: number;
   humanCost: number;
   savings: number;
+  tokensIn: number;
+  tokensOut: number;
+  totalTokens: number;
+  runtimeSeconds: number;
 }
 
 interface ProjectCost {
@@ -28,6 +35,24 @@ interface ProjectCost {
   aiCost: number;
   humanCost: number;
   savings: number;
+  tokensIn: number;
+  tokensOut: number;
+  totalTokens: number;
+  runtimeSeconds: number;
+}
+
+interface MilestoneCost {
+  milestoneId: string;
+  milestoneName: string;
+  projectId: string;
+  tasks: number;
+  aiCost: number;
+  humanCost: number;
+  savings: number;
+  tokensIn: number;
+  tokensOut: number;
+  totalTokens: number;
+  runtimeSeconds: number;
 }
 
 interface TimeSeriesPoint {
@@ -37,6 +62,8 @@ interface TimeSeriesPoint {
   aiCost: number;
   humanCost: number;
   savings: number;
+  tokensIn: number;
+  tokensOut: number;
 }
 
 /**
@@ -70,7 +97,9 @@ export async function costRoutes(fastify: FastifyInstance) {
           COALESCE(SUM(cost), 0) as totalAiCost,
           COALESCE(SUM(runtime), 0) as totalAiSeconds,
           COALESCE(SUM(estimatedHumanMinutes), 0) as totalHumanMinutes,
-          COALESCE(SUM(humanCost), 0) as totalHumanCost
+          COALESCE(SUM(humanCost), 0) as totalHumanCost,
+          COALESCE(SUM(tokensIn), 0) as totalTokensIn,
+          COALESCE(SUM(tokensOut), 0) as totalTokensOut
         FROM tasks 
         WHERE status = 'done'
       `).get() as any;
@@ -95,6 +124,9 @@ export async function costRoutes(fastify: FastifyInstance) {
       // Net savings = human cost - AI cost
       const netSavings = totalHumanCost - totalAiCost;
 
+      const totalTokensIn = rows?.totalTokensIn || 0;
+      const totalTokensOut = rows?.totalTokensOut || 0;
+
       const summary: CostSummary = {
         totalTasks: rows?.totalTasks || 0,
         totalLines,
@@ -104,6 +136,9 @@ export async function costRoutes(fastify: FastifyInstance) {
         totalHumanMinutes,
         netSavings,
         hoursSaved: Math.max(0, hoursSaved),
+        totalTokensIn,
+        totalTokensOut,
+        totalTokens: totalTokensIn + totalTokensOut,
       };
 
       return summary;
@@ -122,7 +157,10 @@ export async function costRoutes(fastify: FastifyInstance) {
           COUNT(*) as tasks,
           COALESCE(SUM(linesAdded), 0) + COALESCE(SUM(linesRemoved), 0) as lines,
           COALESCE(SUM(cost), 0) as aiCost,
-          COALESCE(SUM(humanCost), 0) as humanCost
+          COALESCE(SUM(humanCost), 0) as humanCost,
+          COALESCE(SUM(tokensIn), 0) as tokensIn,
+          COALESCE(SUM(tokensOut), 0) as tokensOut,
+          COALESCE(SUM(runtime), 0) as totalRuntime
         FROM tasks 
         WHERE status = 'done' AND agentId IS NOT NULL
         GROUP BY agentId
@@ -135,6 +173,10 @@ export async function costRoutes(fastify: FastifyInstance) {
         aiCost: row.aiCost || 0,
         humanCost: row.humanCost || 0,
         savings: (row.humanCost || 0) - (row.aiCost || 0),
+        tokensIn: row.tokensIn || 0,
+        tokensOut: row.tokensOut || 0,
+        totalTokens: (row.tokensIn || 0) + (row.tokensOut || 0),
+        runtimeSeconds: Math.round((row.totalRuntime || 0) / 1000),
       }));
 
       return { agents };
@@ -153,7 +195,10 @@ export async function costRoutes(fastify: FastifyInstance) {
           COUNT(*) as tasks,
           COALESCE(SUM(linesAdded), 0) + COALESCE(SUM(linesRemoved), 0) as lines,
           COALESCE(SUM(cost), 0) as aiCost,
-          COALESCE(SUM(humanCost), 0) as humanCost
+          COALESCE(SUM(humanCost), 0) as humanCost,
+          COALESCE(SUM(tokensIn), 0) as tokensIn,
+          COALESCE(SUM(tokensOut), 0) as tokensOut,
+          COALESCE(SUM(runtime), 0) as totalRuntime
         FROM tasks 
         WHERE status = 'done' AND projectId IS NOT NULL
         GROUP BY projectId
@@ -166,6 +211,10 @@ export async function costRoutes(fastify: FastifyInstance) {
         aiCost: row.aiCost || 0,
         humanCost: row.humanCost || 0,
         savings: (row.humanCost || 0) - (row.aiCost || 0),
+        tokensIn: row.tokensIn || 0,
+        tokensOut: row.tokensOut || 0,
+        totalTokens: (row.tokensIn || 0) + (row.tokensOut || 0),
+        runtimeSeconds: Math.round((row.totalRuntime || 0) / 1000),
       }));
 
       return { projects };
@@ -208,7 +257,9 @@ export async function costRoutes(fastify: FastifyInstance) {
           COUNT(*) as tasks,
           COALESCE(SUM(linesAdded), 0) + COALESCE(SUM(linesRemoved), 0) as lines,
           COALESCE(SUM(cost), 0) as aiCost,
-          COALESCE(SUM(humanCost), 0) as humanCost
+          COALESCE(SUM(humanCost), 0) as humanCost,
+          COALESCE(SUM(tokensIn), 0) as tokensIn,
+          COALESCE(SUM(tokensOut), 0) as tokensOut
         FROM tasks 
         WHERE status = 'done' 
           AND completedAt IS NOT NULL
@@ -224,6 +275,8 @@ export async function costRoutes(fastify: FastifyInstance) {
         aiCost: row.aiCost || 0,
         humanCost: row.humanCost || 0,
         savings: (row.humanCost || 0) - (row.aiCost || 0),
+        tokensIn: row.tokensIn || 0,
+        tokensOut: row.tokensOut || 0,
       }));
 
       return { timeSeries, period };
@@ -246,6 +299,7 @@ export async function costRoutes(fastify: FastifyInstance) {
           title,
           agentId,
           projectId,
+          milestoneId,
           model,
           cost,
           runtime,
@@ -254,6 +308,8 @@ export async function costRoutes(fastify: FastifyInstance) {
           linesAdded,
           linesRemoved,
           linesTotal,
+          tokensIn,
+          tokensOut,
           completedAt
         FROM tasks 
         WHERE status = 'done'
@@ -266,22 +322,69 @@ export async function costRoutes(fastify: FastifyInstance) {
         title: row.title,
         agentId: row.agentId,
         projectId: row.projectId,
+        milestoneId: row.milestoneId,
         model: row.model,
         cost: row.cost,
         runtime: row.runtime,
+        runtimeSeconds: row.runtime ? Math.round(row.runtime / 1000) : null,
         humanCost: row.humanCost,
         estimatedHumanMinutes: row.estimatedHumanMinutes,
         linesAdded: row.linesAdded,
         linesRemoved: row.linesRemoved,
         linesTotal: row.linesTotal,
+        tokensIn: row.tokensIn,
+        tokensOut: row.tokensOut,
+        totalTokens: (row.tokensIn || 0) + (row.tokensOut || 0),
         completedAt: row.completedAt,
         savings: (row.humanCost || 0) - (row.cost || 0),
+        estimatedCost: row.cost,
       }));
 
       return { tasks };
     } catch (error) {
       fastify.log.error(error);
       return reply.status(500).send({ error: 'Failed to load recent tasks' });
+    }
+  });
+
+  // GET /api/costs/by-milestone - Breakdown by milestone
+  fastify.get<{}>('/by-milestone', async (request, reply) => {
+    try {
+      const rows = getRawDb().prepare(`
+        SELECT 
+          t.milestoneId,
+          m.name as milestoneName,
+          t.projectId,
+          COUNT(*) as tasks,
+          COALESCE(SUM(t.cost), 0) as aiCost,
+          COALESCE(SUM(t.humanCost), 0) as humanCost,
+          COALESCE(SUM(t.tokensIn), 0) as tokensIn,
+          COALESCE(SUM(t.tokensOut), 0) as tokensOut,
+          COALESCE(SUM(t.runtime), 0) as totalRuntime
+        FROM tasks t
+        LEFT JOIN milestones m ON m.id = t.milestoneId
+        WHERE t.status = 'done' AND t.milestoneId IS NOT NULL
+        GROUP BY t.milestoneId
+      `).all() as any[];
+
+      const milestones: MilestoneCost[] = rows.map(row => ({
+        milestoneId: row.milestoneId,
+        milestoneName: row.milestoneName || row.milestoneId,
+        projectId: row.projectId,
+        tasks: row.tasks || 0,
+        aiCost: row.aiCost || 0,
+        humanCost: row.humanCost || 0,
+        savings: (row.humanCost || 0) - (row.aiCost || 0),
+        tokensIn: row.tokensIn || 0,
+        tokensOut: row.tokensOut || 0,
+        totalTokens: (row.tokensIn || 0) + (row.tokensOut || 0),
+        runtimeSeconds: Math.round((row.totalRuntime || 0) / 1000),
+      }));
+
+      return { milestones };
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({ error: 'Failed to load costs by milestone' });
     }
   });
 }

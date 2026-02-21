@@ -12,6 +12,9 @@
     totalHumanMinutes: number;
     netSavings: number;
     hoursSaved: number;
+    totalTokensIn: number;
+    totalTokensOut: number;
+    totalTokens: number;
   }
 
   interface AgentCost {
@@ -21,6 +24,10 @@
     aiCost: number;
     humanCost: number;
     savings: number;
+    tokensIn: number;
+    tokensOut: number;
+    totalTokens: number;
+    runtimeSeconds: number;
   }
 
   interface ProjectCost {
@@ -30,6 +37,24 @@
     aiCost: number;
     humanCost: number;
     savings: number;
+    tokensIn: number;
+    tokensOut: number;
+    totalTokens: number;
+    runtimeSeconds: number;
+  }
+
+  interface MilestoneCost {
+    milestoneId: string;
+    milestoneName: string;
+    projectId: string;
+    tasks: number;
+    aiCost: number;
+    humanCost: number;
+    savings: number;
+    tokensIn: number;
+    tokensOut: number;
+    totalTokens: number;
+    runtimeSeconds: number;
   }
 
   interface TimeSeriesPoint {
@@ -39,6 +64,8 @@
     aiCost: number;
     humanCost: number;
     savings: number;
+    tokensIn: number;
+    tokensOut: number;
   }
 
   interface RecentTask {
@@ -46,21 +73,28 @@
     title: string;
     agentId: string;
     projectId: string;
+    milestoneId: string | null;
     model: string;
     cost: number;
     runtime: number;
+    runtimeSeconds: number | null;
     humanCost: number;
     estimatedHumanMinutes: number;
     linesAdded: number;
     linesRemoved: number;
     linesTotal: number;
+    tokensIn: number | null;
+    tokensOut: number | null;
+    totalTokens: number;
     completedAt: string;
     savings: number;
+    estimatedCost: number;
   }
 
   let summary: CostSummary | null = null;
   let agents: AgentCost[] = [];
   let projects: ProjectCost[] = [];
+  let milestones: MilestoneCost[] = [];
   let timeSeries: TimeSeriesPoint[] = [];
   let recentTasks: RecentTask[] = [];
   let loading = true;
@@ -89,11 +123,12 @@
         fetchWithTimeout(`${API_BASE}/costs/summary`),
         fetchWithTimeout(`${API_BASE}/costs/by-agent`),
         fetchWithTimeout(`${API_BASE}/costs/by-project`),
+        fetchWithTimeout(`${API_BASE}/costs/by-milestone`),
         fetchWithTimeout(`${API_BASE}/costs/over-time?period=day`),
-        fetchWithTimeout(`${API_BASE}/costs/recent?limit=10`),
+        fetchWithTimeout(`${API_BASE}/costs/recent?limit=20`),
       ]);
 
-      const [summaryRes, agentsRes, projectsRes, timeSeriesRes, recentRes] = results.map(result =>
+      const [summaryRes, agentsRes, projectsRes, milestonesRes, timeSeriesRes, recentRes] = results.map(result =>
         result.status === 'fulfilled' ? result.value : null
       );
 
@@ -109,6 +144,10 @@
       if (projectsRes?.ok) {
         const data = await projectsRes.json();
         projects = data.projects || [];
+      }
+      if (milestonesRes?.ok) {
+        const data = await milestonesRes.json();
+        milestones = data.milestones || [];
       }
       if (timeSeriesRes?.ok) {
         const data = await timeSeriesRes.json();
@@ -167,6 +206,13 @@
     if (!id) return 'N/A';
     // Format kebab-case ids into readable names
     return id.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  function formatTokens(total: number): string {
+    if (!total) return '—';
+    if (total >= 1_000_000) return `${(total / 1_000_000).toFixed(1)}M`;
+    if (total >= 1_000) return `${(total / 1_000).toFixed(0)}K`;
+    return total.toString();
   }
 
   // Calculate max savings for bar charts
@@ -231,15 +277,20 @@
         </p>
       </div>
 
-      <!-- Lines of Code -->
+      <!-- Total Tokens -->
       <div class="bg-white dark:bg-slate-800 rounded-lg p-6 border border-gray-200 dark:border-slate-700">
         <div class="flex items-center gap-3 mb-2">
-          <span class="text-2xl">📝</span>
-          <span class="text-slate-500 dark:text-slate-400 text-sm">Lines of Code</span>
+          <span class="text-2xl">🧠</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">Total Tokens</span>
         </div>
-        <p class="text-3xl font-bold text-purple-400">
-          {summary ? formatNumber(summary.totalLines) : '0'}
+        <p class="text-3xl font-bold text-amber-400">
+          {summary ? formatTokens(summary.totalTokens) : '—'}
         </p>
+        {#if summary && summary.totalTokens > 0}
+          <p class="text-xs text-slate-500 mt-1">
+            {formatTokens(summary.totalTokensIn)} in · {formatTokens(summary.totalTokensOut)} out
+          </p>
+        {/if}
       </div>
 
       <!-- Tasks Completed -->
@@ -251,6 +302,9 @@
         <p class="text-3xl font-bold text-slate-900 dark:text-slate-100">
           {summary ? formatNumber(summary.totalTasks) : '0'}
         </p>
+        {#if summary}
+          <p class="text-xs text-slate-500 mt-1">{formatNumber(summary.totalLines)} lines changed</p>
+        {/if}
       </div>
     </div>
 
@@ -267,13 +321,27 @@
               <div>
                 <div class="flex justify-between text-sm mb-1">
                   <span class="text-slate-600 dark:text-slate-300">{truncateId(agent.agentId)}</span>
-                  <span class="text-green-400">{formatCurrency(agent.savings)}</span>
+                  <div class="flex items-center gap-3">
+                    {#if agent.totalTokens > 0}
+                      <span class="text-amber-400 text-xs">🧠 {formatTokens(agent.totalTokens)}</span>
+                    {/if}
+                    <span class="text-green-400">{formatCurrency(agent.savings)}</span>
+                  </div>
                 </div>
                 <div class="h-2 bg-gray-100 dark:bg-slate-700 rounded-full overflow-hidden">
                   <div 
                     class="h-full bg-green-500 rounded-full transition-all"
                     style="width: {(agent.savings / maxAgentSavings) * 100}%"
                   ></div>
+                </div>
+                <div class="flex gap-4 text-xs text-slate-500 dark:text-slate-500 mt-0.5">
+                  <span>{agent.tasks} tasks</span>
+                  {#if agent.runtimeSeconds > 0}
+                    <span>⏱ {formatRuntime(agent.runtimeSeconds)}</span>
+                  {/if}
+                  {#if agent.aiCost > 0}
+                    <span>AI: {formatCurrency(agent.aiCost)}</span>
+                  {/if}
                 </div>
               </div>
             {/each}
@@ -292,7 +360,12 @@
               <div>
                 <div class="flex justify-between text-sm mb-1">
                   <span class="text-slate-600 dark:text-slate-300">{truncateId(project.projectId)}</span>
-                  <span class="text-green-400">{formatCurrency(project.savings)}</span>
+                  <div class="flex items-center gap-3">
+                    {#if project.totalTokens > 0}
+                      <span class="text-amber-400 text-xs">🧠 {formatTokens(project.totalTokens)}</span>
+                    {/if}
+                    <span class="text-green-400">{formatCurrency(project.savings)}</span>
+                  </div>
                 </div>
                 <div class="h-2 bg-gray-100 dark:bg-slate-700 rounded-full overflow-hidden">
                   <div 
@@ -300,12 +373,58 @@
                     style="width: {(project.savings / maxProjectSavings) * 100}%"
                   ></div>
                 </div>
+                <div class="flex gap-4 text-xs text-slate-500 dark:text-slate-500 mt-0.5">
+                  <span>{project.tasks} tasks</span>
+                  {#if project.runtimeSeconds > 0}
+                    <span>⏱ {formatRuntime(project.runtimeSeconds)}</span>
+                  {/if}
+                  {#if project.aiCost > 0}
+                    <span>AI: {formatCurrency(project.aiCost)}</span>
+                  {/if}
+                </div>
               </div>
             {/each}
           </div>
         {/if}
       </div>
     </div>
+
+    <!-- Savings by Milestone -->
+    {#if milestones.length > 0}
+      <div class="bg-white dark:bg-slate-800 rounded-lg p-6 border border-gray-200 dark:border-slate-700">
+        <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4">🎯 Cost by Milestone</h2>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-gray-200 dark:border-slate-700 text-xs text-slate-500 dark:text-slate-400 uppercase">
+                <th class="text-left py-2 pr-4">Milestone</th>
+                <th class="text-left py-2 pr-4">Project</th>
+                <th class="text-right py-2 pr-4">Tasks</th>
+                <th class="text-right py-2 pr-4">Tokens</th>
+                <th class="text-right py-2 pr-4">Runtime</th>
+                <th class="text-right py-2 pr-4">AI Cost</th>
+                <th class="text-right py-2 pr-4">Human Cost</th>
+                <th class="text-right py-2">Savings</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 dark:divide-slate-700">
+              {#each milestones as m}
+                <tr class="hover:bg-gray-50 dark:hover:bg-slate-700/30">
+                  <td class="py-2 pr-4 text-slate-700 dark:text-slate-300">🎯 {m.milestoneName}</td>
+                  <td class="py-2 pr-4 text-slate-500 dark:text-slate-400">{truncateId(m.projectId)}</td>
+                  <td class="py-2 pr-4 text-right text-slate-600 dark:text-slate-300">{m.tasks}</td>
+                  <td class="py-2 pr-4 text-right text-amber-400">{m.totalTokens > 0 ? formatTokens(m.totalTokens) : '—'}</td>
+                  <td class="py-2 pr-4 text-right text-slate-500 dark:text-slate-400">{m.runtimeSeconds > 0 ? formatRuntime(m.runtimeSeconds) : '—'}</td>
+                  <td class="py-2 pr-4 text-right text-slate-600 dark:text-slate-300">{formatCurrency(m.aiCost)}</td>
+                  <td class="py-2 pr-4 text-right text-slate-600 dark:text-slate-300">{formatCurrency(m.humanCost)}</td>
+                  <td class="py-2 text-right text-green-400 font-medium">{formatCurrency(m.savings)}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {/if}
 
     <!-- Savings Over Time -->
     <div class="bg-white dark:bg-slate-800 rounded-lg p-6 border border-gray-200 dark:border-slate-700">
@@ -346,10 +465,11 @@
                 <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Agent</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Model</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Completed</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Tokens In</th>
+                <th class="px-4 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Tokens Out</th>
                 <th class="px-4 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">AI Cost</th>
                 <th class="px-4 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Human Cost</th>
                 <th class="px-4 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Savings</th>
-                <th class="px-4 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Lines</th>
                 <th class="px-4 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Runtime</th>
               </tr>
             </thead>
@@ -358,6 +478,9 @@
                 <tr class="hover:bg-gray-100 dark:bg-gray-100/50 dark:bg-slate-700/30">
                   <td class="px-4 py-3">
                     <span class="text-slate-200 text-sm truncate max-w-xs block">{task.title}</span>
+                    {#if task.milestoneId}
+                      <span class="text-xs text-amber-400">🎯 milestone</span>
+                    {/if}
                   </td>
                   <td class="px-4 py-3 text-slate-500 dark:text-slate-400 text-sm font-mono">{truncateId(task.agentId)}</td>
                   <td class="px-4 py-3 text-slate-500 dark:text-slate-400 text-sm">{task.model || '-'}</td>
@@ -367,14 +490,12 @@
                       {new Date(task.completedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </td>
+                  <td class="px-4 py-3 text-right text-amber-400 text-sm">{task.tokensIn != null ? formatTokens(task.tokensIn) : '—'}</td>
+                  <td class="px-4 py-3 text-right text-amber-300 text-sm">{task.tokensOut != null ? formatTokens(task.tokensOut) : '—'}</td>
                   <td class="px-4 py-3 text-right text-slate-600 dark:text-slate-300">{formatCurrency(task.cost)}</td>
                   <td class="px-4 py-3 text-right text-slate-600 dark:text-slate-300">{formatCurrency(task.humanCost)}</td>
                   <td class="px-4 py-3 text-right text-green-400 font-medium">{formatCurrency(task.savings)}</td>
-                  <td class="px-4 py-3 text-right text-slate-500 dark:text-slate-400">
-                    {task.linesAdded > 0 ? `+${task.linesAdded}` : ''}
-                    {task.linesRemoved > 0 ? ` -{task.linesRemoved}` : ''}
-                  </td>
-                  <td class="px-4 py-3 text-right text-slate-500 dark:text-slate-400">{formatRuntime(task.runtime / 1000)}</td>
+                  <td class="px-4 py-3 text-right text-slate-500 dark:text-slate-400">{task.runtimeSeconds != null ? formatRuntime(task.runtimeSeconds) : (task.runtime ? formatRuntime(task.runtime / 1000) : '—')}</td>
                 </tr>
               {/each}
             </tbody>

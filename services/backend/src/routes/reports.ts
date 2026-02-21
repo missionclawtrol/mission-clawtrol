@@ -146,8 +146,13 @@ function buildWeeklyReport(days: number, projectId?: string) {
   // ── Milestones ────────────────────────────────────────────────────────────
   const milestoneBase = `
     SELECT m.*,
-      COUNT(t.id)                                          as totalTasks,
-      SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END)  as doneTasks
+      COUNT(t.id)                                                as totalTasks,
+      SUM(CASE WHEN t.status = 'done' THEN 1 ELSE 0 END)        as doneTasks,
+      COALESCE(SUM(CASE WHEN t.status = 'done' THEN t.cost ELSE 0 END), 0)      as aiCost,
+      COALESCE(SUM(CASE WHEN t.status = 'done' THEN t.humanCost ELSE 0 END), 0) as humanCost,
+      COALESCE(SUM(CASE WHEN t.status = 'done' THEN t.tokensIn ELSE 0 END), 0)  as tokensIn,
+      COALESCE(SUM(CASE WHEN t.status = 'done' THEN t.tokensOut ELSE 0 END), 0) as tokensOut,
+      COALESCE(SUM(CASE WHEN t.status = 'done' THEN t.runtime ELSE 0 END), 0)   as totalRuntime
     FROM milestones m
     LEFT JOIN tasks t ON t.milestoneId = m.id
     WHERE m.status = 'open'
@@ -165,6 +170,13 @@ function buildWeeklyReport(days: number, projectId?: string) {
     totalTasks: m.totalTasks || 0,
     doneTasks: m.doneTasks || 0,
     progress: m.totalTasks > 0 ? Math.round((m.doneTasks / m.totalTasks) * 100) : 0,
+    aiCost: m.aiCost || 0,
+    humanCost: m.humanCost || 0,
+    savings: (m.humanCost || 0) - (m.aiCost || 0),
+    tokensIn: m.tokensIn || 0,
+    tokensOut: m.tokensOut || 0,
+    totalTokens: (m.tokensIn || 0) + (m.tokensOut || 0),
+    runtimeSeconds: Math.round((m.totalRuntime || 0) / 1000),
   }));
 
   // ── Flags ─────────────────────────────────────────────────────────────────

@@ -1330,7 +1330,7 @@
 
         {#if selectedTask.status === 'done'}
           <div class="pt-2 border-t border-gray-200 dark:border-slate-700">
-            <h4 class="text-sm text-slate-500 dark:text-slate-400 mb-2">⏱️ Time Estimates</h4>
+            <h4 class="text-sm text-slate-500 dark:text-slate-400 mb-2">⏱️ Time & Cost</h4>
             <div class="space-y-1 text-sm">
               <p class="text-slate-600 dark:text-slate-300">
                 AI Time: <span class="font-semibold">{formatRuntime(selectedTask.runtime || 0)}</span>
@@ -1342,12 +1342,25 @@
               {/if}
               {#if selectedTask.cost}
                 <p class="text-slate-600 dark:text-slate-300">
-                  AI Cost: <span class="font-semibold">${selectedTask.cost.toFixed(2)}</span>
+                  AI Cost: <span class="font-semibold">${selectedTask.cost.toFixed(4)}</span>
                 </p>
               {/if}
               {#if selectedTask.humanCost}
                 <p class="text-slate-600 dark:text-slate-300">
                   Human Cost: <span class="font-semibold">${selectedTask.humanCost.toFixed(2)}</span>
+                </p>
+              {/if}
+              {#if selectedTask.tokensIn != null || selectedTask.tokensOut != null || selectedTask.tokens}
+                {@const tIn = selectedTask.tokensIn ?? selectedTask.tokens?.input ?? 0}
+                {@const tOut = selectedTask.tokensOut ?? selectedTask.tokens?.output ?? 0}
+                <p class="text-slate-600 dark:text-slate-300">
+                  Tokens In: <span class="font-semibold text-amber-400">{formatTokens(tIn)}</span>
+                </p>
+                <p class="text-slate-600 dark:text-slate-300">
+                  Tokens Out: <span class="font-semibold text-amber-300">{formatTokens(tOut)}</span>
+                </p>
+                <p class="text-slate-600 dark:text-slate-300">
+                  Total Tokens: <span class="font-semibold">{formatTokens(tIn + tOut)}</span>
                 </p>
               {/if}
               {#if getModelDisplayName(selectedTask.model)}

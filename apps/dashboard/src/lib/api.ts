@@ -478,6 +478,8 @@ export interface Task {
     output: number;
     total: number;
   };
+  tokensIn?: number; // input token count (persisted)
+  tokensOut?: number; // output token count (persisted)
   cost?: number; // estimated USD
   model?: string; // which model was used
   runtime?: number; // milliseconds
@@ -1058,6 +1060,13 @@ export interface ReportMilestone {
   totalTasks: number;
   doneTasks: number;
   progress: number;
+  aiCost?: number;
+  humanCost?: number;
+  savings?: number;
+  tokensIn?: number;
+  tokensOut?: number;
+  totalTokens?: number;
+  runtimeSeconds?: number;
 }
 
 export interface WeeklyReport {
