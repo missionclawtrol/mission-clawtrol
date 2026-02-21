@@ -1,9 +1,9 @@
 // API client for Mission Clawtrol backend
+import { getApiBase } from '$lib/config';
 
-// Use same hostname as frontend, but port 3001 for backend
-const API_BASE = typeof window !== 'undefined' 
-  ? `http://${window.location.hostname}:3001/api`
-  : 'http://localhost:3001/api';
+// In production (behind nginx), use same-origin /api
+// In dev (Vite on 5173/5174), connect directly to localhost:3001
+export const API_BASE = getApiBase();
 
 const REQUEST_TIMEOUT_MS = 8000;
 

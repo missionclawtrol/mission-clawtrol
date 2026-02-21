@@ -6,6 +6,7 @@
     type WeeklyReport,
     type Project,
   } from '$lib/api';
+  import { getApiBase } from '$lib/config';
   import { toasts } from '$lib/stores/toasts';
 
   // ---- State ----
@@ -26,10 +27,7 @@
   // ---- Load projects list ----
   async function loadProjects() {
     try {
-      const API_BASE =
-        typeof window !== 'undefined'
-          ? `http://${window.location.hostname}:3001/api`
-          : 'http://localhost:3001/api';
+      const API_BASE = getApiBase();
       const res = await fetch(`${API_BASE}/projects`, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();

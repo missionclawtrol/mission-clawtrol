@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { afterNavigate } from '$app/navigation';
   import { page } from '$app/stores';
+  import { getApiBase } from '$lib/config';
 
   interface CostSummary {
     totalTasks: number;
@@ -117,7 +118,7 @@
     loading = true;
     error = '';
     try {
-      const API_BASE = `http://${window.location.hostname}:3001/api`;
+      const API_BASE = getApiBase();
 
       const results = await Promise.allSettled([
         fetchWithTimeout(`${API_BASE}/costs/summary`),

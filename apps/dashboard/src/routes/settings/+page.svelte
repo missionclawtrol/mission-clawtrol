@@ -1,12 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { getBackendBase, getWsUrl } from '$lib/config';
 
-  const API_BASE = typeof window !== 'undefined'
-    ? `http://${window.location.hostname}:3001`
-    : 'http://localhost:3001';
-  const WS_URL = typeof window !== 'undefined'
-    ? `ws://${window.location.hostname}:3001/ws`
-    : 'ws://localhost:3001/ws';
+  const API_BASE = getBackendBase();
+  const WS_URL = getWsUrl();
 
   let settings = {
     alerts: {

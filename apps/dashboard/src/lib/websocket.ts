@@ -1,9 +1,8 @@
 // WebSocket client for real-time updates
 import { writable, type Writable } from 'svelte/store';
+import { getWsUrl } from '$lib/config';
 
-const WS_URL = typeof window !== 'undefined'
-  ? `ws://${window.location.hostname}:3001/ws`
-  : 'ws://localhost:3001/ws';
+const WS_URL = getWsUrl();
 
 export interface WSMessage {
   type: string;

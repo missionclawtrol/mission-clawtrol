@@ -5,6 +5,7 @@
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { fetchTasks, createTask, updateTask, deleteTask, spawnAgent, spawnTaskSession, fetchProjects, fetchAgents, fetchSettings, fetchUsers, fetchMilestones, type Task, type Project, type Agent, type Settings, type UserInfo, type Milestone } from '$lib/api';
+  import { getApiBase } from '$lib/config';
   import { onTaskUpdate } from '$lib/taskWebSocket';
   import { sendWSMessage, addWSMessageCallback } from '$lib/websocket';
   
@@ -252,7 +253,7 @@
   async function loadComments(taskId: string) {
     loadingComments = true;
     try {
-      const res = await fetch(`http://${window.location.hostname}:3001/api/tasks/${taskId}/comments`, { credentials: 'include' });
+      const res = await fetch(`${getApiBase()}/tasks/${taskId}/comments`, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         comments = data.comments || [];
@@ -268,7 +269,7 @@
     if (!selectedTask || !newComment.trim()) return;
     submittingComment = true;
     try {
-      const res = await fetch(`http://${window.location.hostname}:3001/api/tasks/${selectedTask.id}/comments`, {
+      const res = await fetch(`${getApiBase()}/tasks/${selectedTask.id}/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -288,7 +289,7 @@
   async function removeComment(commentId: string) {
     if (!selectedTask) return;
     try {
-      await fetch(`http://${window.location.hostname}:3001/api/tasks/${selectedTask.id}/comments/${commentId}`, {
+      await fetch(`${getApiBase()}/tasks/${selectedTask.id}/comments/${commentId}`, {
         method: 'DELETE',
         credentials: 'include',
       });

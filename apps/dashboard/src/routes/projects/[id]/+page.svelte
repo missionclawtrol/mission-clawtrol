@@ -3,6 +3,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import { fetchProject, fetchTasks, createTask, updateTask, deleteTask, type Task, type Project } from '$lib/api';
+  import { getApiBase } from '$lib/config';
   
   let projectId = '';
   let project: Project | null = null;
@@ -64,7 +65,7 @@
     try {
       // Fetch hourly rate from settings
       try {
-        const settingsRes = await fetch(`http://${window.location.hostname}:3001/api/settings`);
+        const settingsRes = await fetch(`${getApiBase()}/settings`);
         if (settingsRes.ok) {
           const settings = await settingsRes.json();
           humanHourlyRate = settings.humanHourlyRate || 100;
@@ -73,7 +74,7 @@
         console.warn('Failed to load settings:', e);
       }
 
-      const res = await fetch(`http://${window.location.hostname}:3001/api/costs/by-project`);
+      const res = await fetch(`${getApiBase()}/costs/by-project`);
       if (res.ok) {
         const data = await res.json();
         projectCost = (data.projects || []).find((p: ProjectCost) => p.projectId === projectId) || null;
@@ -187,7 +188,7 @@
     
     try {
       // Call the API to parse tasks from PROJECT.md
-      const response = await fetch(`http://${window.location.hostname}:3001/api/projects/${projectId}/parse-tasks`, {
+      const response = await fetch(`${getApiBase()}/projects/${projectId}/parse-tasks`, {
         method: 'POST',
       });
       
@@ -231,7 +232,7 @@
       }));
     
     try {
-      const response = await fetch(`http://${window.location.hostname}:3001/api/projects/${projectId}/create-tasks`, {
+      const response = await fetch(`${getApiBase()}/projects/${projectId}/create-tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tasks: tasksToCreate }),

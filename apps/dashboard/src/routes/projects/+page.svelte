@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { fetchProjects, fetchProject, createProject, deleteProject, spawnAgent, fetchProjectAgents, fetchProjectAgentSummary, sendMessageToAgent, deleteAgent, changeAgentModel, fetchTasks, fetchImportableFolders, importProject, fetchMilestones, createMilestone, updateMilestone, deleteMilestone, type Project, type AgentAssociation, type AgentSummary, type Task, type ImportableFolder, type Milestone } from '$lib/api';
+  import { getApiBase } from '$lib/config';
   
   let projects: Project[] = [];
   let selectedProject: Project | null = null;
@@ -72,7 +73,7 @@
     try {
       // Fetch hourly rate from settings
       try {
-        const settingsRes = await fetch(`http://${window.location.hostname}:3001/api/settings`);
+        const settingsRes = await fetch(`${getApiBase()}/settings`);
         if (settingsRes.ok) {
           const settings = await settingsRes.json();
           humanHourlyRate = settings.humanHourlyRate || 100;
@@ -121,7 +122,7 @@
       agentSummary = summary;
       // Fetch cost data for this project
       try {
-        const costRes = await fetch(`http://${window.location.hostname}:3001/api/costs/by-project`);
+        const costRes = await fetch(`${getApiBase()}/costs/by-project`);
         if (costRes.ok) {
           const costData = await costRes.json();
           projectCost = (costData.projects || []).find((p: ProjectCost) => p.projectId === id) || null;
