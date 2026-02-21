@@ -7,7 +7,9 @@
   import { checkHealth, fetchCurrentUser, logout, type CurrentUser } from '$lib/api';
   import { initTaskWebSocket, setCurrentUserId } from '$lib/taskWebSocket';
   import Toast from '$lib/components/Toast.svelte';
+  import ChatPanel from '$lib/components/ChatPanel.svelte';
   import { fetchSetupStatus, createFirstProject, type SetupStatus } from '$lib/api';
+  import { toggleChat, showUnreadBadge } from '$lib/stores/chat';
 
   const tabs = [
     { name: 'Overview', href: '/', icon: '🏠' },
@@ -242,6 +244,17 @@
               <span class="text-xl">🌙</span>
             {/if}
           </button>
+          <!-- Chat Toggle -->
+          <button
+            on:click={toggleChat}
+            class="relative p-2 hover:bg-slate-700/50 dark:hover:bg-slate-700 rounded-lg transition-colors"
+            title="Chat with AI agent"
+          >
+            <span class="text-xl">💬</span>
+            {#if $showUnreadBadge}
+              <span class="absolute top-1 right-1 w-2 h-2 bg-blue-400 rounded-full animate-pulse"></span>
+            {/if}
+          </button>
           <!-- User Menu -->
           {#if currentUser}
             <div class="relative pl-4 border-l border-gray-300 dark:border-slate-600 user-menu-container">
@@ -362,5 +375,8 @@
     
     <!-- Toast Notifications -->
     <Toast />
+
+    <!-- Chat Panel (slide-out drawer) -->
+    <ChatPanel />
   </div>
 {/if}
