@@ -18,10 +18,11 @@ async function fetchWithTimeout(input: RequestInfo, init?: RequestInit): Promise
       credentials: 'include', // Required for cookie-based sessions
     });
 
-    // Session expired — redirect to login (skip for auth/me to avoid redirect loops)
+    // Session expired — redirect to login (skip if already on login page or for auth endpoints)
     if (res.status === 401 && typeof window !== 'undefined') {
       const url = typeof input === 'string' ? input : input.url;
-      if (!url.includes('/auth/me') && !url.includes('/auth/logout')) {
+      const onLoginPage = window.location.pathname === '/login';
+      if (!onLoginPage && !url.includes('/auth/me') && !url.includes('/auth/logout')) {
         window.location.href = '/login';
       }
     }
