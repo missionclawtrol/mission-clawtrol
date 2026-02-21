@@ -1479,16 +1479,7 @@
                   ⚡ Assign & Run
                 {/if}
               </button>
-              <!-- Legacy Start Work (old flow via chat.send) -->
-              {#if selectedTask.status === 'todo' || selectedTask.status === 'in-progress'}
-                <button 
-                  on:click={() => handleStartWork(selectedTask!)}
-                  class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded text-sm font-medium transition-colors"
-                  title="Send task description as a message (old flow)"
-                >
-                  🚀 Start Work
-                </button>
-              {/if}
+              <!-- Start Work button removed — Assign & Run replaces it -->
             {:else}
               <!-- Already has a session — offer re-spawn (force) -->
               <button
