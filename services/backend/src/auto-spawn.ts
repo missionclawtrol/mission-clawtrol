@@ -10,6 +10,7 @@
 import { findTaskById, updateTask } from './task-store.js';
 import { logAudit } from './audit-store.js';
 import { Task } from './task-store.js';
+import { getAgentDefinitions } from './config-reader.js';
 
 const GATEWAY_PORT = (() => {
   const url = process.env.GATEWAY_URL || 'ws://127.0.0.1:18789';
@@ -22,10 +23,10 @@ const GATEWAY_PORT = (() => {
 
 const GATEWAY_TOKEN = process.env.GATEWAY_TOKEN || '';
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';
-const WORKSPACE_PATH = `${process.env.HOME || '/home/chris'}/.openclaw/workspace`;
+const WORKSPACE_PATH = `${process.env.HOME || ''}/.openclaw/workspace`;
 
-// Agents that are valid for auto-spawning (must exist in openclaw.json agents.list)
-const KNOWN_AGENT_IDS = new Set([
+// Fallback set of known agent IDs (used if config read fails)
+const FALLBACK_AGENT_IDS = new Set([
   'senior-dev',
   'junior-dev',
   'senior-researcher',
@@ -36,6 +37,19 @@ const KNOWN_AGENT_IDS = new Set([
   'product-manager',
   'cso',
 ]);
+
+// Cache of known agent IDs read from config (refreshed per call)
+async function getKnownAgentIds(): Promise<Set<string>> {
+  try {
+    const agents = await getAgentDefinitions();
+    if (agents && agents.length > 0) {
+      return new Set(agents.map(a => a.id));
+    }
+  } catch {
+    // fall through to fallback
+  }
+  return FALLBACK_AGENT_IDS;
+}
 
 // Default timeout for spawned sessions (30 minutes)
 const DEFAULT_TIMEOUT_SECONDS = 1800;
@@ -82,10 +96,11 @@ export async function spawnTaskSession(
   opts?: { force?: boolean }
 ): Promise<AutoSpawnResult> {
   // Safety: only spawn for known agents
-  if (!KNOWN_AGENT_IDS.has(agentId)) {
+  const knownAgentIds = await getKnownAgentIds();
+  if (!knownAgentIds.has(agentId)) {
     return {
       success: false,
-      error: `Unknown agent ID: ${agentId}. Must be one of: ${[...KNOWN_AGENT_IDS].join(', ')}`,
+      error: `Unknown agent ID: ${agentId}. Must be one of: ${[...knownAgentIds].join(', ')}`,
     };
   }
 
@@ -177,7 +192,8 @@ export async function autoSpawnIfNeeded(
   if (!effectiveAgentId) return null;
 
   // Must be a known agent
-  if (!KNOWN_AGENT_IDS.has(effectiveAgentId)) return null;
+  const knownAgentIds = await getKnownAgentIds();
+  if (!knownAgentIds.has(effectiveAgentId)) return null;
 
   // Trigger if: status changed to in-progress, OR agentId was newly assigned/changed
   const statusChangedToInProgress = newStatus === 'in-progress' && oldStatus !== 'in-progress';

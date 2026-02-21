@@ -674,7 +674,7 @@
         </div>
         
         <p class="text-slate-500 text-xs">
-          This will ask the main agent (Jarvis) to spawn a subagent for this project. The subagent runs in isolation and reports back when complete.
+          This will ask the primary agent to spawn a subagent for this project. The subagent runs in isolation and reports back when complete.
         </p>
       </div>
       <div class="px-4 py-3 border-t border-gray-200 dark:border-slate-700 flex justify-end gap-2">

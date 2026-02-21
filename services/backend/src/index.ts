@@ -36,6 +36,7 @@ import { createTask, updateTask, findTaskBySessionKey, findTaskById } from './ta
 import { initializeDatabase } from './database.js';
 import { migrateFromJSON } from './migrate.js';
 import { db } from './db/index.js';
+import { getHumanHourlyRate } from './enrichment.js';
 
 const execAsync = promisify(exec);
 
@@ -1027,7 +1028,7 @@ gatewayClient.on('subagent-completed', async (payload: any) => {
         const MINUTES_PER_LINE = 3;
         const totalLines = diff.added + diff.removed;
         const estimatedHumanMinutes = totalLines * MINUTES_PER_LINE;
-        const hourlyRate = 100;
+        const hourlyRate = getHumanHourlyRate();
         const humanCost = (estimatedHumanMinutes / 60) * hourlyRate;
         
         linesChanged = {
@@ -1046,6 +1047,7 @@ gatewayClient.on('subagent-completed', async (payload: any) => {
     }
 
     // Update the task to review status (CSO will review and mark as done)
+    const humanRate = getHumanHourlyRate();
     const updatedTask = await updateTask(task.id, {
       status: 'review',
       handoffNotes: completionSummary,
@@ -1060,8 +1062,8 @@ gatewayClient.on('subagent-completed', async (payload: any) => {
         ? linesChanged.total * 3 
         : runtime ? Math.ceil((runtime / 1000) * 10 / 60) : undefined, // fallback: runtime-based estimate
       humanCost: linesChanged 
-        ? (linesChanged.total * 3 / 60) * 100 
-        : runtime ? ((runtime / 1000) * 10 / 60) * 100 : undefined, // fallback: runtime-based estimate
+        ? (linesChanged.total * 3 / 60) * humanRate 
+        : runtime ? ((runtime / 1000) * 10 / 60) * humanRate : undefined, // fallback: runtime-based estimate
     });
 
     console.log('[SubagentHandler] Updated task:', task.id, 'to review', {
