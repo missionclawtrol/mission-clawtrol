@@ -1,9 +1,11 @@
 /**
- * Auth Middleware - Protects API routes
+ * Auth Middleware - Protects API routes using mc_session cookie
  */
 
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { getUserById, User, UserRole } from '../user-store.js';
+import { FastifyRequest, FastifyReply } from 'fastify';
+import { validateSession, hasAnyUsers, User, UserRole } from '../user-store.js';
+
+const COOKIE_NAME = 'mc_session';
 
 // Extend Fastify types via declaration merging
 declare module 'fastify' {
@@ -13,29 +15,24 @@ declare module 'fastify' {
 }
 
 /**
- * Authentication middleware - validates session and attaches user to request
+ * Core authentication check — validates the mc_session cookie.
+ * Attaches user to request.user on success.
  */
 export async function requireAuth(
   request: FastifyRequest,
   reply: FastifyReply
 ): Promise<void> {
-  // Check if session has userId
-  const userId = request.session.get('userId');
+  const token = request.cookies?.[COOKIE_NAME];
 
-  if (!userId) {
+  if (!token) {
     return reply.status(401).send({ error: 'Not authenticated' });
   }
 
-  // Look up user by ID
-  const user = await getUserById(userId);
-
+  const user = await validateSession(token);
   if (!user) {
-    // Session exists but user was deleted - destroy session
-    request.session.destroy();
-    return reply.status(401).send({ error: 'Not authenticated' });
+    return reply.status(401).send({ error: 'Session expired or invalid' });
   }
 
-  // Attach user to request for downstream handlers
   request.user = user;
 }
 
@@ -48,12 +45,10 @@ export function requireRole(...allowedRoles: UserRole[]) {
     request: FastifyRequest,
     reply: FastifyReply
   ): Promise<void> {
-    // When auth is disabled, treat as admin
     if (process.env.DISABLE_AUTH === 'true') {
       return;
     }
 
-    // requireAuth must run first to populate request.user
     if (!request.user) {
       return reply.status(401).send({ error: 'Not authenticated' });
     }
@@ -70,29 +65,43 @@ export function requireRole(...allowedRoles: UserRole[]) {
 export function canModifyTask(user: User, task: { createdBy?: string | null; assignedTo?: string | null }): boolean {
   if (user.role === 'admin') return true;
   if (user.role === 'viewer') return false;
-  // Members can modify tasks they created or are assigned to
   return user.id === task.createdBy || user.id === task.assignedTo;
 }
 
 /**
- * Create auth middleware with configurable exclusion patterns
+ * Create auth middleware with configurable exclusion patterns.
+ *
+ * Special behaviour:
+ * - If DISABLE_AUTH=true: pass all requests through
+ * - If no local users exist (fresh install): only allow setup + excluded routes;
+ *   all other routes get 403 { error: "Setup required", setupRequired: true }
  */
 export function createAuthMiddleware(excludePatterns: RegExp[] = []) {
   return async function authMiddleware(
     request: FastifyRequest,
     reply: FastifyReply
   ): Promise<void> {
-    // Check if request path matches any exclusion pattern
-    const path = request.url.split('?')[0]; // Remove query string
-    
+    // Auth fully disabled for local dev
+    if (process.env.DISABLE_AUTH === 'true') {
+      return;
+    }
+
+    const path = request.url.split('?')[0]; // strip query string
+
+    // Always allow excluded paths
     for (const pattern of excludePatterns) {
       if (pattern.test(path)) {
-        // Path is excluded from auth - allow through
         return;
       }
     }
 
-    // Apply requireAuth for non-excluded paths
+    // If no users exist yet, block everything except /api/auth/setup
+    const anyUsers = await hasAnyUsers();
+    if (!anyUsers) {
+      return reply.status(403).send({ error: 'Setup required', setupRequired: true });
+    }
+
+    // Normal auth check
     return requireAuth(request, reply);
   };
 }

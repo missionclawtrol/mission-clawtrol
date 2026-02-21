@@ -1,23 +1,107 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { page } from '$app/stores';
-  import { fetchCurrentUser, type CurrentUser } from '$lib/api';
 
-  let loading = true;
-  let currentUser: CurrentUser | null = null;
+  const API_BASE = '/api';
+
+  type Mode = 'loading' | 'login' | 'setup';
+
+  let mode: Mode = 'loading';
+  let username = '';
+  let password = '';
+  let confirmPassword = '';
+  let error = '';
+  let submitting = false;
 
   onMount(async () => {
-    // Check if user is already authenticated
-    currentUser = await fetchCurrentUser();
-    loading = false;
-
-    // If already authenticated, redirect to home
-    if (currentUser) {
-      goto('/');
-      return;
+    try {
+      const res = await fetch(`${API_BASE}/auth/me`);
+      if (res.ok) {
+        // Already authenticated — go to dashboard
+        goto('/');
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      if (data.setupRequired) {
+        mode = 'setup';
+      } else {
+        mode = 'login';
+      }
+    } catch {
+      mode = 'login';
     }
   });
+
+  async function handleLogin() {
+    error = '';
+    if (!username || !password) {
+      error = 'Username and password are required.';
+      return;
+    }
+    submitting = true;
+    try {
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      if (res.ok) {
+        goto('/');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        error = data.error || 'Login failed. Check your credentials.';
+      }
+    } catch {
+      error = 'Network error. Please try again.';
+    } finally {
+      submitting = false;
+    }
+  }
+
+  async function handleSetup() {
+    error = '';
+    if (!username || !password || !confirmPassword) {
+      error = 'All fields are required.';
+      return;
+    }
+    if (username.length < 3) {
+      error = 'Username must be at least 3 characters.';
+      return;
+    }
+    if (password.length < 8) {
+      error = 'Password must be at least 8 characters.';
+      return;
+    }
+    if (password !== confirmPassword) {
+      error = 'Passwords do not match.';
+      return;
+    }
+    submitting = true;
+    try {
+      const res = await fetch(`${API_BASE}/auth/setup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      if (res.ok) {
+        goto('/');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        error = data.error || 'Setup failed. Please try again.';
+      }
+    } catch {
+      error = 'Network error. Please try again.';
+    } finally {
+      submitting = false;
+    }
+  }
+
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter') {
+      if (mode === 'login') handleLogin();
+      else if (mode === 'setup') handleSetup();
+    }
+  }
 </script>
 
 <div class="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-900">
@@ -26,27 +110,131 @@
     <div class="text-center mb-8">
       <div class="text-6xl mb-4">🦞</div>
       <h1 class="text-3xl font-bold text-white">Mission Clawtrol</h1>
-      <p class="text-slate-500 dark:text-slate-400 mt-2">Sign in to access your dashboard</p>
+      {#if mode === 'setup'}
+        <p class="text-slate-400 mt-2">Create your admin account to get started</p>
+      {:else}
+        <p class="text-slate-400 mt-2">Sign in to access your dashboard</p>
+      {/if}
     </div>
 
-    <!-- Login Card -->
+    <!-- Card -->
     <div class="bg-white dark:bg-slate-800 rounded-lg p-8 shadow-xl border border-gray-200 dark:border-slate-700">
-      {#if loading}
+      {#if mode === 'loading'}
         <div class="flex justify-center py-8">
           <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
         </div>
+
+      {:else if mode === 'setup'}
+        <!-- First-time setup form -->
+        <h2 class="text-lg font-semibold text-white mb-6">Create Admin Account</h2>
+
+        {#if error}
+          <div class="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+            {error}
+          </div>
+        {/if}
+
+        <div class="space-y-4">
+          <div>
+            <label for="setup-username" class="block text-sm font-medium text-slate-300 mb-1">Username</label>
+            <input
+              id="setup-username"
+              type="text"
+              bind:value={username}
+              on:keydown={handleKeydown}
+              placeholder="admin"
+              autocomplete="username"
+              class="w-full px-4 py-2.5 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400
+                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label for="setup-password" class="block text-sm font-medium text-slate-300 mb-1">Password</label>
+            <input
+              id="setup-password"
+              type="password"
+              bind:value={password}
+              on:keydown={handleKeydown}
+              placeholder="At least 8 characters"
+              autocomplete="new-password"
+              class="w-full px-4 py-2.5 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400
+                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label for="setup-confirm" class="block text-sm font-medium text-slate-300 mb-1">Confirm Password</label>
+            <input
+              id="setup-confirm"
+              type="password"
+              bind:value={confirmPassword}
+              on:keydown={handleKeydown}
+              placeholder="Repeat password"
+              autocomplete="new-password"
+              class="w-full px-4 py-2.5 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400
+                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          <button
+            on:click={handleSetup}
+            disabled={submitting}
+            class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 disabled:cursor-not-allowed
+                   text-white font-medium rounded-lg transition-colors"
+          >
+            {submitting ? 'Creating account…' : 'Create Account'}
+          </button>
+        </div>
+
       {:else}
-        <a
-          href="/api/auth/login"
-          class="flex items-center justify-center gap-3 w-full py-3 px-4 bg-gray-100 dark:bg-slate-700 hover:bg-slate-600 
-                 text-white font-medium rounded-lg transition-colors border border-gray-300 dark:border-slate-600
-                 hover:border-slate-500"
-        >
-          <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
-          </svg>
-          Sign in with GitHub
-        </a>
+        <!-- Login form -->
+        <h2 class="text-lg font-semibold text-white mb-6">Sign In</h2>
+
+        {#if error}
+          <div class="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+            {error}
+          </div>
+        {/if}
+
+        <div class="space-y-4">
+          <div>
+            <label for="login-username" class="block text-sm font-medium text-slate-300 mb-1">Username</label>
+            <input
+              id="login-username"
+              type="text"
+              bind:value={username}
+              on:keydown={handleKeydown}
+              placeholder="Enter your username"
+              autocomplete="username"
+              class="w-full px-4 py-2.5 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400
+                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label for="login-password" class="block text-sm font-medium text-slate-300 mb-1">Password</label>
+            <input
+              id="login-password"
+              type="password"
+              bind:value={password}
+              on:keydown={handleKeydown}
+              placeholder="Enter your password"
+              autocomplete="current-password"
+              class="w-full px-4 py-2.5 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400
+                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          <button
+            on:click={handleLogin}
+            disabled={submitting}
+            class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 disabled:cursor-not-allowed
+                   text-white font-medium rounded-lg transition-colors"
+          >
+            {submitting ? 'Signing in…' : 'Sign In'}
+          </button>
+        </div>
       {/if}
     </div>
 

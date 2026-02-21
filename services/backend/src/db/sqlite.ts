@@ -66,8 +66,10 @@ export class SqliteDatabase implements IDatabase {
 
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
-        githubId INTEGER UNIQUE NOT NULL,
-        githubLogin TEXT NOT NULL,
+        githubId INTEGER UNIQUE,
+        githubLogin TEXT,
+        username TEXT UNIQUE,
+        passwordHash TEXT,
         name TEXT,
         email TEXT,
         avatarUrl TEXT,
@@ -75,6 +77,16 @@ export class SqliteDatabase implements IDatabase {
         createdAt TEXT NOT NULL,
         lastLoginAt TEXT
       );
+
+      CREATE TABLE IF NOT EXISTS sessions (
+        token TEXT PRIMARY KEY,
+        userId TEXT NOT NULL,
+        createdAt TEXT NOT NULL,
+        expiresAt TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_sessions_userId ON sessions(userId);
+      CREATE INDEX IF NOT EXISTS idx_sessions_expiresAt ON sessions(expiresAt);
 
       CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,
@@ -160,6 +172,20 @@ export class SqliteDatabase implements IDatabase {
     addColumnIfMissing('tasks', 'blockerNote', 'TEXT');
     addColumnIfMissing('tasks', 'tokensIn', 'INTEGER');
     addColumnIfMissing('tasks', 'tokensOut', 'INTEGER');
+    addColumnIfMissing('users', 'username', 'TEXT');
+    addColumnIfMissing('users', 'passwordHash', 'TEXT');
+
+    // Ensure sessions table exists (may not exist on older installs)
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        token TEXT PRIMARY KEY,
+        userId TEXT NOT NULL,
+        createdAt TEXT NOT NULL,
+        expiresAt TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_sessions_userId ON sessions(userId);
+      CREATE INDEX IF NOT EXISTS idx_sessions_expiresAt ON sessions(expiresAt);
+    `);
 
     // Insert default settings if not exist
     this.db
