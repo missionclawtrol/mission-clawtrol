@@ -22,13 +22,17 @@ import {
 const COOKIE_NAME = 'mc_session';
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days in seconds
 
+// Only set secure cookies when explicitly using HTTPS (not just production mode)
+// Marketplace droplets often run HTTP-only behind an IP address
+const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true' || process.env.BASE_URL?.startsWith('https');
+
 function setSessionCookie(reply: FastifyReply, token: string) {
   reply.setCookie(COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: 'lax',
     path: '/',
     maxAge: COOKIE_MAX_AGE,
-    secure: process.env.NODE_ENV === 'production',
+    secure: !!COOKIE_SECURE,
   });
 }
 
@@ -38,7 +42,7 @@ function clearSessionCookie(reply: FastifyReply) {
     sameSite: 'lax',
     path: '/',
     maxAge: 0,
-    secure: process.env.NODE_ENV === 'production',
+    secure: !!COOKIE_SECURE,
   });
 }
 
