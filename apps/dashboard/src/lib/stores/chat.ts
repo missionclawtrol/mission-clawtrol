@@ -44,6 +44,34 @@ export const showUnreadBadge = derived(
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let streamingMessageId: string | null = null;
+let streamingTimeout: ReturnType<typeof setTimeout> | null = null;
+
+const STREAMING_TIMEOUT_MS = 120_000; // 2 minutes max
+
+function clearStreamingTimeout() {
+  if (streamingTimeout) {
+    clearTimeout(streamingTimeout);
+    streamingTimeout = null;
+  }
+}
+
+function startStreamingTimeout() {
+  clearStreamingTimeout();
+  streamingTimeout = setTimeout(() => {
+    // Auto-reset if streaming hangs
+    isStreaming.set(false);
+    if (streamingMessageId) {
+      messages.update((msgs) =>
+        msgs.map((m) =>
+          m.id === streamingMessageId
+            ? { ...m, content: m.content || '⚠️ Response timed out. The agent may still be processing — try again.', streaming: false }
+            : m
+        )
+      );
+      streamingMessageId = null;
+    }
+  }, STREAMING_TIMEOUT_MS);
+}
 
 const WS_URL = typeof window !== 'undefined'
   ? `ws://${window.location.hostname}:3001/api/chat/ws`
@@ -154,6 +182,7 @@ function handleWSMessage(data: any): void {
 
     case 'stream-start': {
       isStreaming.set(true);
+      startStreamingTimeout();
       streamingMessageId = generateId();
       // Add placeholder streaming message
       messages.update((msgs) => [
@@ -185,6 +214,7 @@ function handleWSMessage(data: any): void {
 
     case 'stream-end': {
       isStreaming.set(false);
+      clearStreamingTimeout();
       if (streamingMessageId) {
         messages.update((msgs) =>
           msgs.map((m) =>
@@ -225,6 +255,7 @@ function handleWSMessage(data: any): void {
 
     case 'error': {
       isStreaming.set(false);
+      clearStreamingTimeout();
       streamingMessageId = null;
       // Add error message to chat
       messages.update((msgs) => [
