@@ -632,6 +632,11 @@ export async function taskRoutes(fastify: FastifyInstance) {
         });
       }
 
+      // Persist sessionKey to the task
+      if (spawnResult.sessionKey) {
+        await updateTask(id, { sessionKey: spawnResult.sessionKey });
+      }
+
       // Register the session for live event tracking
       if (sessionRegistrationFn && spawnResult.sessionKey) {
         sessionRegistrationFn(spawnResult.sessionKey, id, agentId, freshTask.title);
