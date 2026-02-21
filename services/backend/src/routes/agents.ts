@@ -4,7 +4,7 @@ import { join } from 'path';
 import { gatewayClient } from '../gateway-client.js';
 import { addAssociation, getProjectAgents, getAllAssociations, updateAssociation, removeAssociation, type AgentAssociation } from '../project-agents.js';
 import { db } from '../database.js';
-import { getAgentDefinitions, type AgentDefinition } from '../config-reader.js';
+import { getAgentDefinitions, readConfig, type AgentDefinition } from '../config-reader.js';
 import { updateTask, findTaskById } from '../task-store.js';
 
 // Helper to update model in sessions.json
@@ -344,7 +344,12 @@ export async function agentRoutes(fastify: FastifyInstance) {
     }
 
     const agentLabel = label || `${projectId}-agent`;
-    const agentModel = model || 'ollama/qwen3-coder';
+    let defaultModel = 'anthropic/claude-sonnet-4-6';
+    try {
+      const config = await readConfig();
+      if (config?.agents?.defaults?.model?.primary) defaultModel = config.agents.defaults.model.primary;
+    } catch {}
+    const agentModel = model || defaultModel;
     const initialTask = task || 'You are a project agent. Await instructions.';
 
     // Use the standard session key format that chat.send expects

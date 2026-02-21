@@ -23,7 +23,7 @@ Mission Clawtrol is a kanban-style task management platform for teams using AI a
 
 ```bash
 # Clone
-git clone https://github.com/cgmartin0310/mission-clawtrol.git
+git clone https://github.com/missionclawtrol/mission-clawtrol.git
 cd mission-clawtrol
 
 # Backend (port 3001)
@@ -86,7 +86,7 @@ Mission Clawtrol reads special fields from each project's `PROJECT.md` to unlock
 | Field | Example | Enables |
 |-------|---------|---------|
 | `**Repo:** <url>` | `**Repo:** https://github.com/org/repo` | Clickable commit hash links on task cards |
-| `**Report Channel:** <id>` | `**Report Channel:** C0AGS13AABS` | Send to Slack on Reports page |
+| `**Report Channel:** <id>` | `**Report Channel:** C0XXXXXXXXX` | Send to Slack on Reports page |
 
 A project is detected by the presence of a `PROJECT.md` file in its workspace folder (`~/.openclaw/workspace/<project-id>/PROJECT.md`).
 

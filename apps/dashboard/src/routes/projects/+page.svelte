@@ -353,7 +353,7 @@
 
   function openModelModal(agent: AgentAssociation) {
     agentToChangeModel = agent;
-    selectedModel = agent.model || 'claude-opus-4-5';
+    selectedModel = agent.model || 'anthropic/claude-sonnet-4-6';
     showModelModal = true;
   }
 
@@ -823,9 +823,9 @@
           bind:value={selectedModel}
           class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded focus:border-purple-500 focus:outline-none"
         >
-          <option value="claude-opus-4-5">Claude Opus 4.5</option>
-          <option value="anthropic/claude-sonnet-4-20250514">Claude Sonnet 4</option>
-          <option value="ollama/qwen3-coder">Qwen3 Coder (Local)</option>
+          <option value="anthropic/claude-opus-4-6">Claude Opus 4</option>
+          <option value="anthropic/claude-sonnet-4-6">Claude Sonnet 4</option>
+          <option value="anthropic/claude-haiku-4-5">Claude Haiku 4.5</option>
         </select>
         {#if formError}
           <p class="text-sm text-red-400">{formError}</p>
