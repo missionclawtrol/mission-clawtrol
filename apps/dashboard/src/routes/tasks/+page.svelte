@@ -4,7 +4,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { fetchTasks, createTask, updateTask, deleteTask, spawnAgent, fetchProjects, fetchAgents, fetchSettings, fetchUsers, fetchMilestones, type Task, type Project, type Agent, type Settings, type UserInfo, type Milestone } from '$lib/api';
+  import { fetchTasks, createTask, updateTask, deleteTask, spawnAgent, spawnTaskSession, fetchProjects, fetchAgents, fetchSettings, fetchUsers, fetchMilestones, type Task, type Project, type Agent, type Settings, type UserInfo, type Milestone } from '$lib/api';
   import { onTaskUpdate } from '$lib/taskWebSocket';
   import { sendWSMessage, addWSMessageCallback } from '$lib/websocket';
   
@@ -179,6 +179,11 @@
     return task.milestoneId === selectedMilestoneId;
   }
   
+  // Assign & Run state
+  let isSpawning = false;
+  let spawnError = '';
+  let spawnSuccess = '';
+
   // Form state
   let formError = '';
   let formLoading = false;
@@ -668,6 +673,43 @@
       if (selectedTask && selectedTask.id === taskId) {
         selectedTask = { ...selectedTask, agentId };
       }
+    }
+  }
+
+  /**
+   * Assign & Run: sets the agentId and immediately spawns a session.
+   * Uses the new POST /api/tasks/:id/spawn endpoint.
+   */
+  async function handleAssignAndRun(task: Task, agentId?: string) {
+    const targetAgentId = agentId || task.agentId;
+    if (!targetAgentId) {
+      spawnError = 'Please select an agent first';
+      return;
+    }
+
+    isSpawning = true;
+    spawnError = '';
+    spawnSuccess = '';
+
+    try {
+      const result = await spawnTaskSession(task.id, targetAgentId, !!task.sessionKey);
+      if (result.success) {
+        spawnSuccess = `✅ Session spawned! Agent ${targetAgentId} is now working on this task.`;
+        await loadData();
+        // Refresh selectedTask
+        if (selectedTask && selectedTask.id === task.id) {
+          const updated = tasks.find(t => t.id === task.id);
+          if (updated) selectedTask = updated;
+        }
+        // Auto-close success message after 4s
+        setTimeout(() => { spawnSuccess = ''; }, 4000);
+      } else {
+        spawnError = result.error || 'Failed to spawn session';
+      }
+    } catch (e: any) {
+      spawnError = e.message || 'Network error';
+    } finally {
+      isSpawning = false;
     }
   }
   
@@ -1408,30 +1450,76 @@
         </div>
       </div>
       {/if}<!-- end activity/details panel -->
-      <div class="px-4 py-3 border-t border-gray-200 dark:border-slate-700 flex justify-between gap-2 flex-shrink-0">
-        {#if (selectedTask.status === 'todo' || selectedTask.status === 'in-progress') && !selectedTask.sessionKey}
-          <button 
-            on:click={() => handleStartWork(selectedTask!)}
-            class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded text-sm font-medium transition-colors"
-          >
-            🚀 Start Work
-          </button>
-        {:else}
-          <div></div>
+      <div class="px-4 py-3 border-t border-gray-200 dark:border-slate-700 flex-shrink-0">
+        <!-- Spawn status messages -->
+        {#if spawnError}
+          <div class="mb-2 px-3 py-2 bg-red-500/20 border border-red-500/30 rounded text-red-400 text-xs">
+            ❌ {spawnError}
+          </div>
         {/if}
-        <div class="flex gap-2">
-          <button 
-            on:click={() => handleDeleteTask(selectedTask!.id)}
-            class="px-4 py-2 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded text-sm font-medium transition-colors"
-          >
-            🗑️ Delete
-          </button>
-          <button 
-            on:click={closeModals}
-            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition-colors"
-          >
-            Close
-          </button>
+        {#if spawnSuccess}
+          <div class="mb-2 px-3 py-2 bg-green-500/20 border border-green-500/30 rounded text-green-400 text-xs">
+            {spawnSuccess}
+          </div>
+        {/if}
+        <div class="flex justify-between gap-2">
+          <!-- Left: action buttons -->
+          <div class="flex gap-2">
+            {#if !selectedTask.sessionKey}
+              <!-- Assign & Run: spawn a session for this task using its agentId -->
+              <button
+                on:click={() => handleAssignAndRun(selectedTask!)}
+                disabled={isSpawning || !selectedTask.agentId}
+                title={!selectedTask.agentId ? 'Set an agent above first' : `Spawn ${selectedTask.agentId} to work on this task`}
+                class="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded text-sm font-medium transition-colors flex items-center gap-2"
+              >
+                {#if isSpawning}
+                  <span class="animate-spin">⏳</span> Spawning…
+                {:else}
+                  ⚡ Assign & Run
+                {/if}
+              </button>
+              <!-- Legacy Start Work (old flow via chat.send) -->
+              {#if selectedTask.status === 'todo' || selectedTask.status === 'in-progress'}
+                <button 
+                  on:click={() => handleStartWork(selectedTask!)}
+                  class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded text-sm font-medium transition-colors"
+                  title="Send task description as a message (old flow)"
+                >
+                  🚀 Start Work
+                </button>
+              {/if}
+            {:else}
+              <!-- Already has a session — offer re-spawn (force) -->
+              <button
+                on:click={() => handleAssignAndRun(selectedTask!)}
+                disabled={isSpawning || !selectedTask.agentId}
+                title="Re-spawn: spawn a new session even though one already exists"
+                class="px-4 py-2 bg-purple-600/60 hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded text-sm font-medium transition-colors flex items-center gap-2"
+              >
+                {#if isSpawning}
+                  <span class="animate-spin">⏳</span> Spawning…
+                {:else}
+                  ⚡ Re-Spawn
+                {/if}
+              </button>
+            {/if}
+          </div>
+          <!-- Right: delete + close -->
+          <div class="flex gap-2">
+            <button 
+              on:click={() => handleDeleteTask(selectedTask!.id)}
+              class="px-4 py-2 bg-red-600/20 hover:bg-red-600/40 text-red-400 rounded text-sm font-medium transition-colors"
+            >
+              🗑️ Delete
+            </button>
+            <button 
+              on:click={closeModals}
+              class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition-colors"
+            >
+              Close
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1561,7 +1649,7 @@
                 draggable="true"
                 on:dragstart={() => handleDragStart(task)}
                 on:click={() => openTaskDetail(task)}
-                class="p-3 bg-white dark:bg-slate-800 rounded-lg border border-gray-300 dark:border-slate-600 hover:border-slate-500 cursor-move hover:bg-gray-100 dark:bg-slate-700/80 transition-all {draggedTask && draggedTask.id === task.id ? 'opacity-50 scale-95' : ''}"
+                class="p-3 bg-white dark:bg-slate-800 rounded-lg border border-gray-300 dark:border-slate-600 hover:border-slate-500 cursor-move hover:bg-gray-100 dark:hover:bg-slate-700 transition-all {draggedTask && draggedTask.id === task.id ? 'opacity-50 scale-95' : ''}"
               >
                 <!-- Title + Age Badge + Type Badge -->
                 <div class="flex items-start gap-2 mb-1">
@@ -1692,9 +1780,22 @@
                       <span class="text-xs text-slate-500">Unassigned</span>
                     {/if}
                   </div>
-                  <span class={`px-1.5 py-0.5 rounded-full text-xs font-semibold text-white flex-shrink-0 ${getPriorityColor(task.priority)}`}>
-                    {task.priority}
-                  </span>
+                  <div class="flex items-center gap-1.5 flex-shrink-0">
+                    <!-- Quick Assign & Run button on kanban card -->
+                    {#if task.agentId && !task.sessionKey && (task.status === 'todo' || task.status === 'in-progress' || task.status === 'backlog')}
+                      <button
+                        on:click|stopPropagation={() => handleAssignAndRun(task)}
+                        disabled={isSpawning}
+                        title="Assign & Run: spawn {task.agentId} to work on this task"
+                        class="px-1.5 py-0.5 rounded bg-purple-600/80 hover:bg-purple-600 text-white text-[10px] font-semibold transition-colors disabled:opacity-50"
+                      >
+                        ⚡ Run
+                      </button>
+                    {/if}
+                    <span class={`px-1.5 py-0.5 rounded-full text-xs font-semibold text-white ${getPriorityColor(task.priority)}`}>
+                      {task.priority}
+                    </span>
+                  </div>
                 </div>
               </div>
             {/each}

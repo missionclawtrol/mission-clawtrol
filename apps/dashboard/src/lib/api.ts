@@ -281,6 +281,45 @@ export interface SpawnResult {
   details?: string;
 }
 
+export interface SpawnTaskResult {
+  success: boolean;
+  sessionKey?: string;
+  agentId?: string;
+  taskId?: string;
+  error?: string;
+  errorCode?: string;
+}
+
+/**
+ * Assign & Run: Set the agentId on a task and spawn a session immediately.
+ * Calls POST /api/tasks/:id/spawn
+ */
+export async function spawnTaskSession(
+  taskId: string,
+  agentId: string,
+  force = false
+): Promise<SpawnTaskResult> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/tasks/${encodeURIComponent(taskId)}/spawn`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentId, force }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return {
+        success: false,
+        error: data.error || 'Failed to spawn session',
+        errorCode: data.code,
+      };
+    }
+    return { success: true, ...data };
+  } catch (error) {
+    console.error('Failed to spawn task session:', error);
+    return { success: false, error: 'Network error' };
+  }
+}
+
 export async function spawnAgent(params: SpawnAgentParams): Promise<SpawnResult> {
   try {
     const res = await fetchWithTimeout(`${API_BASE}/agents/spawn`, {

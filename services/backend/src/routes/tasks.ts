@@ -21,6 +21,7 @@ import { requireRole, canModifyTask } from '../middleware/auth.js';
 import { onTaskStatusChange } from '../stage-agents/index.js';
 import { enrichDoneTransition } from '../enrichment.js';
 import { dispatchWebhookEvent } from '../webhook-dispatcher.js';
+import { autoSpawnIfNeeded, spawnTaskSession } from '../auto-spawn.js';
 
 // Broadcast function will be injected from index.ts
 let broadcastFn: ((type: string, payload: unknown) => void) | null = null;
@@ -480,6 +481,44 @@ export async function taskRoutes(fastify: FastifyInstance) {
         return reply.status(404).send({ error: 'Task not found' });
       }
 
+      // Auto-spawn: if task moved to in-progress with an agentId and no sessionKey, spawn a session
+      // Run asynchronously so the PATCH response is not blocked
+      if (!updates.sessionKey) {
+        const oldStatus = oldTask?.status;
+        const newStatus = updates.status ?? task.status;
+        const oldAgentId = oldTask?.agentId;
+        const newAgentId = updates.agentId !== undefined ? updates.agentId : task.agentId;
+
+        autoSpawnIfNeeded(task.id, oldStatus, newStatus, oldAgentId, newAgentId)
+          .then(async (spawnResult) => {
+            if (spawnResult?.success && spawnResult.sessionKey) {
+              console.log(`[AutoSpawn] Registered session ${spawnResult.sessionKey} for task ${task.id}`);
+              // Register the session for live event tracking
+              if (sessionRegistrationFn) {
+                const agentId = newAgentId ?? 'unknown';
+                sessionRegistrationFn(spawnResult.sessionKey, task.id, agentId, task.title);
+              }
+              // Broadcast session key update to dashboard
+              if (broadcastFn) {
+                const updatedTask = await findTaskById(task.id);
+                if (updatedTask) {
+                  broadcastFn('task.updated', {
+                    task: updatedTask,
+                    updates: { sessionKey: spawnResult.sessionKey },
+                    oldTask: task,
+                    actor: 'auto-spawn',
+                  });
+                }
+              }
+            } else if (spawnResult && !spawnResult.success) {
+              console.warn(`[AutoSpawn] Failed for task ${task.id}: ${spawnResult.error}`);
+            }
+          })
+          .catch((err) => {
+            fastify.log.error(err, 'Auto-spawn error for task %s', task.id);
+          });
+      }
+
       // Log status change and trigger stage agents
       if (oldTask && updates.status && oldTask.status !== updates.status) {
         await logAudit({
@@ -538,6 +577,96 @@ export async function taskRoutes(fastify: FastifyInstance) {
     } catch (error) {
       fastify.log.error(error);
       return reply.status(500).send({ error: 'Failed to update task' });
+    }
+  });
+
+  // POST /tasks/:id/spawn - explicitly spawn a session for a task ("Assign & Run")
+  fastify.post<{
+    Params: { id: string };
+    Body: { agentId?: string; force?: boolean };
+  }>('/:id/spawn', async (request, reply) => {
+    try {
+      const { id } = request.params;
+      const { agentId: bodyAgentId, force = false } = request.body || {};
+
+      const user = (request as any).user;
+      if (user && user.role === 'viewer') {
+        return reply.status(403).send({ error: 'Viewers cannot spawn sessions' });
+      }
+
+      const task = await findTaskById(id);
+      if (!task) {
+        return reply.status(404).send({ error: 'Task not found' });
+      }
+
+      const agentId = bodyAgentId || task.agentId;
+      if (!agentId) {
+        return reply.status(400).send({
+          error: 'agentId required (pass in body or assign one to the task first)',
+          code: 'MISSING_AGENT_ID',
+        });
+      }
+
+      // Update task: set agentId (if new), set status to in-progress
+      const taskUpdates: Partial<typeof task> = {};
+      if (bodyAgentId && bodyAgentId !== task.agentId) {
+        taskUpdates.agentId = bodyAgentId;
+      }
+      if (task.status === 'backlog' || task.status === 'todo') {
+        taskUpdates.status = 'in-progress';
+      }
+      if (Object.keys(taskUpdates).length > 0) {
+        await updateTask(id, taskUpdates);
+      }
+
+      // Reload after potential updates
+      const freshTask = (await findTaskById(id))!;
+
+      // Spawn the session
+      const spawnResult = await spawnTaskSession(freshTask, agentId, { force });
+
+      if (!spawnResult.success) {
+        return reply.status(422).send({
+          error: spawnResult.error || 'Spawn failed',
+          code: 'SPAWN_FAILED',
+        });
+      }
+
+      // Register the session for live event tracking
+      if (sessionRegistrationFn && spawnResult.sessionKey) {
+        sessionRegistrationFn(spawnResult.sessionKey, id, agentId, freshTask.title);
+      }
+
+      // Broadcast update
+      if (broadcastFn) {
+        const updatedTask = await findTaskById(id);
+        if (updatedTask) {
+          broadcastFn('task.updated', {
+            task: updatedTask,
+            updates: { sessionKey: spawnResult.sessionKey, status: updatedTask.status },
+            oldTask: task,
+            actor: user?.username || user?.name || 'assign-and-run',
+          });
+        }
+      }
+
+      await logAudit({
+        userId: user?.id,
+        action: 'task.spawn_requested',
+        entityType: 'task',
+        entityId: id,
+        details: { agentId, sessionKey: spawnResult.sessionKey, force },
+      });
+
+      return {
+        success: true,
+        sessionKey: spawnResult.sessionKey,
+        agentId,
+        taskId: id,
+      };
+    } catch (error) {
+      fastify.log.error(error);
+      return reply.status(500).send({ error: 'Failed to spawn session' });
     }
   });
 
