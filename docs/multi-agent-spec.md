@@ -23,8 +23,8 @@ Each agent entry contains:
 {
   "id": "senior-dev",
   "name": "Senior Developer",
-  "workspace": "/home/chris/.openclaw/workspace-senior-dev",
-  "agentDir": "/home/chris/.openclaw/agents/senior-dev/agent",
+  "workspace": "/home/user/.openclaw/workspace-senior-dev",
+  "agentDir": "/home/user/.openclaw/agents/senior-dev/agent",
   "model": "anthropic/claude-sonnet-4-5",
   "identity": {
     "name": "Senior Dev",
