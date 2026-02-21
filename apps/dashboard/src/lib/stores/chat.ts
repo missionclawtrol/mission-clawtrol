@@ -321,6 +321,9 @@ export function clearHistory(): void {
 export function openChat(): void {
   chatOpen.set(true);
   unreadCount.set(0);
+  // Connect WebSocket on first open
+  connectChatWS();
+  loadAgents();
 }
 
 export function closeChat(): void {
@@ -329,7 +332,11 @@ export function closeChat(): void {
 
 export function toggleChat(): void {
   chatOpen.update((open) => {
-    if (!open) unreadCount.set(0);
+    if (!open) {
+      unreadCount.set(0);
+      connectChatWS();
+      loadAgents();
+    }
     return !open;
   });
 }

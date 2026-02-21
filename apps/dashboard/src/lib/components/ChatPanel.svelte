@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy, afterUpdate, tick } from 'svelte';
+  import { onMount, afterUpdate, tick } from 'svelte';
   import { page } from '$app/stores';
   import { marked } from 'marked';
   import {
@@ -10,13 +10,10 @@
     selectedAgentId,
     agents,
     currentContext,
-    connectChatWS,
-    disconnectChatWS,
     sendMessage,
     switchAgent,
     clearHistory,
     closeChat,
-    loadAgents,
     setContext,
     type ChatMessage,
   } from '$lib/stores/chat';
@@ -117,17 +114,13 @@
     : '';
 
   onMount(() => {
-    connectChatWS();
-    loadAgents();
     window.addEventListener('click', handleClickOutside);
     return () => {
       window.removeEventListener('click', handleClickOutside);
     };
   });
 
-  onDestroy(() => {
-    disconnectChatWS();
-  });
+  // WebSocket lifecycle managed by chat store (connects on open, reconnects automatically)
 </script>
 
 <!-- Chat Panel Overlay Drawer -->

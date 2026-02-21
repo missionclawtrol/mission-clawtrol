@@ -19,6 +19,9 @@ const GATEWAY_PORT = (() => {
 const GATEWAY_HTTP_URL = `http://127.0.0.1:${GATEWAY_PORT}`;
 const GATEWAY_TOKEN = process.env.GATEWAY_TOKEN || '';
 
+// Map of agentId -> spawned chat session key
+const chatSessions = new Map<string, string>();
+
 // In-memory chat history per agent (cleared on restart)
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -64,7 +67,56 @@ function buildMessageWithContext(
 }
 
 /**
- * Send a message to an agent via gateway /tools/invoke using sessions_send.
+ * Spawn a dedicated chat session for an agent (if not already spawned).
+ * Returns the session key for the chat session.
+ */
+async function getOrSpawnChatSession(agentId: string): Promise<string> {
+  const existing = chatSessions.get(agentId);
+  if (existing) return existing;
+
+  console.log(`[Chat] Spawning dedicated chat session for ${agentId}...`);
+
+  const response = await fetch(`${GATEWAY_HTTP_URL}/tools/invoke`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${GATEWAY_TOKEN}`,
+    },
+    body: JSON.stringify({
+      tool: 'sessions_spawn',
+      args: {
+        agentId,
+        task: `You are responding to the user via the Mission Clawtrol dashboard chat panel. Keep responses concise and helpful. You can use tools when explicitly asked, but prefer quick text answers. This is a lightweight chat session — not the main agent session.`,
+        label: `mc-chat-${agentId}`,
+        cleanup: 'keep',
+        runTimeoutSeconds: 0, // no timeout — keep alive
+      },
+    }),
+  });
+
+  const result = (await response.json()) as any;
+
+  if (!response.ok || !result.ok) {
+    const errMsg = result.error?.message || result.error || `HTTP ${response.status}`;
+    throw new Error(`Failed to spawn chat session: ${errMsg}`);
+  }
+
+  const sessionKey =
+    result.result?.details?.childSessionKey ||
+    result.result?.childSessionKey ||
+    result.result?.sessionKey;
+
+  if (!sessionKey) {
+    throw new Error('No session key returned from spawn');
+  }
+
+  chatSessions.set(agentId, sessionKey);
+  console.log(`[Chat] Chat session for ${agentId}: ${sessionKey}`);
+  return sessionKey;
+}
+
+/**
+ * Send a message to an agent's dedicated chat session via sessions_send.
  * Returns the agent's reply text. Non-streaming, reliable.
  */
 async function sendToAgent(
@@ -73,7 +125,14 @@ async function sendToAgent(
   context?: { route?: string; projectId?: string; taskId?: string; taskTitle?: string }
 ): Promise<string> {
   const fullMessage = buildMessageWithContext(message, context);
-  const sessionKey = `agent:${agentId}:main`;
+
+  let sessionKey: string;
+  try {
+    sessionKey = await getOrSpawnChatSession(agentId);
+  } catch (err) {
+    console.error(`[Chat] Failed to get chat session for ${agentId}:`, (err as Error).message);
+    throw new Error(`Could not connect to ${agentId}. Try again in a moment.`);
+  }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 120_000);
@@ -100,18 +159,38 @@ async function sendToAgent(
 
     if (!response.ok || !result.ok) {
       const errMsg = result.error?.message || result.error || `HTTP ${response.status}`;
+      // If session expired or not found, clear cache and retry once
+      if (errMsg.includes('not found') || errMsg.includes('expired') || errMsg.includes('no session')) {
+        chatSessions.delete(agentId);
+        throw new Error(`Session expired for ${agentId}. Please send your message again.`);
+      }
       throw new Error(`Gateway error: ${errMsg}`);
     }
 
     // Extract the agent's reply text from the result
-    const replyText =
-      result.result?.text ||
-      result.result?.reply ||
-      result.result?.content ||
-      (typeof result.result === 'string' ? result.result : '') ||
-      'No response from agent.';
+    const details = result.result?.details || result.result || {};
+    const contentArr = result.result?.content || [];
+    const textContent = contentArr.find?.((c: any) => c.type === 'text');
 
-    return replyText;
+    // sessions_send returns the reply in content[].text or details.text
+    let replyText = '';
+    if (textContent?.text) {
+      // The text might be JSON with the actual reply
+      try {
+        const parsed = JSON.parse(textContent.text);
+        replyText = parsed.reply || parsed.text || parsed.content || textContent.text;
+      } catch {
+        replyText = textContent.text;
+      }
+    } else if (details.text) {
+      replyText = details.text;
+    } else if (details.reply) {
+      replyText = details.reply;
+    } else if (typeof result.result === 'string') {
+      replyText = result.result;
+    }
+
+    return replyText || 'Agent responded but returned no text.';
   } finally {
     clearTimeout(timeout);
   }
@@ -182,9 +261,15 @@ export async function chatRoutes(fastify: FastifyInstance) {
     }
   });
 
-  // WebSocket /api/chat/ws — chat relay
-  fastify.register(async function (wsPlugin) {
-    wsPlugin.get('/ws', { websocket: true }, (socket, _req) => {
+  // WebSocket route — registered separately at root level (see index.ts)
+  // because @fastify/websocket decorations don't propagate into prefixed plugins.
+}
+
+/**
+ * Chat WebSocket handler — register at root level with full path.
+ */
+export async function chatWsRoute(fastify: FastifyInstance) {
+  fastify.get('/api/chat/ws', { websocket: true }, (socket, _req) => {
       console.log('[ChatWS] Client connected');
 
       let currentAgentId = 'cso';
@@ -283,5 +368,4 @@ export async function chatRoutes(fastify: FastifyInstance) {
       socket.on('close', () => console.log('[ChatWS] Client disconnected'));
       socket.on('error', (err) => console.error('[ChatWS] Socket error:', err.message));
     });
-  });
 }
