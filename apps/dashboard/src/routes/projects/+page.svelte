@@ -36,6 +36,7 @@
     savings: number;
   }
   let projectCost: ProjectCost | null = null;
+  let humanHourlyRate = 100;
   
   // Modal states
   let showNewProjectModal = false;
@@ -69,6 +70,17 @@
   async function loadProjects() {
     loading = true;
     try {
+      // Fetch hourly rate from settings
+      try {
+        const settingsRes = await fetch(`http://${window.location.hostname}:3001/api/settings`);
+        if (settingsRes.ok) {
+          const settings = await settingsRes.json();
+          humanHourlyRate = settings.humanHourlyRate || 100;
+        }
+      } catch (e) {
+        console.warn('Failed to load settings:', e);
+      }
+
       projects = await fetchProjects();
       allTasks = await fetchTasks();
       
@@ -1125,7 +1137,7 @@
               {/if}
               <div class="flex items-center justify-between text-sm">
                 <span class="text-slate-500 dark:text-slate-400">Hours saved</span>
-                <span class="text-slate-600 dark:text-slate-300">{(projectCost.humanCost / 100).toFixed(1)} hrs</span>
+                <span class="text-slate-600 dark:text-slate-300">{(projectCost.humanCost / humanHourlyRate).toFixed(1)} hrs</span>
               </div>
               <div class="flex items-center justify-between text-sm">
                 <span class="text-slate-500 dark:text-slate-400">Tasks completed</span>
