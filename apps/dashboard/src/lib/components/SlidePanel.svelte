@@ -275,9 +275,16 @@
       const clearedAt = Number(localStorage.getItem(`chat-cleared-${agentId}`) || '0');
       if (clearedAt) messages = messages.filter(m => m.timestamp > clearedAt);
       if (messages.length === 0) {
+        const selectedAgent = agents.find(a => a.id === agentId);
+        const agentName = selectedAgent?.name || agentId;
+        const agentEmoji = selectedAgent?.emoji || '🤖';
+        const otherAgents = agents.filter(a => a.id !== agentId);
+        const teamList = otherAgents.length > 0
+          ? '\n\n**Your team:**\n' + otherAgents.map(a => `- ${a.emoji} **${a.name}**`).join('\n')
+          : '';
         messages = [{
           id: uuid(), role: 'assistant', timestamp: now(),
-          content: `👋 **Welcome to Mission Clawtrol!**\n\nI'm **Henry**, your manager. I coordinate your team and make sure things get done.\n\n**Meet your team:**\n- 🔨 **Elon** — your builder. Websites, apps, automations\n- 🔍 **Marie** — your researcher. Market research, competitor analysis\n- ✍️ **Ernest** — your writer. Emails, blog posts, proposals\n- 📊 **Warren** — your analyst. Spreadsheets, financial analysis, reports\n- 🎨 **Steve** — your designer. Logos, branding, presentations\n\nJust tell me what you need and I'll put the right person on it.`,
+          content: `${agentEmoji} **Hi, I'm ${agentName}.** How can I help?${teamList}`,
         }];
       }
       scrollToBottom();
