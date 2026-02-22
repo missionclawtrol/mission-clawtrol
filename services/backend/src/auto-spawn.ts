@@ -71,19 +71,38 @@ export function buildTaskPrompt(task: Task, projectRepoPath: string): string {
       : task.description
     : '(no description — fetch full task details below)';
 
-  return `You are working on ${task.projectId || 'a project'} at ${projectRepoPath}.
+  return `You are managed by Mission Clawtrol (MC) — your task management system.
+MC API: ${apiUrl}
 
+## Your Assignment
+PROJECT: ${task.projectId || 'unknown'}
+WORKSPACE: ${projectRepoPath}
 TASK: ${task.title}
-
-Fetch full task details:
-curl -s ${apiUrl}/api/tasks/${task.id} | python3 -m json.tool
+TASK ID: ${task.id}
 
 ${taskDesc}
 
-When done, update the task:
-curl -s -X PATCH ${apiUrl}/api/tasks/${task.id} -H "Content-Type: application/json" -d '{"status":"review","handoffNotes":"..."}'
+## MANDATORY — Do This First
+1. Fetch your full task details:
+   curl -s ${apiUrl}/api/tasks/${task.id} | python3 -m json.tool
 
-Commit and push.`;
+2. Fetch project context (active tasks, blockers, recent work):
+   curl -s ${apiUrl}/api/context | python3 -m json.tool
+
+3. Fetch workflow rules (how to create tasks, done criteria):
+   curl -s ${apiUrl}/api/workflow | python3 -m json.tool
+
+## Task Lifecycle — Report Back to MC
+- **Progress update**: curl -s -X PATCH ${apiUrl}/api/tasks/${task.id} -H "Content-Type: application/json" -d '{"handoffNotes":"what you have done so far..."}'
+- **Hit a blocker**: curl -s -X PATCH ${apiUrl}/api/tasks/${task.id} -H "Content-Type: application/json" -d '{"status":"blocked","handoffNotes":"what is blocking you..."}'
+- **Done**: curl -s -X PATCH ${apiUrl}/api/tasks/${task.id} -H "Content-Type: application/json" -d '{"status":"review","handoffNotes":"summary of what was delivered..."}'
+
+## Rules
+- ALWAYS update the task when you finish — never leave it in-progress
+- Include clear handoff notes explaining what you did and where deliverables are
+- If the task involves code, commit and push before marking done
+- If the task involves documents/research, save files and note their location in handoff notes
+- If you are unsure about scope, check the task description and workflow rules before guessing`;
 }
 
 /**

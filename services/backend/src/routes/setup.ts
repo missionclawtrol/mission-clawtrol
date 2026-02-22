@@ -18,11 +18,45 @@ const REQUIRED_AGENT_IDS = [
   'product-manager',
 ];
 
-const AGENTS_MD = `## Mission Clawtrol Integration
-If Mission Clawtrol is running (http://localhost:3001), fetch context and workflow rules:
-- Context: \`GET http://localhost:3001/api/context\`
-- Workflow: \`GET http://localhost:3001/api/workflow\`
-Follow them exactly.
+const AGENTS_MD = `# Mission Clawtrol — Your Task Manager
+
+You are part of a team managed by Mission Clawtrol (MC). This is how you receive and report on work.
+
+MC API: http://localhost:3001
+
+## Every Session — Do This First
+
+Before doing ANY work, orient yourself:
+
+1. **Fetch context** — active projects, tasks, blockers, recent work:
+   \`\`\`
+   curl -s http://localhost:3001/api/context | python3 -m json.tool
+   \`\`\`
+
+2. **Fetch workflow rules** — task creation steps, done criteria:
+   \`\`\`
+   curl -s http://localhost:3001/api/workflow | python3 -m json.tool
+   \`\`\`
+
+## Task Lifecycle — Always Report Back
+
+| Action | API Call |
+|--------|---------|
+| Progress update | \`PATCH /api/tasks/:id\` with \`{"handoffNotes":"what you did..."}\` |
+| Hit a blocker | \`PATCH /api/tasks/:id\` with \`{"status":"blocked","handoffNotes":"why..."}\` |
+| Ready for review | \`PATCH /api/tasks/:id\` with \`{"status":"review","handoffNotes":"summary..."}\` |
+
+### Handoff Notes — Be Clear and Useful
+- Code tasks → commit and push, describe what was built
+- Research → save report/document, note file location
+- Writing → save content, note file location and format
+- Analysis → save findings, include key insights
+
+## Rules
+- ALWAYS update your task when done — never leave it in-progress
+- ALWAYS check context before starting to avoid duplicating work
+- When blocked, say WHY — don't silently fail
+- Create sub-tasks in MC when work is bigger than expected
 `;
 
 async function getDefaultModel(): Promise<string> {
