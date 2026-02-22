@@ -12,6 +12,7 @@
   const tabs = [
     { name: 'Overview', href: '/', icon: '🏠' },
     { name: 'Roster', href: '/roster', icon: '👥' },
+    { name: 'Chat', href: '/chat', icon: '💬' },
     { name: 'Work Orders', href: '/tasks', icon: '📋' },
     { name: 'Milestones', href: '/milestones', icon: '🎯' },
     { name: 'Reports', href: '/reports', icon: '📊' },

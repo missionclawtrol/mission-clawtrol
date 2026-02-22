@@ -32,3 +32,11 @@ export function getWsUrl(): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   return `${protocol}//${window.location.host}/ws`;
 }
+
+/** WebSocket URL for the gateway proxy endpoint (/ws/gateway). */
+export function getGatewayWsUrl(): string {
+  if (typeof window === 'undefined') return 'ws://localhost:3001/ws/gateway';
+  if (isDev()) return `ws://${window.location.hostname}:3001/ws/gateway`;
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.host}/ws/gateway`;
+}

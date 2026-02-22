@@ -28,6 +28,7 @@ import { contextRoutes } from './routes/context.js';
 import { reportRoutes } from './routes/reports.js';
 import { setupRoutes } from './routes/setup.js';
 import { agentsConfigRoutes } from './routes/agents-config.js';
+import { chatProxyRoutes } from './routes/chat-proxy.js';
 import { createAuthMiddleware } from './middleware/auth.js';
 import { gatewayClient, ApprovalRequest, ApprovalResolved } from './gateway-client.js';
 import { loadAssociations } from './project-agents.js';
@@ -507,6 +508,7 @@ if (process.env.DISABLE_AUTH === 'true') {
     /^\/api\/auth\//,             // Auth routes (login, callback, me, logout)
     /^\/ws$/,                     // WebSocket endpoint (used by dashboard before login)
     /^\/api\/chat\/ws$/,          // Chat WebSocket endpoint
+    /^\/ws\/gateway$/,            // Chat gateway proxy WebSocket
   ]);
 
   fastify.addHook('preHandler', authMiddleware);
@@ -533,6 +535,7 @@ await fastify.register(reportRoutes, { prefix: '/api/reports' });
 await fastify.register(setupRoutes, { prefix: '/api/setup' });
 await fastify.register(agentsConfigRoutes, { prefix: '/api/agents-config' });
 await fastify.register(contextRoutes, { prefix: '/api/context' });
+await fastify.register(chatProxyRoutes, { prefix: '/ws' });
 
 // Health check with comprehensive system status
 fastify.get('/api/health', async () => {
