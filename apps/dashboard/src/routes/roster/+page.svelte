@@ -215,13 +215,13 @@
     const m = typeof model === 'object' && model ? (model.primary || '') : (model || '');
     if (!m) return 'Unknown';
     const lowerModel = m.toLowerCase();
-    if (lowerModel.includes('opus')) { const v = model.match(/[\d.]+/)?.[0] || ''; return v ? `Opus ${v}` : 'Opus'; }
-    if (lowerModel.includes('sonnet')) { const v = model.match(/[\d.]+/)?.[0] || ''; return v ? `Sonnet ${v}` : 'Sonnet'; }
-    if (lowerModel.includes('haiku')) { const v = model.match(/[\d.]+/)?.[0] || ''; return v ? `Haiku ${v}` : 'Haiku'; }
+    if (lowerModel.includes('opus')) { const v = m.match(/[\d.]+/)?.[0] || ''; return v ? `Opus ${v}` : 'Opus'; }
+    if (lowerModel.includes('sonnet')) { const v = m.match(/[\d.]+/)?.[0] || ''; return v ? `Sonnet ${v}` : 'Sonnet'; }
+    if (lowerModel.includes('haiku')) { const v = m.match(/[\d.]+/)?.[0] || ''; return v ? `Haiku ${v}` : 'Haiku'; }
     if (lowerModel.includes('minimax')) return 'MiniMax M2.5';
     if (lowerModel.includes('gpt-4')) return 'GPT-4';
-    if (lowerModel.includes('qwen')) { const v = model.match(/[\d.]+/)?.[0] || ''; return v ? `Qwen ${v}` : 'Qwen'; }
-    return model.split('/').pop() || model;
+    if (lowerModel.includes('qwen')) { const v = m.match(/[\d.]+/)?.[0] || ''; return v ? `Qwen ${v}` : 'Qwen'; }
+    return m.split('/').pop() || m;
   }
 
   function openDetails(agent: RosterAgent) {
