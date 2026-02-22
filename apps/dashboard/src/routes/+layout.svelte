@@ -7,10 +7,11 @@
   import { checkHealth, fetchCurrentUser, logout, type CurrentUser } from '$lib/api';
   import { initTaskWebSocket, setCurrentUserId } from '$lib/taskWebSocket';
   import Toast from '$lib/components/Toast.svelte';
+  import SlidePanel from '$lib/components/SlidePanel.svelte';
+  import { panel } from '$lib/stores/panel';
   import { fetchSetupStatus, createFirstProject, type SetupStatus } from '$lib/api';
 
   const tabs = [
-    { name: 'Chat', href: '/chat', icon: '💬' },
     { name: 'Onboarding', href: '/onboarding', icon: '📚' },
     { name: 'Tasks', href: '/tasks', icon: '📋' },
     { name: 'Projects', href: '/projects', icon: '📁' },
@@ -245,7 +246,14 @@
               <span class="text-xl">🌙</span>
             {/if}
           </button>
-          <!-- Chat Toggle (removed) -->
+          <!-- Panel Toggle -->
+          <button
+            on:click={() => panel.toggle()}
+            class="p-2 hover:bg-slate-700/50 dark:hover:bg-slate-700 rounded-lg transition-colors"
+            title="Toggle chat / terminal panel"
+          >
+            <span class="text-xl">💬</span>
+          </button>
           <!-- User Menu -->
           {#if currentUser}
             <div class="relative pl-4 border-l border-gray-300 dark:border-slate-600 user-menu-container">
@@ -367,6 +375,7 @@
     <!-- Toast Notifications -->
     <Toast />
 
-    <!-- Chat Panel (slide-out drawer) -->
+    <!-- Slide-out Chat + Terminal Panel -->
+    <SlidePanel />
   </div>
 {/if}

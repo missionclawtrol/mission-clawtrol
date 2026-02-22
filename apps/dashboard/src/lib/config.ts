@@ -40,3 +40,11 @@ export function getGatewayWsUrl(): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   return `${protocol}//${window.location.host}/ws/gateway`;
 }
+
+/** WebSocket URL for the PTY terminal endpoint (/ws/pty). */
+export function getPtyWsUrl(): string {
+  if (typeof window === 'undefined') return 'ws://localhost:3001/ws/pty';
+  if (isDev()) return `ws://${window.location.hostname}:3001/ws/pty`;
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.host}/ws/pty`;
+}

@@ -29,6 +29,7 @@ import { reportRoutes } from './routes/reports.js';
 import { setupRoutes } from './routes/setup.js';
 import { agentsConfigRoutes } from './routes/agents-config.js';
 import { chatProxyRoutes } from './routes/chat-proxy.js';
+import { ptyRoutes } from './routes/pty.js';
 import { onboardingRoutes } from './routes/onboarding.js';
 import { rulesRoutes } from './routes/rules.js';
 import { seedBuiltInRules } from './rule-store.js';
@@ -514,6 +515,7 @@ if (process.env.DISABLE_AUTH === 'true') {
     /^\/ws$/,                     // WebSocket endpoint (used by dashboard before login)
     /^\/api\/chat\/ws$/,          // Chat WebSocket endpoint
     /^\/ws\/gateway$/,            // Chat gateway proxy WebSocket
+    /^\/ws\/pty$/,                // Terminal PTY WebSocket
   ]);
 
   fastify.addHook('preHandler', authMiddleware);
@@ -541,6 +543,7 @@ await fastify.register(setupRoutes, { prefix: '/api/setup' });
 await fastify.register(agentsConfigRoutes, { prefix: '/api/agents-config' });
 await fastify.register(contextRoutes, { prefix: '/api/context' });
 await fastify.register(chatProxyRoutes, { prefix: '/ws' });
+await fastify.register(ptyRoutes, { prefix: '/ws' });
 await fastify.register(onboardingRoutes, { prefix: '/api/onboarding' });
 await fastify.register(rulesRoutes, { prefix: '/api/rules' });
 
