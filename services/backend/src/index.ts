@@ -506,6 +506,8 @@ if (process.env.DISABLE_AUTH === 'true') {
   const authMiddleware = createAuthMiddleware([
     /^\/api\/health$/,           // Health check
     /^\/api\/auth\//,             // Auth routes (login, callback, me, logout)
+    /^\/api\/context$/,           // Context endpoint (used by agents locally)
+    /^\/api\/workflow/,           // Workflow endpoints (used by agents locally)
     /^\/ws$/,                     // WebSocket endpoint (used by dashboard before login)
     /^\/api\/chat\/ws$/,          // Chat WebSocket endpoint
     /^\/ws\/gateway$/,            // Chat gateway proxy WebSocket
