@@ -108,8 +108,7 @@
   }
 
   function toggleAgent(agentId: string) {
-    expandedAgents[agentId] = !expandedAgents[agentId];
-    expandedAgents = expandedAgents; // trigger Svelte reactivity
+    expandedAgents = { ...expandedAgents, [agentId]: !expandedAgents[agentId] };
     // Load training data on first expand
     if (expandedAgents[agentId] && !agentTraining[agentId]) {
       loadAgentTraining(agentId);
@@ -586,13 +585,14 @@
                     <span class="text-slate-500 font-normal ml-1">— What should {agent.name} know about their job here?</span>
                   </label>
                   <textarea
-                    bind:value={agentTraining[agent.id] = training, training.instructions}
+                    value={training.instructions}
                     rows="6"
                     placeholder="Describe this agent's specific responsibilities, style, priorities, and anything they need to know to do their job well at your company..."
                     class="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y"
                     on:input={(e) => {
                       if (!agentTraining[agent.id]) agentTraining[agent.id] = { instructions: '', tools: [] };
                       agentTraining[agent.id].instructions = e.currentTarget.value;
+                      agentTraining = { ...agentTraining };
                     }}
                   ></textarea>
                 </div>
