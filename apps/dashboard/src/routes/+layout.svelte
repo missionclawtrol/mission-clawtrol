@@ -310,9 +310,9 @@
           <span class={setupStatus.gatewayConnected ? 'text-green-400' : 'text-slate-500'}>
             {setupStatus.gatewayConnected ? '✅' : '⬜'} Gateway connected
           </span>
-          <span class={setupStatus.agents.qa && setupStatus.agents.editor ? 'text-green-400' : 'text-amber-400'}>
-            {setupStatus.agents.qa && setupStatus.agents.editor ? '✅' : '⬜'} Minimum agents
-            {#if !setupStatus.agents.qa || !setupStatus.agents.editor}
+          <span class={setupStatus.partialAgents >= setupStatus.totalAgents ? 'text-green-400' : 'text-amber-400'}>
+            {setupStatus.partialAgents >= setupStatus.totalAgents ? '✅' : '⬜'} Team ready ({setupStatus.partialAgents}/{setupStatus.totalAgents})
+            {#if setupStatus.partialAgents < setupStatus.totalAgents}
               <a href="/roster" class="ml-1 underline text-blue-400">→ Create</a>
             {/if}
           </span>

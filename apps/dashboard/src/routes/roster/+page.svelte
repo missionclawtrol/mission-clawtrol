@@ -302,12 +302,12 @@
   </div>
 
   <!-- Minimum Agents Banner -->
-  {#if setupStatus && (!setupStatus.agents.qa || !setupStatus.agents.editor)}
+  {#if setupStatus && setupStatus.partialAgents < setupStatus.totalAgents}
     <div class="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center justify-between gap-4">
       <div>
-        <p class="font-medium text-amber-400">⚠️ Missing required agents</p>
+        <p class="font-medium text-amber-400">⚠️ Missing team members</p>
         <p class="text-sm text-slate-400 mt-1">
-          Mission Clawtrol needs <code class="px-1 bg-slate-800 rounded text-amber-300">qa</code> and <code class="px-1 bg-slate-800 rounded text-amber-300">editor</code> agents to automate task review and documentation.
+          Your team is incomplete ({setupStatus.partialAgents}/{setupStatus.totalAgents} agents). Click "Create Team" to set up the full roster.
         </p>
         {#if minAgentsError}
           <p class="text-sm text-red-400 mt-1">{minAgentsError}</p>
@@ -491,7 +491,7 @@
               bind:value={agentForm.id}
               disabled={agentModalMode === 'edit'}
               type="text"
-              placeholder="e.g. qa, editor, senior-dev"
+              placeholder="e.g. builder, researcher, writer"
               class="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
             />
           </div>
@@ -523,7 +523,7 @@
             <input
               bind:value={agentForm.workspace}
               type="text"
-              placeholder="e.g. /home/user/.openclaw/workspace-qa"
+              placeholder="e.g. /home/user/.openclaw/workspace-builder"
               class="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono"
             />
           </div>

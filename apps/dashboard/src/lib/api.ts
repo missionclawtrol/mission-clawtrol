@@ -811,7 +811,9 @@ export async function fetchAuditLog(params?: FetchAuditParams): Promise<AuditEnt
 
 export interface SetupStatus {
   gatewayConnected: boolean;
-  agents: { qa: boolean; editor: boolean };
+  agents: Record<string, boolean>;
+  partialAgents: number;
+  totalAgents: number;
   hasProjects: boolean;
   complete: boolean;
 }
@@ -823,7 +825,7 @@ export async function fetchSetupStatus(): Promise<SetupStatus> {
     return res.json();
   } catch (error) {
     console.error('Failed to fetch setup status:', error);
-    return { gatewayConnected: false, agents: { qa: false, editor: false }, hasProjects: false, complete: false };
+    return { gatewayConnected: false, agents: {}, partialAgents: 0, totalAgents: 6, hasProjects: false, complete: false };
   }
 }
 
