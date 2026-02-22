@@ -484,7 +484,12 @@ But first — **tell me about your business** so the team can do a better job. W
 
   async function sendMessage() {
     const text = inputText.trim();
-    if (!text || isThinking) return;
+    if (!text) return;
+
+    // If agent is talking, stop it first — user always takes priority
+    if (isThinking || streamingId) {
+      stopResponse();
+    }
     if (!proxyReady) {
       errorText = 'Not connected to gateway. Please wait…';
       return;
