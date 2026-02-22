@@ -206,6 +206,7 @@
   function getTypeBadge(type: string | null | undefined): { icon: string; label: string; classes: string } | null {
     if (!type) return null;
     const map: Record<string, { icon: string; label: string; classes: string }> = {
+      feature: { icon: '💻', label: 'Development', classes: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
       general: { icon: '📌', label: 'General', classes: 'bg-slate-500/20 text-slate-400 border-slate-500/30' },
       research: { icon: '🔍', label: 'Research', classes: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
       writing: { icon: '✍️', label: 'Writing', classes: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
