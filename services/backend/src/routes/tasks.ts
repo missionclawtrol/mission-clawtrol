@@ -16,6 +16,7 @@ import {
   getTasksByStatus,
 } from '../task-store.js';
 import { db, getRawDb } from '../database.js';
+import type { SqliteDatabase } from '../db/sqlite.js';
 import { logAudit } from '../audit-store.js';
 import { requireRole, canModifyTask } from '../middleware/auth.js';
 import { onTaskStatusChange } from '../stage-agents/index.js';
@@ -571,6 +572,40 @@ export async function taskRoutes(fastify: FastifyInstance) {
           oldTask,
           actor: user?.username || user?.name || 'Unknown',
         });
+      }
+
+      // Git conflict detection: warn when multiple agents work on the same project
+      let conflictWarning: { tasks: Array<{ id: string; title: string; agentId: string }> } | undefined;
+      if (updates.status === 'in-progress' && task.projectId) {
+        const sqliteDb = db as unknown as SqliteDatabase;
+        if (typeof sqliteDb.getInProgressTasksForProject === 'function') {
+          const conflictingTasks = sqliteDb.getInProgressTasksForProject(task.projectId, task.id);
+          if (conflictingTasks.length > 0) {
+            conflictWarning = {
+              tasks: conflictingTasks.map(t => ({
+                id: t.id,
+                title: t.title,
+                agentId: t.agentId || 'unknown',
+              })),
+            };
+            // Emit real-time conflict warning via WebSocket
+            if (broadcastFn) {
+              broadcastFn('task.conflict-warning', {
+                task,
+                conflictWarning,
+                projectId: task.projectId,
+              });
+            }
+            fastify.log.warn(
+              { taskId: task.id, projectId: task.projectId, conflicts: conflictWarning.tasks },
+              '[ConflictDetection] Multiple agents in-progress on same project'
+            );
+          }
+        }
+      }
+
+      if (conflictWarning) {
+        return { ...task, conflictWarning };
       }
 
       return task;

@@ -20,6 +20,9 @@
 
   // Project → repoUrl lookup (populated after projects load)
   let projectRepoUrls: Record<string, string> = {};
+
+  // Conflict warnings: taskId → list of conflicting in-progress tasks on same project
+  let conflictWarnings: Record<string, Array<{ id: string; title: string; agentId: string }>> = {};
   
   // UI state
   let showNewTaskModal = false;
@@ -323,6 +326,33 @@
     { id: 'done', name: 'Done', color: 'bg-green-500' },
   ];
   
+  /**
+   * Compute conflict warnings from a list of tasks.
+   * Returns a map of taskId → array of other in-progress tasks on the same project.
+   */
+  function computeConflictWarnings(
+    allTasks: Task[]
+  ): Record<string, Array<{ id: string; title: string; agentId: string }>> {
+    const result: Record<string, Array<{ id: string; title: string; agentId: string }>> = {};
+    const inProgress = allTasks.filter(t => t.status === 'in-progress' && t.projectId);
+    // Group by projectId
+    const byProject: Record<string, Task[]> = {};
+    for (const t of inProgress) {
+      if (!byProject[t.projectId]) byProject[t.projectId] = [];
+      byProject[t.projectId].push(t);
+    }
+    // For each project with 2+ in-progress tasks, build conflict entries
+    for (const projectTasks of Object.values(byProject)) {
+      if (projectTasks.length < 2) continue;
+      for (const task of projectTasks) {
+        result[task.id] = projectTasks
+          .filter(other => other.id !== task.id)
+          .map(other => ({ id: other.id, title: other.title, agentId: other.agentId || 'unknown' }));
+      }
+    }
+    return result;
+  }
+
   async function loadData() {
     loading = true;
     try {
@@ -345,6 +375,9 @@
       projects.forEach(p => {
         if (p.repoUrl) projectRepoUrls[p.id] = p.repoUrl;
       });
+
+      // Compute git conflict warnings: tasks with same projectId both in-progress
+      conflictWarnings = computeConflictWarnings(tasksData);
     } catch (err) {
       console.error('Failed to load tasks view data:', err);
     } finally {
@@ -902,6 +935,36 @@
     removeActivityCallback = addWSMessageCallback((msg) => {
       if (msg.type === 'task-activity' && showTaskDetail && selectedTask && msg.taskId === selectedTask.id) {
         handleActivityMsg(msg);
+      }
+
+      // Handle git conflict-warning events in real-time
+      if (msg.type === 'task.conflict-warning' && msg.payload) {
+        const { task: warningTask, conflictWarning } = msg.payload as {
+          task: { id: string };
+          conflictWarning: { tasks: Array<{ id: string; title: string; agentId: string }> };
+          projectId: string;
+        };
+        if (warningTask?.id && conflictWarning?.tasks) {
+          conflictWarnings = {
+            ...conflictWarnings,
+            [warningTask.id]: conflictWarning.tasks,
+          };
+          // Also mark the conflicting tasks as having a warning back toward the new task
+          for (const other of conflictWarning.tasks) {
+            const existing = conflictWarnings[other.id] || [];
+            if (!existing.find(e => e.id === warningTask.id)) {
+              conflictWarnings = {
+                ...conflictWarnings,
+                [other.id]: [
+                  ...existing,
+                  { id: warningTask.id, title: warningTask.id, agentId: '' },
+                ],
+              };
+            }
+          }
+          // Reload tasks to get fresh data (includes the title for back-references)
+          loadData();
+        }
       }
     });
   });
@@ -1688,6 +1751,18 @@
                 
                 <!-- Project Name -->
                 <p class="text-xs text-slate-500 dark:text-slate-400 mb-2">{task.projectName || getProjectName(task.projectId)}</p>
+
+                <!-- Git Conflict Warning Badge -->
+                {#if conflictWarnings[task.id]?.length > 0}
+                  <div class="mb-2 pb-2 border-b border-yellow-500/30">
+                    {#each conflictWarnings[task.id] as conflict}
+                      <div class="flex items-center gap-1 text-xs text-yellow-400 font-medium" title="Potential git conflict: both tasks are in-progress on the same project">
+                        <span>⚠️</span>
+                        <span class="truncate">{conflict.agentId && conflict.agentId !== 'unknown' ? conflict.agentId : 'Another agent'} is also working on this project</span>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
                 
                 <!-- Lines Changed Info (for completed tasks) -->
                 {#if task.status === 'done' && task.linesChanged}

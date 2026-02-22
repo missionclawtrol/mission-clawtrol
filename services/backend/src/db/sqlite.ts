@@ -235,4 +235,18 @@ export class SqliteDatabase implements IDatabase {
   getRawDb(): any {
     return this.db;
   }
+
+  /**
+   * Get in-progress tasks for a project, excluding a specific task.
+   * Used for git conflict detection when multiple agents work on the same repo.
+   */
+  getInProgressTasksForProject(
+    projectId: string,
+    excludeTaskId: string
+  ): Array<{ id: string; title: string; agentId: string | null }> {
+    const rows = this.db
+      .prepare('SELECT id, title, agentId FROM tasks WHERE projectId = ? AND status = ? AND id != ?')
+      .all(projectId, 'in-progress', excludeTaskId);
+    return rows as Array<{ id: string; title: string; agentId: string | null }>;
+  }
 }
