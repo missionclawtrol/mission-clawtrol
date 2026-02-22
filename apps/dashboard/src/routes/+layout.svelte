@@ -13,10 +13,10 @@
     { name: 'Chat', href: '/chat', icon: '💬' },
     { name: 'Tasks', href: '/tasks', icon: '📋' },
     { name: 'Projects', href: '/projects', icon: '📁' },
+    { name: 'Milestones', href: '/milestones', icon: '🎯' },
     { name: 'Roster', href: '/roster', icon: '👥' },
     { name: 'Reports', href: '/reports', icon: '📊' },
     { name: 'Overview', href: '/', icon: '🏠' },
-    { name: 'Milestones', href: '/milestones', icon: '🎯' },
     { name: 'Costs', href: '/costs', icon: '💰' },
     { name: 'Team', href: '/team', icon: '🔐' },
     // { name: 'Webhooks', href: '/webhooks', icon: '🔔' }, // Hidden
