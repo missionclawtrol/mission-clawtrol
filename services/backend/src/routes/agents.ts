@@ -197,8 +197,8 @@ export async function agentRoutes(fastify: FastifyInstance) {
           
           return {
             id: def.id,
-            name: def.identity.name,
-            emoji: def.identity.emoji,
+            name: def.identity?.name || def.name || def.id,
+            emoji: def.identity?.emoji || '🤖',
             fullName: def.name,
             model: def.model,
             workspace: def.workspace,
@@ -206,7 +206,7 @@ export async function agentRoutes(fastify: FastifyInstance) {
             status,
             lastActive,
             activeSession,
-            mentionPatterns: def.groupChat.mentionPatterns,
+            mentionPatterns: def.groupChat?.mentionPatterns || [],
           };
         })
       );
