@@ -10,16 +10,16 @@
   import { fetchSetupStatus, createFirstProject, type SetupStatus } from '$lib/api';
 
   const tabs = [
-    { name: 'Overview', href: '/', icon: '🏠' },
-    { name: 'Roster', href: '/roster', icon: '👥' },
     { name: 'Chat', href: '/chat', icon: '💬' },
-    { name: 'Work Orders', href: '/tasks', icon: '📋' },
-    { name: 'Milestones', href: '/milestones', icon: '🎯' },
-    { name: 'Reports', href: '/reports', icon: '📊' },
+    { name: 'Tasks', href: '/tasks', icon: '📋' },
     { name: 'Projects', href: '/projects', icon: '📁' },
+    { name: 'Roster', href: '/roster', icon: '👥' },
+    { name: 'Reports', href: '/reports', icon: '📊' },
+    { name: 'Overview', href: '/', icon: '🏠' },
+    { name: 'Milestones', href: '/milestones', icon: '🎯' },
     { name: 'Costs', href: '/costs', icon: '💰' },
     { name: 'Team', href: '/team', icon: '🔐' },
-    // { name: 'Webhooks', href: '/webhooks', icon: '🔔' }, // Hidden — advanced feature, not needed for SMB users
+    // { name: 'Webhooks', href: '/webhooks', icon: '🔔' }, // Hidden
     { name: 'Settings', href: '/settings', icon: '⚙️' },
   ];
   
