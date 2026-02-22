@@ -169,46 +169,11 @@
         🖨️ Print
       </button>
 
-      <!-- Send to Slack -->
-      <button
-        on:click={handleSend}
-        disabled={sending || !selectedProjectId}
-        class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
-          {!selectedProjectId || sending
-            ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
-            : 'bg-green-600 hover:bg-green-700 text-white'}"
-        title={!selectedProjectId
-          ? 'Select a project to send its report'
-          : !reportChannel
-          ? 'No Report Channel set in PROJECT.md'
-          : 'Send to Slack'}
-      >
-        {#if sending}
-          <span class="animate-spin">⏳</span> Sending…
-        {:else}
-          📤 Send to Slack
-        {/if}
-      </button>
+      <!-- Send to Slack (hidden for marketplace - most users won't need this) -->
     </div>
   </div>
 
-  <!-- ── Report Channel helper note ─────────────────────────── -->
-  {#if selectedProjectId && !reportChannel}
-    <div class="bg-yellow-900/30 border border-yellow-700/50 rounded-xl p-4 text-sm text-yellow-300">
-      <span class="font-semibold">No report channel configured for this project.</span>
-      To enable Slack delivery, add the following line to
-      <code class="bg-yellow-900/50 px-1 rounded">{selectedProjectId}/PROJECT.md</code>:
-      <pre class="mt-2 bg-yellow-900/50 rounded p-2 text-yellow-200 text-xs select-all">**Report Channel:** C0XXXXXXX</pre>
-      Replace <code>C0XXXXXXX</code> with your Slack channel ID (right-click a channel → "Copy link" → the ID is at the end).
-    </div>
-  {/if}
-
-  {#if selectedProjectId && reportChannel}
-    <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-3 text-sm text-slate-400 flex items-center gap-2">
-      <span class="text-green-400">📢</span>
-      Reports for <span class="font-semibold text-slate-300">{selectedProject?.name}</span> will post to Slack channel <code class="bg-slate-700 px-1.5 py-0.5 rounded text-slate-200">{reportChannel}</code>
-    </div>
-  {/if}
+  <!-- Slack channel notes hidden for marketplace -->
 
   <!-- ── Loading / error ────────────────────────────────────── -->
   {#if loading}
