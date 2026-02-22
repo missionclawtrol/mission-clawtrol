@@ -1662,10 +1662,14 @@
       <select bind:value={filterType} class="px-3 py-1.5 text-sm bg-gray-100 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:border-blue-500">
         <option value="">All Types</option>
         <option value="general">📌 General</option>
-        <option value="bug">🐛 Bug</option>
+        <option value="development">💻 Development</option>
+        <option value="feature">💻 Feature (Dev)</option>
+        <option value="bug">🐛 Bug Fix</option>
         <option value="chore">🔧 Chore</option>
         <option value="research">🔍 Research</option>
         <option value="writing">✍️ Writing</option>
+        <option value="design">🎨 Design</option>
+        <option value="analysis">📊 Analysis</option>
       </select>
       
       <!-- Clear Filters Button -->
