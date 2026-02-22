@@ -1,4 +1,4 @@
-// Mission Clawtrol - Work Orders Kanban Board
+// Mission Clawtrol - Tasks Kanban Board
 
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
@@ -1608,7 +1608,7 @@
 <div class="space-y-4">
   <!-- Header -->
   <div class="flex items-center justify-between gap-4 flex-wrap">
-    <h1 class="text-2xl font-semibold">📋 Work Orders</h1>
+    <h1 class="text-2xl font-semibold">📋 Tasks</h1>
     
     <!-- Filter Bar -->
     <div class="flex items-center gap-2 flex-1 max-w-3xl flex-wrap">
