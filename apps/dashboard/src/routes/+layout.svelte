@@ -19,7 +19,7 @@
     { name: 'Projects', href: '/projects', icon: '📁' },
     { name: 'Costs', href: '/costs', icon: '💰' },
     { name: 'Team', href: '/team', icon: '🔐' },
-    { name: 'Webhooks', href: '/webhooks', icon: '🔔' },
+    // { name: 'Webhooks', href: '/webhooks', icon: '🔔' }, // Hidden — advanced feature, not needed for SMB users
     { name: 'Settings', href: '/settings', icon: '⚙️' },
   ];
   
