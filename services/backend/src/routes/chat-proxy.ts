@@ -69,7 +69,7 @@ export async function chatProxyRoutes(fastify: FastifyInstance) {
                 mode: 'backend',    // known constant accepted by gateway
               },
               role: 'operator',
-              scopes: ['operator.read', 'operator.write'],
+              scopes: ['operator.read', 'operator.write', 'operator.approvals', 'operator.admin'],
               caps: [],
               commands: [],
               permissions: {},
