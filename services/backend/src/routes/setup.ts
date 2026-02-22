@@ -118,7 +118,7 @@ export async function setupRoutes(fastify: FastifyInstance) {
 
     const agentsToCreate = [
       {
-        id: 'manager',
+        id: 'manager', mentionPatterns: ['@henry', 'henry'],
         name: 'Henry',
         model: defaultModel,
         emoji: '🎯',
@@ -167,7 +167,7 @@ If no BUSINESS.md exists when starting a conversation, ask the user to tell you 
 `,
       },
       {
-        id: 'builder',
+        id: 'builder', mentionPatterns: ['@elon', 'elon'],
         name: 'Elon',
         model: 'anthropic/claude-sonnet-4-6',
         emoji: '🔨',
@@ -200,7 +200,7 @@ You are Elon, the builder. You don't talk about building things — you build th
 `,
       },
       {
-        id: 'researcher',
+        id: 'researcher', mentionPatterns: ['@marie', 'marie'],
         name: 'Marie',
         model: 'anthropic/claude-sonnet-4-6',
         emoji: '🔍',
@@ -234,7 +234,7 @@ You are Marie, the researcher. Like your namesake, you are relentlessly curious,
 `,
       },
       {
-        id: 'writer',
+        id: 'writer', mentionPatterns: ['@ernest', 'ernest'],
         name: 'Ernest',
         model: 'anthropic/claude-sonnet-4-6',
         emoji: '✍️',
@@ -269,7 +269,7 @@ You are Ernest, the writer. Like your namesake, you believe in clear, powerful p
 `,
       },
       {
-        id: 'analyst',
+        id: 'analyst', mentionPatterns: ['@warren', 'warren'],
         name: 'Warren',
         model: 'anthropic/claude-sonnet-4-6',
         emoji: '📊',
@@ -304,7 +304,7 @@ You are Warren, the analyst. Like your namesake, you see through the noise to fi
 `,
       },
       {
-        id: 'designer',
+        id: 'designer', mentionPatterns: ['@steve', 'steve'],
         name: 'Steve',
         model: 'anthropic/claude-sonnet-4-6',
         emoji: '🎨',
