@@ -30,6 +30,8 @@ import { setupRoutes } from './routes/setup.js';
 import { agentsConfigRoutes } from './routes/agents-config.js';
 import { chatProxyRoutes } from './routes/chat-proxy.js';
 import { onboardingRoutes } from './routes/onboarding.js';
+import { rulesRoutes } from './routes/rules.js';
+import { seedBuiltInRules } from './rule-store.js';
 import { createAuthMiddleware } from './middleware/auth.js';
 import { gatewayClient, ApprovalRequest, ApprovalResolved } from './gateway-client.js';
 import { loadAssociations } from './project-agents.js';
@@ -540,6 +542,7 @@ await fastify.register(agentsConfigRoutes, { prefix: '/api/agents-config' });
 await fastify.register(contextRoutes, { prefix: '/api/context' });
 await fastify.register(chatProxyRoutes, { prefix: '/ws' });
 await fastify.register(onboardingRoutes, { prefix: '/api/onboarding' });
+await fastify.register(rulesRoutes, { prefix: '/api/rules' });
 
 // Health check with comprehensive system status
 fastify.get('/api/health', async () => {
@@ -1134,6 +1137,10 @@ const start = async () => {
     // Run one-time migration from JSON to SQLite
     console.log('📦 Running migration from JSON to SQLite...');
     await migrateFromJSON();
+
+    // Seed built-in rules (idempotent — safe to run on every startup)
+    console.log('📋 Seeding built-in rules...');
+    await seedBuiltInRules();
 
     // Load project-agent associations
     await loadAssociations();

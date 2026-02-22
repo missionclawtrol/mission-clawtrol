@@ -1120,3 +1120,69 @@ export async function sendWeeklyReport(params?: {
   }
   return res.json();
 }
+
+// ---- Rules Engine ----
+
+export interface Rule {
+  id: string;
+  name: string;
+  trigger: string;
+  conditions: Record<string, any>;
+  actions: Array<Record<string, any>>;
+  enabled: boolean;
+  priority: number;
+  projectId: string | null;
+  isBuiltIn: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function fetchRules(): Promise<Rule[]> {
+  const res = await fetchWithTimeout(`${API_BASE}/rules`);
+  if (!res.ok) throw new Error(`Failed to fetch rules: ${res.status}`);
+  const data = await res.json();
+  return data.rules ?? [];
+}
+
+export async function createRule(data: {
+  name: string;
+  trigger: string;
+  conditions?: Record<string, any>;
+  actions?: Array<Record<string, any>>;
+  enabled?: boolean;
+  priority?: number;
+  projectId?: string | null;
+}): Promise<Rule> {
+  const res = await fetchWithTimeout(`${API_BASE}/rules`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as any).error || `Failed to create rule: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function updateRule(id: string, data: Partial<Rule>): Promise<Rule> {
+  const res = await fetchWithTimeout(`${API_BASE}/rules/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as any).error || `Failed to update rule: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function deleteRule(id: string): Promise<{ success: boolean }> {
+  const res = await fetchWithTimeout(`${API_BASE}/rules/${id}`, { method: 'DELETE' });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as any).error || `Failed to delete rule: ${res.status}`);
+  }
+  return res.json();
+}

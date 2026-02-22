@@ -1,16 +1,16 @@
 /**
  * Stage Agent Dispatcher
- * 
+ *
  * Triggers automated agents when tasks transition between stages.
- * Currently supports:
- *   - "review" → Spawns a dedicated QA agent to review the task
- *   - "done"   → Spawns a docs agent to update PROJECT.md if needed
+ * Phase 1: Rules engine is the primary dispatcher. Hardcoded handlers
+ * remain as fallback when corresponding built-in rules are disabled.
  */
 
 import { Task, updateTask, findTaskById } from '../task-store.js';
 import { createComment } from '../comment-store.js';
 import { logAudit } from '../audit-store.js';
 import { enrichDoneTransition } from '../enrichment.js';
+import { evaluateAndExecuteRules } from '../rules-engine.js';
 
 // Track tasks currently being processed to prevent infinite loops
 const processingTasks = new Set<string>();
@@ -19,7 +19,7 @@ const processingTasks = new Set<string>();
 const QA_TIMEOUT_MS = 120_000; // 2 minutes
 
 /**
- * Handle a task status change — triggers stage agents if configured
+ * Handle a task status change — evaluates rules first, then falls back to hardcoded handlers
  */
 export async function onTaskStatusChange(
   taskId: string,
@@ -38,10 +38,39 @@ export async function onTaskStatusChange(
 
   try {
     processingTasks.add(taskId);
+
+    // Load task for rules evaluation
+    const task = await findTaskById(taskId);
+    if (!task) {
+      console.warn(`[StageAgent] Task ${taskId} not found for rules evaluation`);
+      return;
+    }
+
+    // --- Rules Engine: evaluate task.status.changed rules ---
+    const { rulesMatched } = await evaluateAndExecuteRules('task.status.changed', {
+      task,
+      trigger: 'task.status.changed',
+      oldStatus,
+      newStatus,
+    });
+
+    // Check if any matched rule had a spawn_agent action (so we don't double-spawn)
+    const rulesHandledSpawn = rulesMatched.length > 0;
+
     if (newStatus === 'review') {
-      await handleReviewStage(taskId);
+      if (rulesHandledSpawn) {
+        console.log(`[StageAgent] Skipping hardcoded QA handler — rules engine handled spawn (rules: ${rulesMatched.join(', ')})`);
+      } else {
+        // Fallback: hardcoded QA spawn (active when builtin-qa-on-review rule is disabled)
+        await handleReviewStage(taskId);
+      }
     } else if (newStatus === 'done') {
-      await handleDoneStage(taskId);
+      if (rulesHandledSpawn) {
+        console.log(`[StageAgent] Skipping hardcoded docs handler — rules engine handled spawn (rules: ${rulesMatched.join(', ')})`);
+      } else {
+        // Fallback: hardcoded docs spawn (active when builtin-docs-on-done rule is disabled)
+        await handleDoneStage(taskId);
+      }
     }
   } finally {
     // Keep the task in processingTasks for a bit to prevent re-entry

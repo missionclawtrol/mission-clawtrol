@@ -11,6 +11,7 @@ import { findTaskById, updateTask } from './task-store.js';
 import { logAudit } from './audit-store.js';
 import { Task } from './task-store.js';
 import { getAgentDefinitions } from './config-reader.js';
+import { getInjectContextContent } from './rules-engine.js';
 
 const GATEWAY_PORT = (() => {
   const url = process.env.GATEWAY_URL || 'ws://127.0.0.1:18789';
@@ -58,9 +59,10 @@ export interface AutoSpawnResult {
 }
 
 /**
- * Build the task prompt for the spawned agent
+ * Build the task prompt for the spawned agent.
+ * Evaluates inject_context rules and appends injected content to the prompt.
  */
-export function buildTaskPrompt(task: Task, projectRepoPath: string): string {
+export async function buildTaskPrompt(task: Task, projectRepoPath: string): Promise<string> {
   const apiUrl = BACKEND_URL;
   const taskDesc = task.description
     ? task.description.length > 2000
@@ -68,7 +70,7 @@ export function buildTaskPrompt(task: Task, projectRepoPath: string): string {
       : task.description
     : '(no description — fetch full task details below)';
 
-  return `You are managed by Mission Clawtrol (MC) — your task management system.
+  const basePrompt = `You are managed by Mission Clawtrol (MC) — your task management system.
 MC API: ${apiUrl}
 
 ## Your Assignment
@@ -100,6 +102,24 @@ ${taskDesc}
 - If the task involves code, commit and push before marking done
 - If the task involves documents/research, save files and note their location in handoff notes
 - If you are unsure about scope, check the task description and workflow rules before guessing`;
+
+  // Evaluate inject_context rules
+  let injectedSections: string[] = [];
+  try {
+    injectedSections = await getInjectContextContent({
+      task,
+      trigger: 'agent.session.started',
+      newStatus: task.status,
+    });
+  } catch (err: any) {
+    console.warn('[AutoSpawn] inject_context evaluation failed (non-fatal):', err.message);
+  }
+
+  if (injectedSections.length === 0) {
+    return basePrompt;
+  }
+
+  return basePrompt + '\n\n## Injected Context (from Rules)\n\n' + injectedSections.join('\n\n---\n\n');
 }
 
 /**
@@ -133,8 +153,8 @@ export async function spawnTaskSession(
   // Build the repo path
   const projectRepoPath = `${WORKSPACE_PATH}/${task.projectId}`;
 
-  // Build the prompt
-  const prompt = buildTaskPrompt(task, projectRepoPath);
+  // Build the prompt (async — evaluates inject_context rules)
+  const prompt = await buildTaskPrompt(task, projectRepoPath);
 
   console.log(`[AutoSpawn] Spawning ${agentId} for task ${task.id}: ${task.title}`);
 

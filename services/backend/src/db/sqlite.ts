@@ -151,6 +151,23 @@ export class SqliteDatabase implements IDatabase {
       );
 
       CREATE INDEX IF NOT EXISTS idx_milestones_projectId ON milestones(projectId);
+
+      CREATE TABLE IF NOT EXISTS rules (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        trigger TEXT NOT NULL,
+        conditions TEXT NOT NULL DEFAULT '{}',
+        actions TEXT NOT NULL DEFAULT '[]',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        priority INTEGER NOT NULL DEFAULT 100,
+        projectId TEXT,
+        isBuiltIn INTEGER NOT NULL DEFAULT 0,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_rules_trigger ON rules(trigger);
+      CREATE INDEX IF NOT EXISTS idx_rules_enabled ON rules(enabled);
     `);
 
     // Schema migrations (backward compatibility)
