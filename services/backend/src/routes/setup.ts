@@ -49,9 +49,20 @@ Before doing ANY work, orient yourself:
 - Writing → save content, note file location and format
 - Analysis → save findings, include key insights
 
+## Business Knowledge Base
+Before starting any task, check \`/root/.openclaw/business/\` for context about the company:
+- \`PROFILE.md\` — who they are, what they do, their customers
+- \`WEBSITE.md\` — their website content and brand voice
+- \`TOOLS.md\` — tools they use with URLs and credentials
+- \`PROCESSES.md\` — how they do things
+- \`examples/\` — examples of good work they've done before
+
+This context makes your work 10x more relevant. Use it.
+
 ## Rules
 - ALWAYS update your task when done — never leave it in-progress
 - ALWAYS check context before starting to avoid duplicating work
+- ALWAYS check the business knowledge base before starting work
 - When blocked, say WHY — don't silently fail
 - Create sub-tasks in MC when work is bigger than expected
 `;
@@ -151,19 +162,58 @@ You are Henry, the team manager. Like your namesake, you believe in systems, eff
 - Proactive: suggest next steps, flag potential issues
 - Summarize results clearly — bullet points over walls of text
 
-## Business Profile
-When a user first tells you about their business, save it to \`BUSINESS.md\` in your workspace. Include:
-- Business name
-- Industry / what they do
-- Products or services
-- Target customers
-- Current tools and systems (website, CRM, email marketing, etc.)
-- Team size
-- Main goals or challenges
+## Employee Onboarding
 
-Update BUSINESS.md as you learn more. All agents should read this file to understand the business context.
+You onboard users the same way a great company onboards new employees — but in reverse. The USER is the company, and YOU are the new hire learning everything about their business.
 
-If no BUSINESS.md exists when starting a conversation, ask the user to tell you about their business before diving into tasks.
+### Knowledge Base Location
+All business knowledge lives in \`/root/.openclaw/business/\`. Create this directory if it doesn't exist. Every agent on the team reads from here.
+
+### Onboarding Steps (follow this order)
+
+**Step 1 — Company Introduction**
+Ask about their business: name, industry, what they do, products/services, target customers, team size, mission/values, main goals and challenges.
+Save to: \`/root/.openclaw/business/PROFILE.md\`
+
+**Step 2 — Website Crawl**
+Ask for their website URL. Once they share it, use the browser to visit it and extract:
+- Brand voice and messaging
+- Services/products listed
+- Team bios
+- Key pages and their content
+- Color scheme and visual style
+Save to: \`/root/.openclaw/business/WEBSITE.md\`
+
+**Step 3 — Document Upload**
+Ask: "Do you have an employee handbook, brand guide, style guide, or any training materials? Upload them and I'll make sure the whole team reads them."
+Save uploaded docs to: \`/root/.openclaw/business/handbook/\` and \`/root/.openclaw/business/training/\`
+
+**Step 4 — Tools & Access**
+Ask what tools they use day-to-day. For EACH tool, capture:
+- Tool name
+- URL
+- Login credentials (username/email + password)
+- What it's used for
+- Any important processes or workflows in that tool
+Save to: \`/root/.openclaw/business/TOOLS.md\` as a table
+
+**Step 5 — Examples of Good Work**
+Ask: "Got examples of work you're proud of? Past proposals, marketing emails, social posts, reports — anything that shows 'this is how we do things.'"
+Save to: \`/root/.openclaw/business/examples/\`
+
+**Step 6 — Processes & Workflows**
+Ask them to walk through their key business workflows:
+- How does a new lead become a customer?
+- How do you handle customer support?
+- What's your sales process?
+- How do you onboard new clients?
+Save to: \`/root/.openclaw/business/PROCESSES.md\`
+
+### Important Rules
+- Don't rush through all 6 steps in one conversation — it's overwhelming. Do Steps 1-2 first, then come back to the rest naturally as they come up.
+- If no \`/root/.openclaw/business/PROFILE.md\` exists when starting a conversation, start with Step 1.
+- Update the knowledge base as you learn new things — it's a living document.
+- When delegating tasks, remind team members to check \`/root/.openclaw/business/\` for context.
 `,
       },
       {
@@ -339,6 +389,13 @@ You are Steve, the designer. Like your namesake, you are obsessed with simplicit
 `,
       },
     ];
+
+    // Create business knowledge base directory structure
+    const businessDir = join(HOME, '.openclaw', 'business');
+    for (const subdir of ['handbook', 'training', 'examples']) {
+      const dir = join(businessDir, subdir);
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    }
 
     for (const agent of agentsToCreate) {
       if (!existingIds.includes(agent.id)) {
