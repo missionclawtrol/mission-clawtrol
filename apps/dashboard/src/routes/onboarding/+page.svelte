@@ -109,6 +109,7 @@
 
   function toggleAgent(agentId: string) {
     expandedAgents[agentId] = !expandedAgents[agentId];
+    expandedAgents = expandedAgents; // trigger Svelte reactivity
     // Load training data on first expand
     if (expandedAgents[agentId] && !agentTraining[agentId]) {
       loadAgentTraining(agentId);
