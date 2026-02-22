@@ -222,20 +222,83 @@
   }
 
   function handleGatewayEvent(event: string, payload: any) {
-    // Chat stream chunk
+    // The gateway sends all chat events under event name "chat"
+    // with payload.state = "delta" | "final" | "aborted" | "error"
+    if (event === 'chat') {
+      const state = payload?.state;
+      const messageData = payload?.message;
+
+      // Delta — streaming content
+      if (state === 'delta' && messageData) {
+        // messageData.content is an array like [{type:"text", text:"..."}]
+        const fullText = messageData.content?.find((c: any) => c.type === 'text')?.text ?? '';
+        if (!fullText) return;
+
+        if (streamingId) {
+          // Replace content with full accumulated text (gateway sends full text each delta)
+          messages = messages.map(m =>
+            m.id === streamingId
+              ? { ...m, content: fullText }
+              : m
+          );
+        } else {
+          streamingId = uuid();
+          messages = [...messages, {
+            id: streamingId,
+            role: 'assistant',
+            content: fullText,
+            timestamp: now(),
+            streaming: true,
+          }];
+        }
+        scrollToBottom();
+        return;
+      }
+
+      // Final — agent finished responding
+      if (state === 'final') {
+        if (streamingId) {
+          messages = messages.map(m =>
+            m.id === streamingId ? { ...m, streaming: false } : m
+          );
+          streamingId = null;
+          isThinking = false;
+          scrollToBottom();
+        } else {
+          // No deltas received — fetch the response from history
+          fetchLatestResponse();
+        }
+        return;
+      }
+
+      // Aborted or error
+      if (state === 'aborted' || state === 'error') {
+        if (streamingId) {
+          messages = messages.map(m =>
+            m.id === streamingId ? { ...m, streaming: false } : m
+          );
+          streamingId = null;
+        }
+        isThinking = false;
+        if (state === 'error') errorText = 'Agent encountered an error';
+        scrollToBottom();
+        return;
+      }
+      return;
+    }
+
+    // Legacy event names (fallback)
     if (event === 'chat.chunk' || event === 'chat.delta') {
       const delta = payload?.delta ?? payload?.content ?? payload?.text ?? '';
       if (!delta) return;
 
       if (streamingId) {
-        // Append to existing streaming message
         messages = messages.map(m =>
           m.id === streamingId
             ? { ...m, content: m.content + delta }
             : m
         );
       } else {
-        // Start a new streaming message
         streamingId = uuid();
         messages = [...messages, {
           id: streamingId,
@@ -249,7 +312,6 @@
       return;
     }
 
-    // Chat stream end
     if (event === 'chat.done' || event === 'chat.complete') {
       if (streamingId) {
         messages = messages.map(m =>
@@ -262,7 +324,6 @@
       return;
     }
 
-    // Full message (non-streaming)
     if (event === 'chat.message') {
       const content = payload?.message ?? payload?.content ?? '';
       if (content) {
@@ -276,6 +337,58 @@
         scrollToBottom();
       }
     }
+  }
+
+  // ── Fetch latest response (fallback when no deltas received) ────────────
+
+  function fetchLatestResponse() {
+    if (!proxyReady || !selectedAgentId) {
+      isThinking = false;
+      return;
+    }
+
+    const reqId = uuid();
+    sendWs({
+      type: 'req',
+      id: reqId,
+      method: 'chat.history',
+      params: { sessionKey: `agent:${selectedAgentId}:main` },
+    });
+
+    pendingReqs.set(reqId, (payload: any) => {
+      const history: Array<{ role: string; content: any }> =
+        payload?.messages ?? payload?.history ?? [];
+
+      // Find the last assistant message
+      for (let i = history.length - 1; i >= 0; i--) {
+        const m = history[i];
+        if (m.role === 'assistant') {
+          // Content can be a string or array of {type:"text", text:"..."}
+          let text = '';
+          if (typeof m.content === 'string') {
+            text = m.content;
+          } else if (Array.isArray(m.content)) {
+            text = m.content
+              .filter((c: any) => c.type === 'text')
+              .map((c: any) => c.text)
+              .join('');
+          }
+
+          if (text) {
+            messages = [...messages, {
+              id: uuid(),
+              role: 'assistant',
+              content: text,
+              timestamp: now(),
+            }];
+            scrollToBottom();
+          }
+          break;
+        }
+      }
+
+      isThinking = false;
+    });
   }
 
   // ── History loading ───────────────────────────────────────────────────────
@@ -292,16 +405,29 @@
     });
 
     pendingReqs.set(reqId, (payload: any) => {
-      const history: Array<{ role: string; content: string; timestamp: number }> =
+      const history: Array<{ role: string; content: any; timestamp?: number }> =
         payload?.messages ?? payload?.history ?? [];
       messages = history
         .filter(m => m.role === 'user' || m.role === 'assistant')
-        .map(m => ({
-          id: uuid(),
-          role: m.role as 'user' | 'assistant',
-          content: m.content,
-          timestamp: m.timestamp || now(),
-        }));
+        .map(m => {
+          // Content can be string or array of {type:"text", text:"..."}
+          let text = '';
+          if (typeof m.content === 'string') {
+            text = m.content;
+          } else if (Array.isArray(m.content)) {
+            text = m.content
+              .filter((c: any) => c.type === 'text')
+              .map((c: any) => c.text)
+              .join('');
+          }
+          return {
+            id: uuid(),
+            role: m.role as 'user' | 'assistant',
+            content: text,
+            timestamp: m.timestamp || now(),
+          };
+        })
+        .filter(m => m.content); // skip empty messages
       scrollToBottom();
     });
   }

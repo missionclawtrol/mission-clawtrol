@@ -149,8 +149,8 @@ export async function chatProxyRoutes(fastify: FastifyInstance) {
 
           const authPayload = buildDeviceAuthPayload({
             deviceId: deviceIdentity.deviceId,
-            clientId: 'gateway-client',
-            clientMode: 'backend',
+            clientId: 'cli',
+            clientMode: 'cli',
             role: 'operator',
             scopes,
             signedAtMs,
@@ -167,10 +167,10 @@ export async function chatProxyRoutes(fastify: FastifyInstance) {
               minProtocol: 3,
               maxProtocol: 3,
               client: {
-                id: 'gateway-client',
+                id: 'cli',
                 version: '1.0.0',
                 platform: 'linux',
-                mode: 'backend',
+                mode: 'cli',
               },
               role: 'operator',
               scopes,
