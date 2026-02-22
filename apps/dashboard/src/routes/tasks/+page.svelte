@@ -1663,7 +1663,6 @@
         <option value="">All Types</option>
         <option value="general">📌 General</option>
         <option value="development">💻 Development</option>
-        <option value="feature">💻 Feature (Dev)</option>
         <option value="bug">🐛 Bug Fix</option>
         <option value="chore">🔧 Chore</option>
         <option value="research">🔍 Research</option>
