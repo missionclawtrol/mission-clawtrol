@@ -100,7 +100,7 @@
     agentForm = {
       id: agent.id,
       name: agent.name || '',
-      model: agent.model || '',
+      model: (typeof agent.model === 'object' ? agent.model?.primary : agent.model) || '',
       workspace: agent.workspace || '',
     };
     agentModalError = null;
@@ -211,9 +211,10 @@
     return `${diffDays}d ago`;
   }
 
-  function formatModelName(model: string): string {
-    if (!model) return 'Unknown';
-    const lowerModel = model.toLowerCase();
+  function formatModelName(model: string | { primary?: string } | undefined): string {
+    const m = typeof model === 'object' && model ? (model.primary || '') : (model || '');
+    if (!m) return 'Unknown';
+    const lowerModel = m.toLowerCase();
     if (lowerModel.includes('opus')) { const v = model.match(/[\d.]+/)?.[0] || ''; return v ? `Opus ${v}` : 'Opus'; }
     if (lowerModel.includes('sonnet')) { const v = model.match(/[\d.]+/)?.[0] || ''; return v ? `Sonnet ${v}` : 'Sonnet'; }
     if (lowerModel.includes('haiku')) { const v = model.match(/[\d.]+/)?.[0] || ''; return v ? `Haiku ${v}` : 'Haiku'; }
