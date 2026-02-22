@@ -20,14 +20,37 @@ const workflowRules = {
     ],
   },
   doneCriteria: {
-    description: 'ALL required to move a task from review to done',
-    required: [
-      'Files changed — list of files modified',
-      'How tested — what testing was done (compilation, manual, curl, etc.)',
-      'Edge cases / risks — known limitations or risks',
-      'Rollback plan — how to undo the change',
-      'Commit hash — git commit hash (or NO_COMMIT for non-git work)',
-    ],
+    description: 'Done criteria depend on task type',
+    byType: {
+      development: {
+        description: 'Code tasks — full dev workflow',
+        required: [
+          'Files changed — list of files modified',
+          'How tested — what testing was done',
+          'Edge cases / risks — known limitations',
+          'Rollback plan — how to undo the change',
+          'Commit hash — git commit hash',
+        ],
+      },
+      bug: {
+        description: 'Bug fixes — full dev workflow',
+        required: [
+          'Root cause — what caused the bug',
+          'Files changed — list of files modified',
+          'How tested — how the fix was verified',
+          'Commit hash — git commit hash',
+        ],
+      },
+      default: {
+        description: 'All other tasks (research, writing, design, analysis, general)',
+        required: [
+          'What was delivered — the actual output',
+          'Where to find it — file location or link',
+          'Summary — plain English explanation of what was done',
+          'Next steps — what the user should do with this',
+        ],
+      },
+    },
   },
   heartbeatChecklist: {
     description: 'Checks to perform on each heartbeat',

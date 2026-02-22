@@ -188,7 +188,7 @@
   // Form state
   let formError = '';
   let formLoading = false;
-  let newTaskType: string = 'feature';
+  let newTaskType: string = 'general';
   let newTask = {
     title: '',
     description: '',
@@ -203,11 +203,14 @@
   function getTypeBadge(type: string | null | undefined): { icon: string; label: string; classes: string } | null {
     if (!type) return null;
     const map: Record<string, { icon: string; label: string; classes: string }> = {
-      feature: { icon: '✨', label: 'Feature', classes: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
-      bug: { icon: '🐛', label: 'Bug', classes: 'bg-red-500/20 text-red-400 border-red-500/30' },
+      general: { icon: '📌', label: 'General', classes: 'bg-slate-500/20 text-slate-400 border-slate-500/30' },
+      research: { icon: '🔍', label: 'Research', classes: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
+      writing: { icon: '✍️', label: 'Writing', classes: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
+      design: { icon: '🎨', label: 'Design', classes: 'bg-pink-500/20 text-pink-400 border-pink-500/30' },
+      analysis: { icon: '📊', label: 'Analysis', classes: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' },
+      development: { icon: '💻', label: 'Development', classes: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
+      bug: { icon: '🐛', label: 'Bug Fix', classes: 'bg-red-500/20 text-red-400 border-red-500/30' },
       chore: { icon: '🔧', label: 'Chore', classes: 'bg-slate-500/20 text-slate-400 border-slate-500/30' },
-      spike: { icon: '🔬', label: 'Spike', classes: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
-      docs: { icon: '📝', label: 'Docs', classes: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
     };
     return map[type] || null;
   }
@@ -629,7 +632,7 @@
     if (result.success) {
       showNewTaskModal = false;
       newTask = { title: '', description: '', projectId: '', agentId: '', assignedTo: '', priority: 'P2', dueDate: '', milestoneId: '' };
-      newTaskType = 'feature';
+      newTaskType = 'general';
       await loadData();
     } else {
       formError = result.error || 'Failed to create task';
@@ -953,11 +956,14 @@
             bind:value={newTaskType}
             class="w-full px-3 py-2 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-lg text-sm focus:border-blue-500 focus:outline-none"
           >
-            <option value="feature">✨ Feature</option>
-            <option value="bug">🐛 Bug</option>
+            <option value="general">📌 General</option>
+            <option value="research">🔍 Research</option>
+            <option value="writing">✍️ Writing</option>
+            <option value="design">🎨 Design</option>
+            <option value="analysis">📊 Analysis</option>
+            <option value="development">💻 Development</option>
+            <option value="bug">🐛 Bug Fix</option>
             <option value="chore">🔧 Chore</option>
-            <option value="spike">🔬 Spike</option>
-            <option value="docs">📝 Docs</option>
           </select>
         </div>
 
@@ -1290,18 +1296,21 @@
         <div class="flex items-center gap-2">
           <span class="text-slate-500 text-sm w-24">Type</span>
           <select
-            value={selectedTask?.type || 'feature'}
+            value={selectedTask?.type || 'general'}
             on:change={async (e) => {
               await updateTask(selectedTask!.id, { type: e.currentTarget.value as any });
               await loadData();
             }}
             class="px-2 py-1 text-xs bg-slate-700 border border-slate-600 rounded"
           >
-            <option value="feature">✨ Feature</option>
-            <option value="bug">🐛 Bug</option>
+            <option value="general">📌 General</option>
+            <option value="research">🔍 Research</option>
+            <option value="writing">✍️ Writing</option>
+            <option value="design">🎨 Design</option>
+            <option value="analysis">📊 Analysis</option>
+            <option value="development">💻 Development</option>
+            <option value="bug">🐛 Bug Fix</option>
             <option value="chore">🔧 Chore</option>
-            <option value="spike">🔬 Spike</option>
-            <option value="docs">📝 Docs</option>
           </select>
         </div>
 
@@ -1588,11 +1597,11 @@
       <!-- Type Filter -->
       <select bind:value={filterType} class="px-3 py-1.5 text-sm bg-gray-100 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg focus:outline-none focus:border-blue-500">
         <option value="">All Types</option>
-        <option value="feature">✨ Feature</option>
+        <option value="general">📌 General</option>
         <option value="bug">🐛 Bug</option>
         <option value="chore">🔧 Chore</option>
-        <option value="spike">🔬 Spike</option>
-        <option value="docs">📝 Docs</option>
+        <option value="research">🔍 Research</option>
+        <option value="writing">✍️ Writing</option>
       </select>
       
       <!-- Clear Filters Button -->
