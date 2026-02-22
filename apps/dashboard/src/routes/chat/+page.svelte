@@ -622,10 +622,23 @@ But first — **tell me about your business** so the team can do a better job. W
       </div>
     </div>
 
-    <!-- Connection status -->
-    <div class="status-pill" class:green={statusDot === 'green'} class:yellow={statusDot === 'yellow'} class:red={statusDot === 'red'}>
-      <span class="status-dot"></span>
-      <span class="status-text">{statusText}</span>
+    <div class="flex items-center gap-3">
+      <!-- Clear chat button -->
+      {#if messages.length > 0}
+        <button
+          on:click={() => { messages = []; }}
+          class="px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-white bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
+          title="Clear chat display"
+        >
+          🗑️ Clear
+        </button>
+      {/if}
+
+      <!-- Connection status -->
+      <div class="status-pill" class:green={statusDot === 'green'} class:yellow={statusDot === 'yellow'} class:red={statusDot === 'red'}>
+        <span class="status-dot"></span>
+        <span class="status-text">{statusText}</span>
+      </div>
     </div>
   </div>
 
