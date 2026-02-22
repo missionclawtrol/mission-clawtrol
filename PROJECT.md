@@ -63,6 +63,7 @@ mission-clawtrol/
 - 🐳 **Docker Ready** — Containerized for production deployment
 - 🧭 **Agent Context API** — `GET /api/context` gives agents full situational awareness on session start (active milestones, blockers, recent completions, next-up tasks)
 - 🚧 **Blocker Tracking** — Tasks can be flagged as blocked (with a note); surfaced automatically in the context API
+- 💬 **Agent Chat** — Built-in chat page for conversing with OpenClaw agents via the gateway WebSocket proxy
 
 ## Quick Start
 
@@ -117,6 +118,7 @@ All endpoints at `http://localhost:3001/api/`:
 | `GET /audit` | Audit log |
 | `GET /context` | Full agent context — active projects, milestones, blockers, recent/next tasks |
 | `GET /context/:projectId` | Scoped agent context for a single project |
+| `WS /ws/gateway` | WebSocket proxy — relay messages to/from OpenClaw agents via the gateway |
 
 ## License
 
