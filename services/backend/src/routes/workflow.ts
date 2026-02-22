@@ -41,16 +41,14 @@ const workflowRules = {
   agentGuidelines: {
     wipLimit: 2,
     delegation: {
-      'senior-dev': 'Complex coding, architecture, code reviews, refactoring',
-      'junior-dev': 'Routine coding, boilerplate, tests, simple scripts',
-      'senior-researcher': 'Deep analysis, competitive intelligence, technical evaluations',
-      'junior-researcher': 'Data gathering, quick lookups, summaries, fact-checking',
-      'editor': 'Documentation, blog posts, emails, polished writing',
-      'devops': 'Server configs, deployments, Docker, networking',
-      'security': 'Code security reviews, vulnerability assessments',
+      'builder': 'Websites, apps, automations, integrations, technical solutions',
+      'researcher': 'Market research, competitor analysis, data gathering, evaluations',
+      'writer': 'Blog posts, emails, proposals, marketing copy, documentation',
+      'analyst': 'Spreadsheets, financial analysis, data interpretation, reports',
+      'designer': 'Logos, branding, presentations, visual assets',
     },
     modelRecommendations: {
-      note: 'Delegate to cheapest capable agent. Use junior agents for routine work, senior for complex.',
+      note: 'The Manager handles delegation automatically. Just describe what you need.',
     },
   },
 };

@@ -1174,7 +1174,7 @@
                 <div class="p-3 bg-gray-100 dark:bg-slate-700/50 rounded-lg">
                   <div class="flex items-center justify-between mb-2">
                     <div class="flex items-center gap-2">
-                      <span class="text-lg">{agent.agentId === 'senior-dev' ? '👨‍💻' : agent.agentId === 'junior-dev' ? '👩‍💻' : agent.agentId === 'cso' ? '🔵' : agent.agentId === 'editor' ? '✍️' : agent.agentId === 'qa' ? '🔍' : '🤖'}</span>
+                      <span class="text-lg">{agent.agentId === 'manager' ? '🎯' : agent.agentId === 'builder' ? '🔨' : agent.agentId === 'researcher' ? '🔍' : agent.agentId === 'writer' ? '✍️' : agent.agentId === 'analyst' ? '📊' : agent.agentId === 'designer' ? '🎨' : '🤖'}</span>
                       <span class="font-medium text-sm text-gray-900 dark:text-slate-200">{agent.agentId}</span>
                     </div>
                     <span class="text-xs text-slate-500">{formatRelativeTime(agent.lastActive)}</span>

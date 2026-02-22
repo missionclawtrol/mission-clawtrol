@@ -363,7 +363,7 @@ export async function agentRoutes(fastify: FastifyInstance) {
         const existingTask = await findTaskById(taskId);
         if (existingTask) {
           // Extract agentId from label
-          const agentId = label || 'senior-dev';
+          const agentId = label || 'builder';
           await updateTask(taskId, { 
             sessionKey, 
             status: 'in-progress',

@@ -146,8 +146,8 @@ export async function messageRoutes(fastify: FastifyInstance) {
         }
       }
 
-      // Send to the main agent (cso)
-      const sessionKey = 'agent:cso:main';
+      // Send to the main agent (manager)
+      const sessionKey = 'agent:manager:main';
       
       const result = await gatewayClient.request('chat.send', {
         sessionKey,
@@ -174,8 +174,8 @@ export async function messageRoutes(fastify: FastifyInstance) {
     const limit = parseInt(request.query.limit || '20');
 
     try {
-      const agentId = 'cso';
-      const sessionKey = 'agent:cso:main';
+      const agentId = 'manager';
+      const sessionKey = 'agent:manager:main';
       
       // Read sessions index to find the session file
       const sessionsIndexPath = join(OPENCLAW_HOME, agentId, 'sessions', 'sessions.json');
@@ -195,7 +195,7 @@ export async function messageRoutes(fastify: FastifyInstance) {
       } else {
         // Find by iterating - get the most recent session with a sessionId
         for (const [key, session] of Object.entries(sessionsIndex)) {
-          if (key.startsWith('agent:cso:') && session.sessionId) {
+          if (key.startsWith('agent:manager:') && session.sessionId) {
             sessionFile = join(OPENCLAW_HOME, agentId, 'sessions', `${session.sessionId}.jsonl`);
             break;
           }

@@ -122,8 +122,8 @@
     } catch (err) {
       console.error('[Chat] Failed to load agents:', err);
       // Fallback — single dummy agent so the UI is usable
-      agents = [{ id: 'cso', name: 'Chief Strategy Officer', emoji: '🎯', model: '' }];
-      selectedAgentId = 'cso';
+      agents = [{ id: 'manager', name: 'Manager', emoji: '🎯', model: '' }];
+      selectedAgentId = 'manager';
     }
   }
 

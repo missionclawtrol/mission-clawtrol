@@ -27,15 +27,12 @@ const WORKSPACE_PATH = `${process.env.HOME || ''}/.openclaw/workspace`;
 
 // Fallback set of known agent IDs (used if config read fails)
 const FALLBACK_AGENT_IDS = new Set([
-  'senior-dev',
-  'junior-dev',
-  'senior-researcher',
-  'junior-researcher',
-  'editor',
-  'qa',
-  'security',
-  'product-manager',
-  'cso',
+  'manager',
+  'builder',
+  'researcher',
+  'writer',
+  'analyst',
+  'designer',
 ]);
 
 // Cache of known agent IDs read from config (refreshed per call)
