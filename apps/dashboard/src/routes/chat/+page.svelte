@@ -122,7 +122,7 @@
     } catch (err) {
       console.error('[Chat] Failed to load agents:', err);
       // Fallback — single dummy agent so the UI is usable
-      agents = [{ id: 'manager', name: 'Manager', emoji: '🎯', model: '' }];
+      agents = [{ id: 'manager', name: 'Henry', emoji: '🎯', model: '' }];
       selectedAgentId = 'manager';
     }
   }
@@ -455,16 +455,16 @@
           role: 'assistant',
           content: `👋 **Welcome to Mission Clawtrol!**
 
-I'm your Manager — I coordinate your AI team and make sure things get done.
+I'm **Henry**, your manager. I coordinate your team and make sure things get done.
 
-**Your team is ready:**
-- 🔨 **Builder** — websites, apps, automations
-- 🔍 **Researcher** — market research, competitor analysis
-- ✍️ **Writer** — emails, blog posts, proposals, marketing copy
-- 📊 **Analyst** — spreadsheets, financial analysis, reports
-- 🎨 **Designer** — logos, branding, presentations
+**Meet your team:**
+- 🔨 **Elon** — your builder. Websites, apps, automations
+- 🔍 **Marie** — your researcher. Market research, competitor analysis
+- ✍️ **Ernest** — your writer. Emails, blog posts, proposals
+- 📊 **Warren** — your analyst. Spreadsheets, financial analysis, reports
+- 🎨 **Steve** — your designer. Logos, branding, presentations
 
-Just tell me what you need and I'll delegate to the right person.
+Just tell me what you need and I'll put the right person on it.
 
 **Try something like:**
 - "Research my competitors in [your industry]"

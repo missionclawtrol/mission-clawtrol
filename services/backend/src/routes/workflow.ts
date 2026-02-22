@@ -41,11 +41,11 @@ const workflowRules = {
   agentGuidelines: {
     wipLimit: 2,
     delegation: {
-      'builder': 'Websites, apps, automations, integrations, technical solutions',
-      'researcher': 'Market research, competitor analysis, data gathering, evaluations',
-      'writer': 'Blog posts, emails, proposals, marketing copy, documentation',
-      'analyst': 'Spreadsheets, financial analysis, data interpretation, reports',
-      'designer': 'Logos, branding, presentations, visual assets',
+      'builder (Elon)': 'Websites, apps, automations, integrations, technical solutions',
+      'researcher (Marie)': 'Market research, competitor analysis, data gathering, evaluations',
+      'writer (Ernest)': 'Blog posts, emails, proposals, marketing copy, documentation',
+      'analyst (Warren)': 'Spreadsheets, financial analysis, data interpretation, reports',
+      'designer (Steve)': 'Logos, branding, presentations, visual assets',
     },
     modelRecommendations: {
       note: 'The Manager handles delegation automatically. Just describe what you need.',

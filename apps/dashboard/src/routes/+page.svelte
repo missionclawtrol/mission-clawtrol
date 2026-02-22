@@ -196,12 +196,12 @@
         
         // Agent display info mapping
         const agentInfo: Record<string, { name: string; emoji: string }> = {
-          'manager': { name: 'Manager', emoji: '🎯' },
-          'builder': { name: 'Builder', emoji: '🔨' },
-          'researcher': { name: 'Researcher', emoji: '🔍' },
-          'writer': { name: 'Writer', emoji: '✍️' },
-          'analyst': { name: 'Analyst', emoji: '📊' },
-          'designer': { name: 'Designer', emoji: '🎨' },
+          'manager': { name: 'Henry', emoji: '🎯' },
+          'builder': { name: 'Elon', emoji: '🔨' },
+          'researcher': { name: 'Marie', emoji: '🔍' },
+          'writer': { name: 'Ernest', emoji: '✍️' },
+          'analyst': { name: 'Warren', emoji: '📊' },
+          'designer': { name: 'Steve', emoji: '🎨' },
         };
         
         // Enrich tasks with agent info
