@@ -2,7 +2,7 @@
 
 **AI-powered task management for multi-agent teams**
 
-**Repo:** https://github.com/missionclawtrol/mission-clawtrol
+**Repo:** https://github.com/cgmartin0310/mission-clawtrol
 
 ## What It Is
 
@@ -74,7 +74,7 @@ mission-clawtrol/
 ### Local Development
 
 ```bash
-git clone https://github.com/missionclawtrol/mission-clawtrol.git
+git clone https://github.com/cgmartin0310/mission-clawtrol.git
 cd mission-clawtrol
 
 # Backend
