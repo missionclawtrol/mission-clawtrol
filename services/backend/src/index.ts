@@ -32,6 +32,7 @@ import { chatProxyRoutes } from './routes/chat-proxy.js';
 import { ptyRoutes } from './routes/pty.js';
 import { onboardingRoutes } from './routes/onboarding.js';
 import { rulesRoutes } from './routes/rules.js';
+import { agentMemoryRoutes } from './routes/agent-memory.js';
 import { seedBuiltInRules } from './rule-store.js';
 import { createAuthMiddleware } from './middleware/auth.js';
 import { gatewayClient, ApprovalRequest, ApprovalResolved } from './gateway-client.js';
@@ -512,6 +513,7 @@ if (process.env.DISABLE_AUTH === 'true') {
     /^\/api\/auth\//,             // Auth routes (login, callback, me, logout)
     /^\/api\/context$/,           // Context endpoint (used by agents locally)
     /^\/api\/workflow/,           // Workflow endpoints (used by agents locally)
+    /^\/api\/agent\/[^/]+\/memory$/, // Agent memory endpoint (used by agents locally)
     /^\/ws$/,                     // WebSocket endpoint (used by dashboard before login)
     /^\/api\/chat\/ws$/,          // Chat WebSocket endpoint
     /^\/ws\/gateway$/,            // Chat gateway proxy WebSocket
@@ -546,6 +548,7 @@ await fastify.register(chatProxyRoutes, { prefix: '/ws' });
 await fastify.register(ptyRoutes, { prefix: '/ws' });
 await fastify.register(onboardingRoutes, { prefix: '/api/onboarding' });
 await fastify.register(rulesRoutes, { prefix: '/api/rules' });
+await fastify.register(agentMemoryRoutes, { prefix: '/api/agent' });
 
 // Health check with comprehensive system status
 fastify.get('/api/health', async () => {

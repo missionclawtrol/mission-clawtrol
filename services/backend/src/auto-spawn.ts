@@ -28,6 +28,13 @@ const WORKSPACE_PATH = `${process.env.HOME || ''}/.openclaw/workspace`;
 
 // Fallback set of known agent IDs (used if config read fails)
 const FALLBACK_AGENT_IDS = new Set([
+  'henry',
+  'elon',
+  'marie',
+  'ernest',
+  'warren',
+  'steve',
+  // Legacy IDs (droplet/marketplace)
   'manager',
   'builder',
   'researcher',
@@ -59,10 +66,88 @@ export interface AutoSpawnResult {
 }
 
 /**
- * Build the task prompt for the spawned agent.
- * Evaluates inject_context rules and appends injected content to the prompt.
+ * Fetch assembled agent memory from the memory API.
+ * Returns null on any failure so the caller can degrade gracefully.
  */
-export async function buildTaskPrompt(task: Task, projectRepoPath: string): Promise<string> {
+async function fetchAgentMemory(
+  agentId: string,
+  taskId: string,
+  projectId: string | null | undefined
+): Promise<Record<string, any> | null> {
+  try {
+    const qs = new URLSearchParams({ taskId });
+    if (projectId) qs.set('projectId', projectId);
+    const url = `${BACKEND_URL}/api/agent/${encodeURIComponent(agentId)}/memory?${qs}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) {
+      console.warn(`[AutoSpawn] Memory API returned ${res.status} for agent ${agentId}`);
+      return null;
+    }
+    return await res.json() as Record<string, any>;
+  } catch (err: any) {
+    console.warn('[AutoSpawn] Memory API call failed (non-fatal):', err.message);
+    return null;
+  }
+}
+
+/**
+ * Format memory sections into a compact string for prompt injection.
+ * Respects a rough token budget — only injects what fits.
+ */
+function formatMemoryForPrompt(memory: Record<string, any>): string {
+  const sections: string[] = [];
+
+  // ── Procedural: Role (SOUL.md) ─────────────────────────────────────────
+  const role = memory.procedural?.role;
+  if (role && typeof role === 'string' && role.trim().length > 0) {
+    // Truncate at 1500 chars to keep within token budget
+    const truncated = role.length > 1500 ? role.slice(0, 1500) + '\n...(truncated)' : role;
+    sections.push(`## Your Role\n\n${truncated}`);
+  }
+
+  // ── Semantic: Cheat Sheet (LEARNED.md) ────────────────────────────────
+  const learned = memory.semantic?.learned;
+  if (learned && typeof learned === 'string' && learned.trim().length > 0) {
+    const truncated = learned.length > 1000 ? learned.slice(0, 1000) + '\n...(truncated)' : learned;
+    sections.push(`## Your Cheat Sheet (LEARNED.md)\n\n${truncated}`);
+  }
+
+  // ── Semantic: Project Context (PROJECT.md) ────────────────────────────
+  const projectContext = memory.semantic?.project?.context;
+  if (projectContext && typeof projectContext === 'string' && projectContext.trim().length > 0) {
+    const truncated = projectContext.length > 1500 ? projectContext.slice(0, 1500) + '\n...(see PROJECT.md for full details)' : projectContext;
+    sections.push(`## Project Context\n\n${truncated}`);
+  }
+
+  // ── Episodic: Recent Tasks ─────────────────────────────────────────────
+  const myRecentTasks: any[] = memory.episodic?.myRecentTasks || [];
+  if (myRecentTasks.length > 0) {
+    const taskLines = myRecentTasks.slice(0, 5).map((t: any) => {
+      const date = t.completedAt ? new Date(t.completedAt).toLocaleDateString() : 'unknown';
+      const notes = t.handoffNotes
+        ? ' — ' + t.handoffNotes.slice(0, 100).replace(/\n/g, ' ')
+        : '';
+      return `- [${t.priority}] ${t.title} (${date})${notes}`;
+    });
+    sections.push(`## Your Recent Work\n\n${taskLines.join('\n')}`);
+  }
+
+  // ── Prospective: Upcoming / Pending ───────────────────────────────────
+  const pendingDeps: any[] = memory.prospective?.pendingDependencies || [];
+  if (pendingDeps.length > 0) {
+    const depLines = pendingDeps.map((t: any) => `- [${t.priority}] ${t.title} (${t.status})`);
+    sections.push(`## Blocked / Pending Tasks (FYI)\n\n${depLines.join('\n')}`);
+  }
+
+  return sections.join('\n\n');
+}
+
+/**
+ * Build the task prompt for the spawned agent.
+ * Calls the Agent Memory API and injects assembled memory context,
+ * then evaluates inject_context rules and appends injected content.
+ */
+export async function buildTaskPrompt(task: Task, projectRepoPath: string, agentId?: string): Promise<string> {
   const apiUrl = BACKEND_URL;
   const taskDesc = task.description
     ? task.description.length > 2000
@@ -103,7 +188,20 @@ ${taskDesc}
 - If the task involves documents/research, save files and note their location in handoff notes
 - If you are unsure about scope, check the task description and workflow rules before guessing`;
 
-  // Evaluate inject_context rules
+  // ── Fetch Agent Memory (Phase 2) ────────────────────────────────────────
+  let memorySection = '';
+  if (agentId) {
+    const memory = await fetchAgentMemory(agentId, task.id, task.projectId);
+    if (memory) {
+      const formatted = formatMemoryForPrompt(memory);
+      if (formatted.trim().length > 0) {
+        memorySection = '\n\n## Agent Memory (Injected at Spawn)\n\n' + formatted;
+        console.log(`[AutoSpawn] Injected ${formatted.length} chars of memory for agent ${agentId}`);
+      }
+    }
+  }
+
+  // ── Evaluate inject_context Rules ────────────────────────────────────────
   let injectedSections: string[] = [];
   try {
     injectedSections = await getInjectContextContent({
@@ -115,11 +213,13 @@ ${taskDesc}
     console.warn('[AutoSpawn] inject_context evaluation failed (non-fatal):', err.message);
   }
 
-  if (injectedSections.length === 0) {
-    return basePrompt;
+  let fullPrompt = basePrompt + memorySection;
+
+  if (injectedSections.length > 0) {
+    fullPrompt += '\n\n## Injected Context (from Rules)\n\n' + injectedSections.join('\n\n---\n\n');
   }
 
-  return basePrompt + '\n\n## Injected Context (from Rules)\n\n' + injectedSections.join('\n\n---\n\n');
+  return fullPrompt;
 }
 
 /**
@@ -153,8 +253,8 @@ export async function spawnTaskSession(
   // Build the repo path
   const projectRepoPath = `${WORKSPACE_PATH}/${task.projectId}`;
 
-  // Build the prompt (async — evaluates inject_context rules)
-  const prompt = await buildTaskPrompt(task, projectRepoPath);
+  // Build the prompt (async — evaluates inject_context rules + fetches agent memory)
+  const prompt = await buildTaskPrompt(task, projectRepoPath, agentId);
 
   console.log(`[AutoSpawn] Spawning ${agentId} for task ${task.id}: ${task.title}`);
 
