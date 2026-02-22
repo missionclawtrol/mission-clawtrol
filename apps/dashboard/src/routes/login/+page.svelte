@@ -18,7 +18,7 @@
       const res = await fetch(`${API_BASE}/auth/me`);
       if (res.ok) {
         // Already authenticated — go to dashboard
-        goto('/chat');
+        window.location.href = '/chat';
         return;
       }
       const data = await res.json().catch(() => ({}));
@@ -46,7 +46,7 @@
         body: JSON.stringify({ username, password }),
       });
       if (res.ok) {
-        goto('/chat');
+        window.location.href = '/chat';
       } else {
         const data = await res.json().catch(() => ({}));
         error = data.error || 'Login failed. Check your credentials.';
@@ -84,7 +84,7 @@
         body: JSON.stringify({ username, password }),
       });
       if (res.ok) {
-        goto('/chat');
+        window.location.href = '/chat';
       } else {
         const data = await res.json().catch(() => ({}));
         error = data.error || 'Setup failed. Please try again.';
