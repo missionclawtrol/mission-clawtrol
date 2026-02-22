@@ -255,19 +255,30 @@
         return;
       }
 
-      // Final — agent finished responding
+      // Final — agent finished responding (also contains the complete message)
       if (state === 'final') {
+        const finalText = messageData?.content?.find((c: any) => c.type === 'text')?.text ?? '';
         if (streamingId) {
+          // Update with final complete text
           messages = messages.map(m =>
-            m.id === streamingId ? { ...m, streaming: false } : m
+            m.id === streamingId ? { ...m, content: finalText || m.content, streaming: false } : m
           );
           streamingId = null;
-          isThinking = false;
-          scrollToBottom();
+        } else if (finalText) {
+          // No deltas were received but final has the text
+          messages = [...messages, {
+            id: uuid(),
+            role: 'assistant',
+            content: finalText,
+            timestamp: now(),
+          }];
         } else {
-          // No deltas received — fetch the response from history
+          // No text anywhere — fetch from history as last resort
           fetchLatestResponse();
+          return;
         }
+        isThinking = false;
+        scrollToBottom();
         return;
       }
 
@@ -352,7 +363,7 @@
       type: 'req',
       id: reqId,
       method: 'chat.history',
-      params: { sessionKey: `agent:${selectedAgentId}:main` },
+      params: { sessionKey: `agent:${selectedAgentId}:mc-chat` },
     });
 
     pendingReqs.set(reqId, (payload: any) => {
@@ -401,7 +412,7 @@
       type: 'req',
       id: reqId,
       method: 'chat.history',
-      params: { sessionKey: `agent:${agentId}:main` },
+      params: { sessionKey: `agent:${agentId}:mc-chat` },
     });
 
     pendingReqs.set(reqId, (payload: any) => {
@@ -459,7 +470,7 @@
     await scrollToBottom();
 
     const reqId = uuid();
-    const sessionKey = `agent:${selectedAgentId}:main`;
+    const sessionKey = `agent:${selectedAgentId}:mc-chat`;
 
     sendWs({
       type: 'req',
