@@ -448,6 +448,12 @@
         })
         .filter(m => m.content); // skip empty messages
 
+      // Respect "clear chat" — hide messages before the cleared timestamp
+      const clearedAt = Number(localStorage.getItem(`chat-cleared-${agentId}`) || '0');
+      if (clearedAt) {
+        messages = messages.filter(m => m.timestamp > clearedAt);
+      }
+
       // Show welcome message if no history exists
       if (messages.length === 0) {
         messages = [{
@@ -647,7 +653,7 @@ But first — **tell me about your business** so the team can do a better job. W
       <!-- Clear chat button -->
       {#if messages.length > 0}
         <button
-          on:click={() => { messages = []; }}
+          on:click={() => { messages = []; localStorage.setItem(`chat-cleared-${selectedAgent}`, String(Date.now())); }}
           class="px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-white bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
           title="Clear chat display"
         >
