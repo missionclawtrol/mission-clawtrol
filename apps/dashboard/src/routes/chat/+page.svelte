@@ -447,6 +447,35 @@
           };
         })
         .filter(m => m.content); // skip empty messages
+
+      // Show welcome message if no history exists
+      if (messages.length === 0) {
+        messages = [{
+          id: uuid(),
+          role: 'assistant',
+          content: `👋 **Welcome to Mission Clawtrol!**
+
+I'm your Manager — I coordinate your AI team and make sure things get done.
+
+**Your team is ready:**
+- 🔨 **Builder** — websites, apps, automations
+- 🔍 **Researcher** — market research, competitor analysis
+- ✍️ **Writer** — emails, blog posts, proposals, marketing copy
+- 📊 **Analyst** — spreadsheets, financial analysis, reports
+- 🎨 **Designer** — logos, branding, presentations
+
+Just tell me what you need and I'll delegate to the right person.
+
+**Try something like:**
+- "Research my competitors in [your industry]"
+- "Build me a landing page for my business"
+- "Write a marketing email for our new product"
+
+But first — **tell me about your business** so the team can do a better job. What's your company name, what do you do, and who are your customers?`,
+          timestamp: now(),
+        }];
+      }
+
       scrollToBottom();
     });
   }
