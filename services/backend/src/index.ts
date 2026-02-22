@@ -29,6 +29,7 @@ import { reportRoutes } from './routes/reports.js';
 import { setupRoutes } from './routes/setup.js';
 import { agentsConfigRoutes } from './routes/agents-config.js';
 import { chatProxyRoutes } from './routes/chat-proxy.js';
+import { onboardingRoutes } from './routes/onboarding.js';
 import { createAuthMiddleware } from './middleware/auth.js';
 import { gatewayClient, ApprovalRequest, ApprovalResolved } from './gateway-client.js';
 import { loadAssociations } from './project-agents.js';
@@ -538,6 +539,7 @@ await fastify.register(setupRoutes, { prefix: '/api/setup' });
 await fastify.register(agentsConfigRoutes, { prefix: '/api/agents-config' });
 await fastify.register(contextRoutes, { prefix: '/api/context' });
 await fastify.register(chatProxyRoutes, { prefix: '/ws' });
+await fastify.register(onboardingRoutes, { prefix: '/api/onboarding' });
 
 // Health check with comprehensive system status
 fastify.get('/api/health', async () => {

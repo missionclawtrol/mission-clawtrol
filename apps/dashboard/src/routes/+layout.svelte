@@ -11,6 +11,7 @@
 
   const tabs = [
     { name: 'Chat', href: '/chat', icon: '💬' },
+    { name: 'Onboarding', href: '/onboarding', icon: '📚' },
     { name: 'Tasks', href: '/tasks', icon: '📋' },
     { name: 'Projects', href: '/projects', icon: '📁' },
     { name: 'Milestones', href: '/milestones', icon: '🎯' },
