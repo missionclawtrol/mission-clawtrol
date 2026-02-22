@@ -566,7 +566,23 @@ But first — **tell me about your business** so the team can do a better job. W
     }
   }
 
+  function stopResponse() {
+    // Stop streaming — finalize whatever we have so far
+    if (streamingId) {
+      messages = messages.map(m =>
+        m.id === streamingId ? { ...m, streaming: false } : m
+      );
+      streamingId = null;
+    }
+    isThinking = false;
+  }
+
   function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      stopResponse();
+      return;
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
@@ -712,20 +728,26 @@ But first — **tell me about your business** so the team can do a better job. W
       disabled={!proxyReady}
     ></textarea>
 
-    <button
-      class="send-btn"
-      on:click={sendMessage}
-      disabled={!proxyReady || !inputText.trim() || isThinking}
-      title="Send message (Enter)"
-    >
-      {#if isThinking}
-        <span class="spinner"></span>
-      {:else}
+    {#if isThinking || streamingId}
+      <button
+        class="stop-btn"
+        on:click={stopResponse}
+        title="Stop response (Esc)"
+      >
+        ⏹
+      </button>
+    {:else}
+      <button
+        class="send-btn"
+        on:click={sendMessage}
+        disabled={!proxyReady || !inputText.trim()}
+        title="Send message (Enter)"
+      >
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
           <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
         </svg>
-      {/if}
-    </button>
+      </button>
+    {/if}
   </div>
 </div>
 
@@ -1064,6 +1086,30 @@ But first — **tell me about your business** so the team can do a better job. W
   .message-input:disabled {
     opacity: 0.45;
     cursor: not-allowed;
+  }
+
+  .stop-btn {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    background: #dc2626;
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 18px;
+    transition: background 0.2s, transform 0.1s;
+  }
+
+  .stop-btn:hover {
+    background: #b91c1c;
+  }
+
+  .stop-btn:active {
+    transform: scale(0.93);
   }
 
   .send-btn {
