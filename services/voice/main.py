@@ -88,7 +88,8 @@ def get_whisper() -> WhisperModel:
 
 def get_piper(voice_name: Optional[str] = None) -> PiperVoice:
     global _piper, _piper_name
-    name = voice_name or DEFAULT_PIPER_VOICE
+    # If no voice specified, use the currently loaded voice (not the startup default)
+    name = voice_name or _piper_name or DEFAULT_PIPER_VOICE
 
     if _piper is None or name != _piper_name:
         # Check legacy path first (for already-downloaded models)
