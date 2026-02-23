@@ -1186,3 +1186,120 @@ export async function deleteRule(id: string): Promise<{ success: boolean }> {
   }
   return res.json();
 }
+
+// ─── Deliverables ────────────────────────────────────────────────────────────
+
+export type DeliverableStatus = 'draft' | 'review' | 'approved' | 'rejected' | 'changes_requested';
+export type DeliverableType = 'markdown' | 'text' | 'csv' | 'html' | 'pdf' | 'other';
+
+export interface Deliverable {
+  id: string;
+  taskId: string;
+  agentId: string | null;
+  projectId: string | null;
+  title: string;
+  type: DeliverableType;
+  content: string | null;
+  filePath: string | null;
+  status: DeliverableStatus;
+  feedback: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateDeliverableParams {
+  taskId: string;
+  title: string;
+  type?: DeliverableType;
+  content?: string;
+  filePath?: string;
+  agentId?: string;
+  projectId?: string;
+  status?: DeliverableStatus;
+}
+
+export async function fetchDeliverables(filters?: {
+  taskId?: string;
+  agentId?: string;
+  projectId?: string;
+  status?: DeliverableStatus;
+}): Promise<Deliverable[]> {
+  try {
+    const params = new URLSearchParams();
+    if (filters?.taskId) params.set('taskId', filters.taskId);
+    if (filters?.agentId) params.set('agentId', filters.agentId);
+    if (filters?.projectId) params.set('projectId', filters.projectId);
+    if (filters?.status) params.set('status', filters.status);
+    const qs = params.toString();
+    const res = await fetchWithTimeout(`${API_BASE}/deliverables${qs ? '?' + qs : ''}`);
+    const data = await res.json();
+    return data.deliverables || [];
+  } catch (error) {
+    console.error('Failed to fetch deliverables:', error);
+    return [];
+  }
+}
+
+export async function fetchTaskDeliverables(taskId: string): Promise<Deliverable[]> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/tasks/${taskId}/deliverables`);
+    const data = await res.json();
+    return data.deliverables || [];
+  } catch (error) {
+    console.error('Failed to fetch task deliverables:', error);
+    return [];
+  }
+}
+
+export async function fetchPendingDeliverableCount(): Promise<number> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/deliverables/pending`);
+    const data = await res.json();
+    return data.count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+export async function createDeliverable(params: CreateDeliverableParams): Promise<Deliverable | null> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/deliverables`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (error) {
+    console.error('Failed to create deliverable:', error);
+    return null;
+  }
+}
+
+export async function reviewDeliverable(
+  id: string,
+  action: 'approved' | 'rejected' | 'changes_requested' | 'review',
+  feedback?: string
+): Promise<Deliverable | null> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/deliverables/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: action, feedback: feedback || null }),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (error) {
+    console.error('Failed to review deliverable:', error);
+    return null;
+  }
+}
+
+export async function deleteDeliverable(id: string): Promise<boolean> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/deliverables/${id}`, { method: 'DELETE' });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}

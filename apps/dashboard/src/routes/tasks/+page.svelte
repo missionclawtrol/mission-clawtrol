@@ -4,7 +4,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
-  import { fetchTasks, createTask, updateTask, deleteTask, spawnAgent, spawnTaskSession, fetchProjects, fetchAgents, fetchSettings, fetchUsers, fetchMilestones, type Task, type Project, type Agent, type Settings, type UserInfo, type Milestone } from '$lib/api';
+  import { fetchTasks, createTask, updateTask, deleteTask, spawnAgent, spawnTaskSession, fetchProjects, fetchAgents, fetchSettings, fetchUsers, fetchMilestones, fetchTaskDeliverables, reviewDeliverable, deleteDeliverable, type Task, type Project, type Agent, type Settings, type UserInfo, type Milestone, type Deliverable } from '$lib/api';
   import { getApiBase } from '$lib/config';
   import { onTaskUpdate } from '$lib/taskWebSocket';
   import { sendWSMessage, addWSMessageCallback } from '$lib/websocket';
@@ -241,6 +241,96 @@
     selectedTaskMilestones = [];
   }
   
+  // Deliverables state
+  let deliverables: Deliverable[] = [];
+  let loadingDeliverables = false;
+  let reviewingDeliverable: string | null = null; // id of deliverable being reviewed
+  let reviewFeedback = '';
+  let deliverablePreview: Deliverable | null = null;
+
+  async function loadDeliverables(taskId: string) {
+    loadingDeliverables = true;
+    try {
+      deliverables = await fetchTaskDeliverables(taskId);
+    } catch (e) {
+      console.error('Failed to load deliverables:', e);
+    } finally {
+      loadingDeliverables = false;
+    }
+  }
+
+  async function handleReviewDeliverable(id: string, action: 'approved' | 'rejected' | 'changes_requested') {
+    await reviewDeliverable(id, action, reviewFeedback || undefined);
+    reviewFeedback = '';
+    reviewingDeliverable = null;
+    if (selectedTask) await loadDeliverables(selectedTask.id);
+  }
+
+  async function handleDeleteDeliverable(id: string) {
+    if (!confirm('Delete this deliverable?')) return;
+    await deleteDeliverable(id);
+    if (selectedTask) await loadDeliverables(selectedTask.id);
+  }
+
+  function getDeliverableStatusBadge(status: Deliverable['status']): { label: string; classes: string } {
+    switch (status) {
+      case 'draft': return { label: '📝 Draft', classes: 'bg-slate-500/20 text-slate-300 border-slate-500/30' };
+      case 'review': return { label: '🔍 Review', classes: 'bg-purple-500/20 text-purple-300 border-purple-500/30' };
+      case 'approved': return { label: '✅ Approved', classes: 'bg-green-500/20 text-green-300 border-green-500/30' };
+      case 'rejected': return { label: '❌ Rejected', classes: 'bg-red-500/20 text-red-300 border-red-500/30' };
+      case 'changes_requested': return { label: '🔄 Changes Requested', classes: 'bg-amber-500/20 text-amber-300 border-amber-500/30' };
+      default: return { label: status, classes: 'bg-slate-500/20 text-slate-300 border-slate-500/30' };
+    }
+  }
+
+  function getDeliverableTypeIcon(type: Deliverable['type']): string {
+    switch (type) {
+      case 'markdown': return '📄';
+      case 'text': return '📃';
+      case 'csv': return '📊';
+      case 'html': return '🌐';
+      case 'pdf': return '📑';
+      default: return '📎';
+    }
+  }
+
+  /** Minimal markdown → HTML for safe agent-produced content */
+  function renderMarkdown(md: string): string {
+    return md
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      // Headings
+      .replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold mt-3 mb-1">$1</h3>')
+      .replace(/^## (.+)$/gm, '<h2 class="text-lg font-semibold mt-4 mb-1">$1</h2>')
+      .replace(/^# (.+)$/gm, '<h1 class="text-xl font-bold mt-4 mb-1">$1</h1>')
+      // Bold / italic
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      // Inline code
+      .replace(/`([^`]+)`/g, '<code class="bg-slate-600 px-1 rounded text-xs font-mono">$1</code>')
+      // Code blocks
+      .replace(/```[\w]*\n?([\s\S]*?)```/g, '<pre class="bg-slate-700 rounded p-3 my-2 text-xs overflow-x-auto whitespace-pre-wrap"><code>$1</code></pre>')
+      // Unordered lists
+      .replace(/^[-*] (.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
+      // Ordered lists
+      .replace(/^\d+\. (.+)$/gm, '<li class="ml-4 list-decimal">$1</li>')
+      // Horizontal rule
+      .replace(/^---$/gm, '<hr class="border-slate-600 my-3" />')
+      // Line breaks → paragraphs (double newline = paragraph)
+      .replace(/\n\n+/g, '</p><p class="mb-2">')
+      .replace(/\n/g, '<br/>');
+  }
+
+  function downloadDeliverable(d: Deliverable) {
+    const ext = d.type === 'markdown' ? 'md' : d.type === 'csv' ? 'csv' : 'txt';
+    const blob = new Blob([d.content || ''], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${d.title.replace(/[^a-z0-9_\-]/gi, '_')}.${ext}`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   // Comments state
   interface TaskComment {
     id: string;
@@ -884,7 +974,12 @@
     showTaskDetail = true;
     comments = [];
     newComment = '';
+    deliverables = [];
+    deliverablePreview = null;
+    reviewingDeliverable = null;
+    reviewFeedback = '';
     loadComments(task.id);
+    loadDeliverables(task.id);
     resetActivityState();
 
     if (task.status === 'in-progress' && task.sessionKey) {
@@ -1481,7 +1576,124 @@
           </div>
         {/if}
 
-        <!-- Comments Section -->
+        <!-- Deliverables Section -->
+        <div class="pt-2 border-t border-gray-200 dark:border-slate-700">
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="text-sm text-slate-500 dark:text-slate-400">📦 Deliverables ({deliverables.length})</h4>
+            {#if deliverables.some(d => d.status === 'review')}
+              <span class="text-xs px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                {deliverables.filter(d => d.status === 'review').length} pending review
+              </span>
+            {/if}
+          </div>
+
+          {#if loadingDeliverables}
+            <p class="text-xs text-slate-500">Loading deliverables...</p>
+          {:else if deliverables.length === 0}
+            <p class="text-xs text-slate-500 italic">No deliverables yet. Agents will drop files here when done.</p>
+          {:else}
+            <div class="space-y-2">
+              {#each deliverables as d (d.id)}
+                {@const badge = getDeliverableStatusBadge(d.status)}
+                <div class="bg-slate-700/50 rounded border border-slate-600 p-2">
+                  <!-- Header row -->
+                  <div class="flex items-start gap-2 mb-1">
+                    <span class="text-sm">{getDeliverableTypeIcon(d.type)}</span>
+                    <div class="flex-1 min-w-0">
+                      <p class="text-sm font-medium text-slate-200 truncate">{d.title}</p>
+                      <p class="text-xs text-slate-500">{new Date(d.createdAt).toLocaleString()}{d.agentId ? ` · ${d.agentId}` : ''}</p>
+                    </div>
+                    <span class="text-xs px-1.5 py-0.5 rounded border flex-shrink-0 {badge.classes}">{badge.label}</span>
+                  </div>
+
+                  <!-- Feedback (if any) -->
+                  {#if d.feedback}
+                    <div class="mt-1 px-2 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded text-xs text-amber-300">
+                      💬 {d.feedback}
+                    </div>
+                  {/if}
+
+                  <!-- Preview / Download -->
+                  <div class="flex items-center gap-2 mt-2">
+                    {#if d.content}
+                      <button
+                        on:click={() => { deliverablePreview = deliverablePreview?.id === d.id ? null : d; }}
+                        class="text-xs px-2 py-1 bg-slate-600 hover:bg-slate-500 rounded transition-colors"
+                      >
+                        {deliverablePreview?.id === d.id ? 'Hide' : '👁 Preview'}
+                      </button>
+                      <button
+                        on:click={() => downloadDeliverable(d)}
+                        class="text-xs px-2 py-1 bg-slate-600 hover:bg-slate-500 rounded transition-colors"
+                      >
+                        ⬇ Download
+                      </button>
+                    {/if}
+
+                    <!-- Review actions (only when in review status) -->
+                    {#if d.status === 'review'}
+                      {#if reviewingDeliverable === d.id}
+                        <div class="flex-1 flex gap-1 flex-wrap">
+                          <input
+                            type="text"
+                            bind:value={reviewFeedback}
+                            placeholder="Feedback (optional)..."
+                            class="flex-1 min-w-0 bg-slate-700 border border-slate-600 rounded px-2 py-1 text-xs text-white placeholder-slate-500"
+                          />
+                          <button on:click={() => handleReviewDeliverable(d.id, 'approved')} class="text-xs px-2 py-1 bg-green-600 hover:bg-green-700 rounded text-white">✅ Approve</button>
+                          <button on:click={() => handleReviewDeliverable(d.id, 'changes_requested')} class="text-xs px-2 py-1 bg-amber-600 hover:bg-amber-700 rounded text-white">🔄 Changes</button>
+                          <button on:click={() => handleReviewDeliverable(d.id, 'rejected')} class="text-xs px-2 py-1 bg-red-600 hover:bg-red-700 rounded text-white">❌ Reject</button>
+                          <button on:click={() => { reviewingDeliverable = null; reviewFeedback = ''; }} class="text-xs px-2 py-1 bg-slate-600 hover:bg-slate-500 rounded">Cancel</button>
+                        </div>
+                      {:else}
+                        <button
+                          on:click={() => { reviewingDeliverable = d.id; reviewFeedback = ''; }}
+                          class="ml-auto text-xs px-2 py-1 bg-purple-600 hover:bg-purple-700 rounded text-white"
+                        >
+                          📋 Review
+                        </button>
+                      {/if}
+                    {:else}
+                      <button
+                        on:click={() => handleDeleteDeliverable(d.id)}
+                        class="ml-auto text-xs text-red-400 hover:text-red-300 transition-colors"
+                        title="Delete deliverable"
+                      >✕</button>
+                    {/if}
+                  </div>
+
+                  <!-- Content preview panel -->
+                  {#if deliverablePreview?.id === d.id && d.content}
+                    <div class="mt-2 border-t border-slate-600 pt-2">
+                      {#if d.type === 'markdown'}
+                        <div class="prose prose-invert prose-sm max-w-none text-slate-200 text-sm leading-relaxed max-h-96 overflow-y-auto">
+                          <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                          {@html '<p class="mb-2">' + renderMarkdown(d.content) + '</p>'}
+                        </div>
+                      {:else if d.type === 'csv'}
+                        <div class="overflow-x-auto max-h-64">
+                          <table class="text-xs w-full border-collapse">
+                            {#each d.content.trim().split('\n') as row, i}
+                              <tr class="{i === 0 ? 'font-semibold bg-slate-600' : 'even:bg-slate-700/40'}">
+                                {#each row.split(',') as cell}
+                                  <td class="border border-slate-600 px-2 py-1 text-slate-200">{cell.trim()}</td>
+                                {/each}
+                              </tr>
+                            {/each}
+                          </table>
+                        </div>
+                      {:else}
+                        <pre class="text-xs text-slate-300 whitespace-pre-wrap max-h-64 overflow-y-auto">{d.content}</pre>
+                      {/if}
+                    </div>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+
+<!-- Comments Section -->
         <div class="pt-2 border-t border-gray-200 dark:border-slate-700">
           <h4 class="text-sm text-slate-500 dark:text-slate-400 mb-2">💬 Comments ({comments.length})</h4>
           

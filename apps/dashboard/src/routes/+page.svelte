@@ -4,10 +4,12 @@
     fetchAgents, 
     fetchTasks, 
     fetchAuditLog, 
-    checkHealth, 
+    checkHealth,
+    fetchDeliverables,
     type Agent, 
     type Task,
-    type AuditEntry 
+    type AuditEntry,
+    type Deliverable,
   } from '$lib/api';
   import { connectWebSocket, wsConnected, wsMessages } from '$lib/websocket';
   import DonutChart from '$lib/components/DonutChart.svelte';
@@ -24,6 +26,9 @@
   let completedThisWeek = 0;
   let totalSavings = 0;
   let activeAgents = 0;
+
+  // Deliverables
+  let pendingDeliverables: Deliverable[] = [];
   
   // Chart data
   let statusLabels: string[] = [];
@@ -184,15 +189,17 @@
     if (backendConnected) {
       try {
         // Fetch data in parallel
-        const [agentsData, tasksData, auditData] = await Promise.all([
+        const [agentsData, tasksData, auditData, deliverableData] = await Promise.all([
           fetchAgents(),
           fetchTasks(),
           fetchAuditLog({ limit: 30 }),
+          fetchDeliverables({ status: 'review' }),
         ]);
         
         agents = agentsData;
         tasks = tasksData;
         auditLog = auditData;
+        pendingDeliverables = deliverableData;
         
         // Agent display info mapping
         const agentInfo: Record<string, { name: string; emoji: string }> = {
@@ -299,6 +306,38 @@
     </div>
   </div>
   
+  <!-- Deliverables Widget -->
+  {#if !loading && pendingDeliverables.length > 0}
+  <div class="bg-white dark:bg-slate-800 rounded-lg border border-purple-500/40 overflow-hidden">
+    <div class="px-4 py-3 border-b border-purple-500/30 bg-purple-500/10 flex items-center justify-between">
+      <h2 class="font-semibold text-purple-300 flex items-center gap-2">
+        <span>📦</span> Deliverables Ready for Review
+        <span class="text-sm font-normal px-2 py-0.5 bg-purple-500/30 rounded-full">{pendingDeliverables.length}</span>
+      </h2>
+      <a href="/deliverables" class="text-sm text-purple-400 hover:text-purple-200 underline transition-colors">View all →</a>
+    </div>
+    <div class="divide-y divide-slate-700">
+      {#each pendingDeliverables.slice(0, 5) as d (d.id)}
+        <div class="px-4 py-3 flex items-center gap-3 hover:bg-slate-700/30 transition-colors">
+          <span class="text-lg">{d.type === 'markdown' ? '📄' : d.type === 'csv' ? '📊' : d.type === 'text' ? '📃' : '📎'}</span>
+          <div class="flex-1 min-w-0">
+            <p class="font-medium text-slate-200 truncate">{d.title}</p>
+            <p class="text-xs text-slate-500">
+              {d.agentId ? `🤖 ${d.agentId} ·` : ''} {new Date(d.createdAt).toLocaleDateString()}
+            </p>
+          </div>
+          <a href="/deliverables" class="text-xs px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded text-white font-medium transition-colors flex-shrink-0">Review →</a>
+        </div>
+      {/each}
+      {#if pendingDeliverables.length > 5}
+        <div class="px-4 py-3 text-center text-sm text-slate-500">
+          +{pendingDeliverables.length - 5} more — <a href="/deliverables" class="text-purple-400 hover:text-purple-200 underline">view all</a>
+        </div>
+      {/if}
+    </div>
+  </div>
+  {/if}
+
   <!-- Charts Row -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
     <!-- Task Status Breakdown Chart -->

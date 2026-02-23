@@ -168,6 +168,27 @@ export class SqliteDatabase implements IDatabase {
 
       CREATE INDEX IF NOT EXISTS idx_rules_trigger ON rules(trigger);
       CREATE INDEX IF NOT EXISTS idx_rules_enabled ON rules(enabled);
+
+      CREATE TABLE IF NOT EXISTS deliverables (
+        id TEXT PRIMARY KEY,
+        taskId TEXT NOT NULL,
+        agentId TEXT,
+        projectId TEXT,
+        title TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'markdown',
+        content TEXT,
+        filePath TEXT,
+        status TEXT NOT NULL DEFAULT 'draft',
+        feedback TEXT,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL,
+        FOREIGN KEY (taskId) REFERENCES tasks(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_deliverables_taskId ON deliverables(taskId);
+      CREATE INDEX IF NOT EXISTS idx_deliverables_agentId ON deliverables(agentId);
+      CREATE INDEX IF NOT EXISTS idx_deliverables_projectId ON deliverables(projectId);
+      CREATE INDEX IF NOT EXISTS idx_deliverables_status ON deliverables(status);
     `);
 
     // Schema migrations (backward compatibility)
