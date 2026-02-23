@@ -161,7 +161,7 @@ export async function agentRoutes(fastify: FastifyInstance) {
         agentDefs.map(async (def) => {
           const sessionsPath = join(OPENCLAW_DIR, 'agents', def.id, 'sessions', 'sessions.json');
           
-          let status: 'online' | 'idle' | 'offline' = 'offline';
+          let status = 'offline' as string;
           let lastActive: string | null = null;
           let activeSession: string | null = null;
           
