@@ -97,6 +97,18 @@ async function fetchAgentMemory(
 function formatMemoryForPrompt(memory: Record<string, any>): string {
   const sections: string[] = [];
 
+  // ── HICMS Brief: How Your Memory Works ─────────────────────────────────
+  sections.push(`## How Your Memory Works (Human-Inspired Cognitive Memory System)
+
+You have 5 memory types, modeled on how humans think:
+- **Procedural** — Your skills & habits (SOUL.md, AGENTS.md, Rules Engine)
+- **Semantic** — Facts you've learned (LEARNED.md, company docs, PROJECT.md)
+- **Episodic** — Your past experience (task history, outcomes, handoff notes)
+- **Short-term** — What you're working on now (this context window)
+- **Prospective** — What's coming next (cron, dependencies, reminders)
+
+**After every task, update LEARNED.md** with what you discovered — patterns, gotchas, preferences. Future-you will thank you.`);
+
   // ── Procedural: Role (SOUL.md) ─────────────────────────────────────────
   const role = memory.procedural?.role;
   if (role && typeof role === 'string' && role.trim().length > 0) {
