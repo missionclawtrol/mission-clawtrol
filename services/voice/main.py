@@ -278,7 +278,23 @@ def list_voices():
     for d in [MODELS_DIR, LEGACY_PIPER_DIR]:
         if d.exists():
             downloaded.extend(f.stem for f in d.glob("*.onnx"))
-    return {"voices": list(set(downloaded)), "current": DEFAULT_PIPER_VOICE}
+    return {"voices": list(set(downloaded)), "current": _piper_name or DEFAULT_PIPER_VOICE}
+
+
+from pydantic import BaseModel
+
+class SwitchVoiceRequest(BaseModel):
+    voice: str
+
+@app.post("/api/voices/switch")
+def switch_voice(req: SwitchVoiceRequest):
+    """Switch the active Piper TTS voice. Downloads if not already available."""
+    try:
+        get_piper(req.voice)  # loads (and downloads if needed)
+        return {"ok": True, "current": _piper_name}
+    except Exception as e:
+        logger.error(f"Failed to switch voice to '{req.voice}': {e}")
+        return {"ok": False, "error": str(e)}
 
 
 # ─── WebSocket voice endpoint ────────────────────────────────────────────────
