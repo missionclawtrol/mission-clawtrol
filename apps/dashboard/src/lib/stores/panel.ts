@@ -10,7 +10,7 @@ interface PanelState {
 function createPanelStore() {
   const { subscribe, set, update } = writable<PanelState>({
     open: false,
-    mode: 'chat',
+    mode: 'terminal',
   });
 
   return {
