@@ -298,7 +298,7 @@ export async function voiceRoutes(fastify: FastifyInstance) {
             const scopes = ['operator.read', 'operator.write'];
             const authPayload = buildDeviceAuthPayload({
               deviceId: deviceIdentity.deviceId,
-              clientId: 'voice',
+              clientId: 'cli',
               clientMode: 'cli',
               role: 'operator',
               scopes,
@@ -312,7 +312,7 @@ export async function voiceRoutes(fastify: FastifyInstance) {
               type: 'req', id: 'voice-connect-1', method: 'connect',
               params: {
                 minProtocol: 3, maxProtocol: 3,
-                client: { id: 'voice', version: '1.0.0', platform: 'linux', mode: 'cli' },
+                client: { id: 'cli', version: '1.0.0', platform: 'linux', mode: 'cli' },
                 role: 'operator', scopes, caps: [], commands: [], permissions: {},
                 auth: { token: GATEWAY_TOKEN },
                 locale: 'en-US', userAgent: 'mission-clawtrol-voice/1.0.0',
