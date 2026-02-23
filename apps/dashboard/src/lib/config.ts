@@ -21,6 +21,16 @@ export function getBackendBase(): string {
 
 function wsUrl(path: string): string {
   if (typeof window === 'undefined') return `ws://localhost:3001${path}`;
+  // In dev (5173/5174), SvelteKit intercepts routes before Vite's WS proxy
+  // can handle them. Connect directly to the backend on port 3001.
+  // NOTE: wss:// is used even in dev because the page is served over HTTPS
+  // (for mic access) and browsers block ws:// as mixed content. The backend
+  // doesn't support TLS, so we use ws:// and rely on the browser allowing
+  // it for private network IPs with self-signed certs.
+  const port = window.location.port;
+  if (port === '5173' || port === '5174') {
+    return `ws://${window.location.hostname}:3001${path}`;
+  }
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   return `${proto}//${window.location.host}${path}`;
 }
