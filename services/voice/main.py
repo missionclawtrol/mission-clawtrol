@@ -56,7 +56,7 @@ LEGACY_PIPER_DIR = Path.home() / ".openclaw" / "piper-voices"
 
 MC_BACKEND_WS = os.environ.get("MC_BACKEND_WS", "ws://localhost:3001/ws/gateway")
 WHISPER_MODEL_SIZE = os.environ.get("WHISPER_MODEL", "base")
-DEFAULT_PIPER_VOICE = os.environ.get("PIPER_VOICE", "en_US-lessac-medium")
+DEFAULT_PIPER_VOICE = os.environ.get("PIPER_VOICE", "en_US-ryan-high")
 DEFAULT_SESSION_KEY = os.environ.get("VOICE_SESSION_KEY", "agent:cso:mc-voice")
 PORT = int(os.environ.get("VOICE_PORT", "8766"))
 
@@ -203,13 +203,20 @@ async def ask_jarvis(
             # Send the chat request
             req_id = f"voice-{uuid.uuid4().hex[:8]}"
             idempotency = uuid.uuid4().hex
+            voice_prefix = (
+                "[System context: This is a VOICE conversation. The user is speaking via microphone "
+                "and your text reply will be converted to speech by Piper TTS. "
+                "Do NOT use the tts tool — just reply with plain text. "
+                "Keep responses conversational, concise, and free of markdown formatting. "
+                "No bullet lists, no headers, no code blocks. Speak naturally.]\n\n"
+            )
             await gw.send(json.dumps({
                 "type": "req",
                 "id": req_id,
                 "method": "chat.send",
                 "params": {
                     "sessionKey": session_key,
-                    "message": text,
+                    "message": voice_prefix + text,
                     "idempotencyKey": idempotency,
                 },
             }))

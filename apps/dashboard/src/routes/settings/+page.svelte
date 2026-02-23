@@ -302,7 +302,7 @@
           <input
             id="v-agent-id"
             type="text"
-            value={typeof localStorage !== 'undefined' ? localStorage.getItem('voice_agent_id') || 'jarvis' : 'jarvis'}
+            value={typeof localStorage !== 'undefined' ? localStorage.getItem('voice_agent_id') || 'cso' : 'cso'}
             on:change={(e) => {
               if (typeof localStorage !== 'undefined') {
                 localStorage.setItem('voice_agent_id', (e.target as HTMLInputElement).value);

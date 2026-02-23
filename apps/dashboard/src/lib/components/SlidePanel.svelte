@@ -23,7 +23,7 @@
   // ── Panel State ───────────────────────────────────────────────────────────
 
   let isOpen = false;
-  let mode: 'chat' | 'terminal' = 'chat';
+  let mode: 'chat' | 'terminal' = 'terminal';
 
   const unsubscribe = panel.subscribe((s) => {
     isOpen = s.open;
@@ -526,16 +526,7 @@
     <!-- Mode tabs -->
     <div class="mode-tabs">
       <button
-        class="mode-tab"
-        class:active={mode === 'chat'}
-        on:click={() => setMode('chat')}
-      >
-        💬 Chat
-      </button>
-      <button
-        class="mode-tab"
-        class:active={mode === 'terminal'}
-        on:click={() => setMode('terminal')}
+        class="mode-tab active"
       >
         💻 Terminal
       </button>

@@ -12,7 +12,7 @@
   let responseText = '';
 
   // Settings
-  let agentId = 'jarvis';
+  let agentId = 'cso';
   let sttModel = 'base';
   let voiceEnabled = true;
 
@@ -70,7 +70,7 @@
 
   function loadSettings() {
     if (typeof localStorage === 'undefined') return;
-    agentId = localStorage.getItem('voice_agent_id') || 'jarvis';
+    agentId = localStorage.getItem('voice_agent_id') || 'cso';
     sttModel = localStorage.getItem('voice_stt_model') || 'base';
     voiceEnabled = localStorage.getItem('voice_tts_enabled') !== 'false';
   }

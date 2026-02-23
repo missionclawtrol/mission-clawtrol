@@ -253,9 +253,9 @@
           <button
             on:click={() => panel.toggle()}
             class="p-2 hover:bg-slate-700/50 dark:hover:bg-slate-700 rounded-lg transition-colors"
-            title="Toggle chat / terminal panel"
+            title="Toggle terminal panel"
           >
-            <span class="text-xl">💬</span>
+            <span class="text-xl">💻</span>
           </button>
           <!-- User Menu -->
           {#if currentUser}

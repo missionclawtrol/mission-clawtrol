@@ -46,7 +46,7 @@ const DEFAULT_AGENT_ID = process.env.VOICE_AGENT_ID || 'jarvis';
 // ── Device Identity (reuse same approach as chat-proxy.ts) ───────────────────
 
 const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
-const IDENTITY_PATH = path.join(process.env.HOME || '/root', '.openclaw', 'mc-voice-device.json');
+const IDENTITY_PATH = path.join(process.env.HOME || '/root', '.openclaw', 'mc-proxy-device.json');
 
 function base64UrlEncode(buf: Buffer): string {
   return buf.toString('base64url');
@@ -298,8 +298,8 @@ export async function voiceRoutes(fastify: FastifyInstance) {
             const scopes = ['operator.read', 'operator.write'];
             const authPayload = buildDeviceAuthPayload({
               deviceId: deviceIdentity.deviceId,
-              clientId: 'cli',
-              clientMode: 'cli',
+              clientId: 'gateway-client',
+              clientMode: 'backend',
               role: 'operator',
               scopes,
               signedAtMs: ts,
@@ -389,6 +389,10 @@ export async function voiceRoutes(fastify: FastifyInstance) {
       let responseReject: ((err: Error) => void) | null = null;
 
       function handleGatewayEvent(event: string, payload: any) {
+        // Only handle events for our voice session — ignore other sessions
+        if (payload?.sessionKey && payload.sessionKey !== sessionKey) {
+          return;
+        }
         if (event === 'chat') {
           const state = payload?.state;
           const messageData = payload?.message;
