@@ -48,3 +48,11 @@ export function getPtyWsUrl(): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   return `${protocol}//${window.location.host}/ws/pty`;
 }
+
+/** WebSocket URL for the voice interface endpoint (/ws/voice). */
+export function getVoiceWsUrl(): string {
+  if (typeof window === 'undefined') return 'ws://localhost:3001/ws/voice';
+  if (isDev()) return `ws://${window.location.hostname}:3001/ws/voice`;
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.host}/ws/voice`;
+}
