@@ -7,7 +7,7 @@
     name: string;
     emoji: string;
     fullName: string;
-    model: string;
+    model: string | { primary?: string };
     workspace: string;
     agentDir: string;
     status: 'online' | 'idle' | 'offline';
