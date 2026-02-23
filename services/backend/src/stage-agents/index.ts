@@ -112,7 +112,7 @@ async function handleReviewStage(taskId: string): Promise<void> {
       body: JSON.stringify({
         tool: 'sessions_spawn',
         args: {
-          agentId: 'qa',
+          agentId: 'henry',
           task: qaPrompt,
           cleanup: 'delete',
           runTimeoutSeconds: Math.floor(QA_TIMEOUT_MS / 1000),

@@ -6,14 +6,17 @@ import { existsSync, mkdirSync, writeFileSync, readdirSync } from 'fs';
 
 const HOME = process.env.HOME || '';
 
-const REQUIRED_AGENT_IDS = [
-  'manager',
-  'builder',
-  'researcher',
-  'writer',
-  'analyst',
-  'designer',
+// Accept both named agents (henry, elon...) and role-based IDs (manager, builder...)
+// The setup check passes if EITHER naming convention is present for each role.
+const AGENT_ROLE_ALIASES: [string, string][] = [
+  ['manager', 'henry'],
+  ['builder', 'elon'],
+  ['researcher', 'marie'],
+  ['writer', 'ernest'],
+  ['analyst', 'warren'],
+  ['designer', 'steve'],
 ];
+const REQUIRED_AGENT_IDS = AGENT_ROLE_ALIASES.map(([a, b]) => a); // canonical list for counting
 
 const AGENTS_MD = `# Mission Clawtrol — Your Task Manager
 
@@ -97,16 +100,18 @@ export async function setupRoutes(fastify: FastifyInstance) {
       hasProjects = false;
     }
 
-    const presentAgents = REQUIRED_AGENT_IDS.filter(id => agentIds.includes(id));
-    const partialAgents = presentAgents.length;
-    const totalAgents = REQUIRED_AGENT_IDS.length;
+    // Check if either alias is present for each role
+    const presentRoles = AGENT_ROLE_ALIASES.filter(([a, b]) => agentIds.includes(a) || agentIds.includes(b));
+    const partialAgents = presentRoles.length;
+    const totalAgents = AGENT_ROLE_ALIASES.length;
     const allAgentsPresent = partialAgents === totalAgents;
     const complete = allAgentsPresent && hasProjects;
 
-    // Legacy compatibility: individual agent flags
+    // Agent status: show whichever ID is actually present
     const agentStatus: Record<string, boolean> = {};
-    for (const id of REQUIRED_AGENT_IDS) {
-      agentStatus[id] = agentIds.includes(id);
+    for (const [a, b] of AGENT_ROLE_ALIASES) {
+      const present = agentIds.includes(a) || agentIds.includes(b);
+      agentStatus[agentIds.includes(b) ? b : a] = present;
     }
 
     return {

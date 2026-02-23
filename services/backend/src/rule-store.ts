@@ -205,7 +205,7 @@ export const BUILT_IN_RULES: CreateRuleInput[] = [
     actions: [
       {
         type: 'spawn_agent',
-        agentId: 'qa',
+        agentId: 'henry',
         template: 'qa-review',
       },
     ],
@@ -223,7 +223,7 @@ export const BUILT_IN_RULES: CreateRuleInput[] = [
     actions: [
       {
         type: 'spawn_agent',
-        agentId: 'editor',
+        agentId: 'ernest',
         template: 'docs-update',
       },
     ],

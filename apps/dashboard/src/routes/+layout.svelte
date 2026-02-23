@@ -12,17 +12,17 @@
   import { fetchSetupStatus, createFirstProject, type SetupStatus } from '$lib/api';
 
   const tabs = [
-    { name: 'Onboarding', href: '/onboarding', icon: '📚' },
+    { name: 'Overview', href: '/', icon: '🏠' },
     { name: 'Tasks', href: '/tasks', icon: '📋' },
     { name: 'Projects', href: '/projects', icon: '📁' },
     { name: 'Milestones', href: '/milestones', icon: '🎯' },
     { name: 'Roster', href: '/roster', icon: '👥' },
     { name: 'Reports', href: '/reports', icon: '📊' },
-    { name: 'Overview', href: '/', icon: '🏠' },
     { name: 'Costs', href: '/costs', icon: '💰' },
     { name: 'Team', href: '/team', icon: '🔐' },
     // { name: 'Webhooks', href: '/webhooks', icon: '🔔' }, // Hidden
     { name: 'Rules', href: '/rules', icon: '⚡' },
+    { name: 'Onboarding', href: '/onboarding', icon: '📚' },
     { name: 'Settings', href: '/settings', icon: '⚙️' },
   ];
   
