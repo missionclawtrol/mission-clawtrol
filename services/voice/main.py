@@ -1,16 +1,18 @@
 """
 Mission Clawtrol Voice Sidecar
--------------------------------
-FastAPI + WebSocket server that handles:
-  - Speech-to-Text via faster-whisper (CPU)
-  - Text routing to OpenClaw (Jarvis) via MC backend
-  - Text-to-Speech via Piper TTS (CPU)
-  - Real-time audio streaming with browser via WebSocket
+--------------------------------
+Python FastAPI service that handles Speech-to-Text (faster-whisper) and
+Text-to-Speech (Piper TTS) for the Mission Clawtrol voice interface.
+
+- Models are loaded ONCE at startup and kept in memory for fast responses.
+- Connects to OpenClaw (Jarvis/CSO) via the MC backend gateway proxy.
+- Audio is received as base64-encoded WebM/Opus (from MediaRecorder API).
+- Audio response is sent as base64-encoded WAV chunks.
 
 Port: 8766
 WebSocket: ws://localhost:8766/ws
 Health:    http://localhost:8766/health
-Settings:  http://localhost:8766/api/settings
+Voices:    http://localhost:8766/api/voices
 """
 
 import asyncio
@@ -19,17 +21,19 @@ import io
 import json
 import logging
 import os
-import tempfile
+import uuid
 import wave
 from pathlib import Path
 from typing import Optional
 
-import httpx
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from faster_whisper import WhisperModel
+from faster_whisper.audio import decode_audio
 from piper import PiperVoice
 from piper.download_voices import download_voice
+
+import websockets  # noqa: F401 — used for gateway proxy connection
 
 # ─── Logging ────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -47,13 +51,17 @@ MODELS_DIR = Path(
 )
 MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
-MC_BACKEND_URL = os.environ.get("MC_BACKEND_URL", "http://localhost:3001")
+# Also check the legacy piper-voices directory
+LEGACY_PIPER_DIR = Path.home() / ".openclaw" / "piper-voices"
+
+MC_BACKEND_WS = os.environ.get("MC_BACKEND_WS", "ws://localhost:3001/ws/gateway")
 WHISPER_MODEL_SIZE = os.environ.get("WHISPER_MODEL", "base")
 DEFAULT_PIPER_VOICE = os.environ.get("PIPER_VOICE", "en_US-lessac-medium")
+DEFAULT_SESSION_KEY = os.environ.get("VOICE_SESSION_KEY", "agent:cso:mc-voice")
 PORT = int(os.environ.get("VOICE_PORT", "8766"))
 
 # ─── App ────────────────────────────────────────────────────────────────────
-app = FastAPI(title="Mission Clawtrol Voice Sidecar", version="1.0.0")
+app = FastAPI(title="Mission Clawtrol Voice Sidecar", version="1.1.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -64,142 +72,190 @@ app.add_middleware(
 )
 
 # ─── Global model state ─────────────────────────────────────────────────────
-_whisper_model: Optional[WhisperModel] = None
-_piper_voice: Optional[PiperVoice] = None
-_piper_voice_name: Optional[str] = None
+_whisper: Optional[WhisperModel] = None
+_piper: Optional[PiperVoice] = None
+_piper_name: Optional[str] = None
 
 
-def get_whisper_model() -> WhisperModel:
-    global _whisper_model
-    if _whisper_model is None:
-        logger.info(f"Loading Whisper model '{WHISPER_MODEL_SIZE}' (CPU, int8)…")
-        _whisper_model = WhisperModel(
-            WHISPER_MODEL_SIZE,
-            device="cpu",
-            compute_type="int8",
-        )
-        logger.info("Whisper model ready")
-    return _whisper_model
+def get_whisper() -> WhisperModel:
+    global _whisper
+    if _whisper is None:
+        logger.info(f"Loading Whisper model '{WHISPER_MODEL_SIZE}' on CPU (int8)…")
+        _whisper = WhisperModel(WHISPER_MODEL_SIZE, device="cpu", compute_type="int8")
+        logger.info("✓ Whisper ready")
+    return _whisper
 
 
-def get_piper_voice(voice_name: Optional[str] = None) -> PiperVoice:
-    global _piper_voice, _piper_voice_name
+def get_piper(voice_name: Optional[str] = None) -> PiperVoice:
+    global _piper, _piper_name
     name = voice_name or DEFAULT_PIPER_VOICE
 
-    if _piper_voice is None or name != _piper_voice_name:
-        model_path = MODELS_DIR / f"{name}.onnx"
-        config_path = MODELS_DIR / f"{name}.onnx.json"
+    if _piper is None or name != _piper_name:
+        # Check legacy path first (for already-downloaded models)
+        model_path = LEGACY_PIPER_DIR / f"{name}.onnx"
+        if not model_path.exists():
+            model_path = MODELS_DIR / f"{name}.onnx"
 
-        if not model_path.exists() or not config_path.exists():
+        if not model_path.exists():
             logger.info(f"Downloading Piper voice '{name}'…")
             download_voice(name, MODELS_DIR)
-            logger.info(f"Piper voice '{name}' downloaded to {MODELS_DIR}")
+            model_path = MODELS_DIR / f"{name}.onnx"
+            logger.info(f"✓ Downloaded to {model_path}")
 
-        logger.info(f"Loading Piper voice from {model_path}")
-        _piper_voice = PiperVoice.load(str(model_path))
-        _piper_voice_name = name
-        logger.info("Piper voice ready")
+        logger.info(f"Loading Piper voice from {model_path}…")
+        _piper = PiperVoice.load(str(model_path))
+        _piper_name = name
+        logger.info("✓ Piper ready")
 
-    return _piper_voice
+    return _piper
 
 
 # ─── Audio helpers ──────────────────────────────────────────────────────────
 
-def transcribe_wav(wav_bytes: bytes) -> str:
-    """Transcribe WAV audio bytes using faster-whisper. Returns transcript text."""
-    model = get_whisper_model()
+def transcribe_bytes(audio_bytes: bytes) -> str:
+    """
+    Transcribe audio bytes (any format PyAV supports: WebM, Opus, MP4, WAV, etc.)
+    using faster-whisper. PyAV is bundled and does NOT need system ffmpeg.
+    Returns the transcript text (empty string if no speech detected).
+    """
+    model = get_whisper()
+    audio_buf = io.BytesIO(audio_bytes)
 
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-        f.write(wav_bytes)
-        tmp_path = f.name
+    # decode_audio accepts BinaryIO and returns float32 numpy array at 16kHz
+    audio_array = decode_audio(audio_buf, sampling_rate=16000)
 
-    try:
-        segments, _info = model.transcribe(
-            tmp_path,
-            language="en",
-            vad_filter=True,
-            vad_parameters={"min_silence_duration_ms": 300},
-        )
-        text = " ".join(seg.text for seg in segments).strip()
-        return text
-    finally:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
+    segments, _info = model.transcribe(
+        audio_array,
+        language="en",
+        vad_filter=True,
+        vad_parameters={"min_silence_duration_ms": 200},
+    )
+    text = " ".join(seg.text for seg in segments).strip()
+    return text
 
 
-def synthesize_tts(text: str, voice_name: Optional[str] = None) -> bytes:
-    """Synthesize text to WAV bytes using Piper TTS."""
-    voice = get_piper_voice(voice_name)
+def synthesize_wav_bytes(text: str, voice_name: Optional[str] = None) -> bytes:
+    """
+    Synthesize text to WAV bytes using Piper TTS.
+    Strips markdown formatting to produce cleaner speech.
+    """
+    # Strip markdown for TTS
+    clean = (
+        text
+        .replace("```", "")
+        .replace("**", "")
+        .replace("__", "")
+        .replace("*", "")
+        .replace("_", " ")
+        .replace("#", "")
+        .replace("`", "")
+        .strip()
+    )
+    # Truncate very long responses (≈ 60 seconds of speech max)
+    if len(clean) > 2000:
+        clean = clean[:2000] + "… and more."
+
+    voice = get_piper(voice_name)
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wav_file:
-        voice.synthesize_wav(text, wav_file)
+        voice.synthesize_wav(clean, wav_file)
     return buf.getvalue()
 
 
-# ─── OpenClaw integration ───────────────────────────────────────────────────
+# ─── Gateway integration (via MC backend proxy) ──────────────────────────────
 
-async def send_to_jarvis(text: str, timeout_secs: int = 90) -> str:
+async def ask_jarvis(
+    text: str,
+    session_key: str,
+    on_delta: Optional[asyncio.Queue] = None,
+    timeout_secs: float = 90.0,
+) -> str:
     """
-    Send transcribed text to Jarvis (CSO agent) via MC backend and
-    poll the session history for a new assistant reply.
-    
-    Returns the assistant's response text.
-    Raises RuntimeError on timeout or communication failure.
+    Send `text` to the CSO (Jarvis) via the MC backend gateway proxy.
+    Optionally streams text deltas into `on_delta` queue.
+    Returns the final response text.
     """
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        # Snapshot current history
-        prev_assistant_texts: list[str] = []
-        try:
-            res = await client.get(
-                f"{MC_BACKEND_URL}/api/message/history",
-                params={"limit": "100"},
-            )
-            if res.status_code == 200:
-                msgs = res.json().get("messages", [])
-                prev_assistant_texts = [
-                    m["content"] for m in msgs if m["role"] == "assistant"
-                ]
-        except Exception as exc:
-            logger.warning(f"Could not snapshot history: {exc}")
+    import websockets as ws_lib
 
-        # Send the user message
-        try:
-            await client.post(
-                f"{MC_BACKEND_URL}/api/message",
-                json={"message": text},
-                timeout=15.0,
-            )
-        except Exception as exc:
-            raise RuntimeError(f"Failed to send message to MC backend: {exc}") from exc
+    gateway_url = MC_BACKEND_WS
+    response_parts: list[str] = []
+    final_text = ""
 
-        # Poll for a new assistant reply
-        prev_set = set(prev_assistant_texts)
-        deadline = asyncio.get_event_loop().time() + timeout_secs
-
-        while asyncio.get_event_loop().time() < deadline:
-            await asyncio.sleep(1.5)
-            try:
-                res = await client.get(
-                    f"{MC_BACKEND_URL}/api/message/history",
-                    params={"limit": "100"},
-                    timeout=8.0,
-                )
-                if res.status_code != 200:
+    try:
+        async with ws_lib.connect(gateway_url, open_timeout=10) as gw:
+            # Wait for proxy-ready
+            ready = False
+            async for raw in gw:
+                try:
+                    msg = json.loads(raw)
+                except Exception:
                     continue
-                msgs = res.json().get("messages", [])
-                new_assistant = [
-                    m["content"]
-                    for m in msgs
-                    if m["role"] == "assistant" and m["content"] not in prev_set
-                ]
-                if new_assistant:
-                    return new_assistant[-1]
-            except Exception as exc:
-                logger.warning(f"History poll error: {exc}")
+                if msg.get("type") == "proxy-ready":
+                    ready = True
+                    break
+                if msg.get("type") == "error":
+                    raise RuntimeError(f"Gateway proxy error: {msg.get('message')}")
 
-        raise RuntimeError("Timed out waiting for Jarvis response")
+            if not ready:
+                raise RuntimeError("Gateway proxy did not send proxy-ready")
+
+            # Send the chat request
+            req_id = f"voice-{uuid.uuid4().hex[:8]}"
+            idempotency = uuid.uuid4().hex
+            await gw.send(json.dumps({
+                "type": "req",
+                "id": req_id,
+                "method": "chat.send",
+                "params": {
+                    "sessionKey": session_key,
+                    "message": text,
+                    "idempotencyKey": idempotency,
+                },
+            }))
+
+            # Listen for response events
+            deadline = asyncio.get_event_loop().time() + timeout_secs
+
+            async for raw in gw:
+                if asyncio.get_event_loop().time() > deadline:
+                    break
+                try:
+                    msg = json.loads(raw)
+                except Exception:
+                    continue
+
+                if msg.get("type") == "event" and msg.get("event") == "chat":
+                    payload = msg.get("payload", {})
+                    state = payload.get("state")
+                    message_data = payload.get("message", {})
+
+                    if state == "delta":
+                        content = message_data.get("content", [])
+                        for block in content:
+                            if block.get("type") == "text":
+                                delta = block.get("text", "")
+                                if delta:
+                                    response_parts.append(delta)
+                                    if on_delta:
+                                        await on_delta.put(delta)
+
+                    elif state == "final":
+                        content = message_data.get("content", [])
+                        parts = [b.get("text", "") for b in content if b.get("type") == "text"]
+                        final_text = "".join(parts) or "".join(response_parts)
+                        break
+
+                    elif state in ("aborted", "error"):
+                        final_text = "".join(response_parts)
+                        if not final_text:
+                            raise RuntimeError(f"Chat {state}")
+                        break
+
+    except Exception as exc:
+        logger.error(f"Gateway error: {exc}")
+        raise RuntimeError(f"Could not reach Jarvis: {exc}") from exc
+
+    return final_text or "".join(response_parts) or "I'm sorry, I didn't get a response."
 
 
 # ─── REST endpoints ──────────────────────────────────────────────────────────
@@ -211,86 +267,73 @@ def health():
         "service": "mission-clawtrol-voice",
         "whisper_model": WHISPER_MODEL_SIZE,
         "piper_voice": DEFAULT_PIPER_VOICE,
-        "models_dir": str(MODELS_DIR),
-    }
-
-
-@app.get("/api/settings")
-def get_settings():
-    return {
-        "whisperModel": WHISPER_MODEL_SIZE,
-        "piperVoice": DEFAULT_PIPER_VOICE,
-        "modelsDir": str(MODELS_DIR),
+        "models_loaded": _whisper is not None,
+        "piper_loaded": _piper is not None,
     }
 
 
 @app.get("/api/voices")
 def list_voices():
-    """List available Piper voices (already downloaded)."""
     downloaded = []
-    for f in MODELS_DIR.glob("*.onnx"):
-        downloaded.append(f.stem)
-    return {"voices": downloaded, "current": DEFAULT_PIPER_VOICE}
+    for d in [MODELS_DIR, LEGACY_PIPER_DIR]:
+        if d.exists():
+            downloaded.extend(f.stem for f in d.glob("*.onnx"))
+    return {"voices": list(set(downloaded)), "current": DEFAULT_PIPER_VOICE}
 
 
 # ─── WebSocket voice endpoint ────────────────────────────────────────────────
 
 @app.websocket("/ws")
-async def voice_websocket(ws: WebSocket):
+async def voice_ws(ws: WebSocket):
     """
-    WebSocket voice conversation endpoint.
+    Voice conversation WebSocket.
 
     Client → Server:
-      - text: {"type":"audio_start"}            - user started recording
-      - binary: <WAV bytes>                      - audio chunk (16kHz, 16-bit, mono WAV)
-      - text: {"type":"audio_end"}               - user finished recording → trigger pipeline
-      - text: {"type":"ping"}                    - keepalive
+      text: {"type":"config","agentId":"cso","sttModel":"base","voiceModel":"/path/to.onnx"}
+      text: {"type":"audio","data":"<base64-webm-or-wav>"}
+      text: {"type":"cancel"}
+      text: {"type":"ping"}
 
     Server → Client:
-      - text: {"type":"state","state":"idle|listening|processing|speaking"}
-      - text: {"type":"transcript","text":"..."}  - STT result
-      - text: {"type":"response_text","text":"..."}  - Jarvis reply text
-      - text: {"type":"audio_start"}             - TTS audio beginning
-      - binary: <WAV bytes>                      - TTS audio data
-      - text: {"type":"audio_end"}               - TTS audio done
-      - text: {"type":"error","message":"..."}   - error
-      - text: {"type":"pong"}                    - ping reply
+      text: {"type":"ready"}
+      text: {"type":"config_ok","agentId":"...","sttModel":"..."}
+      text: {"type":"transcript","text":"..."}
+      text: {"type":"thinking"}
+      text: {"type":"response_text","text":"...","final":true/false}
+      text: {"type":"audio_chunk","data":"<base64-wav>"}
+      text: {"type":"audio_end"}
+      text: {"type":"error","message":"..."}
+      text: {"type":"pong"}
     """
     await ws.accept()
-    logger.info("Voice WebSocket connected")
+    logger.info("Voice WebSocket client connected")
 
-    audio_buffer = bytearray()
+    # Per-connection state
+    session_key = DEFAULT_SESSION_KEY
+    voice_name: Optional[str] = None
+    processing = False
+    cancelled = False
 
-    async def send_json(obj: dict):
+    async def send(obj: dict):
         try:
             await ws.send_text(json.dumps(obj))
         except Exception:
             pass
 
-    async def send_state(state: str):
-        await send_json({"type": "state", "state": state})
+    # Send ready immediately
+    await send({"type": "ready"})
 
     try:
-        await send_state("idle")
-
         while True:
             try:
                 data = await asyncio.wait_for(ws.receive(), timeout=120.0)
             except asyncio.TimeoutError:
-                # Send keepalive to avoid idle disconnect
-                await send_json({"type": "pong"})
+                await send({"type": "pong"})
                 continue
 
-            # Disconnected
             if data.get("type") == "websocket.disconnect":
                 break
 
-            # Binary audio chunk
-            if data.get("bytes"):
-                audio_buffer.extend(data["bytes"])
-                continue
-
-            # Text control message
             text_data = data.get("text", "")
             if not text_data:
                 continue
@@ -302,71 +345,129 @@ async def voice_websocket(ws: WebSocket):
 
             msg_type = msg.get("type", "")
 
+            # ── Ping ────────────────────────────────────────────────────────
             if msg_type == "ping":
-                await send_json({"type": "pong"})
+                await send({"type": "pong"})
 
-            elif msg_type == "audio_start":
-                audio_buffer.clear()
-                await send_state("listening")
+            # ── Config ──────────────────────────────────────────────────────
+            elif msg_type == "config":
+                agent_id = msg.get("agentId", "cso")
+                stt_model = msg.get("sttModel", WHISPER_MODEL_SIZE)
+                voice_model = msg.get("voiceModel")
 
-            elif msg_type == "audio_end":
-                if not audio_buffer:
-                    logger.warning("audio_end with empty buffer — ignoring")
-                    await send_state("idle")
+                session_key = f"agent:{agent_id}:mc-voice"
+                if voice_model:
+                    voice_name = voice_model  # path or name
+                    
+                logger.info(f"Config: agent={agent_id}, stt={stt_model}, sessionKey={session_key}")
+                await send({
+                    "type": "config_ok",
+                    "agentId": agent_id,
+                    "sttModel": stt_model,
+                    "sessionKey": session_key,
+                })
+
+            # ── Cancel ──────────────────────────────────────────────────────
+            elif msg_type == "cancel":
+                cancelled = True
+                processing = False
+                await send({"type": "cancelled"})
+
+            # ── Audio ───────────────────────────────────────────────────────
+            elif msg_type == "audio":
+                if processing:
+                    await send({"type": "error", "message": "Already processing — please wait"})
                     continue
 
-                wav_bytes = bytes(audio_buffer)
-                audio_buffer.clear()
+                audio_b64 = msg.get("data", "")
+                if not audio_b64:
+                    await send({"type": "error", "message": "No audio data"})
+                    continue
+
+                audio_bytes = base64.b64decode(audio_b64)
+                if len(audio_bytes) < 500:
+                    await send({"type": "error", "message": "Audio too short"})
+                    continue
+
+                processing = True
+                cancelled = False
 
                 try:
-                    # ── STT ──────────────────────────────────────────────
-                    await send_state("processing")
-                    logger.info(f"Transcribing {len(wav_bytes)//1024}KB of audio…")
-
+                    # ── STT ─────────────────────────────────────────────────
+                    logger.info(f"Transcribing {len(audio_bytes)//1024}KB audio…")
                     loop = asyncio.get_event_loop()
-                    transcript = await loop.run_in_executor(
-                        None, transcribe_wav, wav_bytes
-                    )
-
+                    transcript = await loop.run_in_executor(None, transcribe_bytes, audio_bytes)
                     logger.info(f"Transcript: {transcript!r}")
 
                     if not transcript:
-                        await send_json({"type": "error", "message": "No speech detected"})
-                        await send_state("idle")
+                        await send({"type": "error", "message": "No speech detected"})
                         continue
 
-                    await send_json({"type": "transcript", "text": transcript})
+                    await send({"type": "transcript", "text": transcript})
+                    if cancelled:
+                        continue
 
-                    # ── Jarvis ───────────────────────────────────────────
-                    logger.info("Sending to Jarvis…")
-                    response_text = await send_to_jarvis(transcript)
-                    logger.info(f"Jarvis replied ({len(response_text)} chars)")
+                    # ── Jarvis ───────────────────────────────────────────────
+                    await send({"type": "thinking"})
+                    logger.info(f"Asking Jarvis (session={session_key})…")
 
-                    await send_json({"type": "response_text", "text": response_text})
-
-                    # ── TTS ──────────────────────────────────────────────
-                    await send_state("speaking")
-                    logger.info("Synthesizing TTS…")
-
-                    tts_audio = await loop.run_in_executor(
-                        None, synthesize_tts, response_text
+                    delta_queue: asyncio.Queue = asyncio.Queue()
+                    jarvis_task = asyncio.create_task(
+                        ask_jarvis(transcript, session_key, on_delta=delta_queue)
                     )
-                    logger.info(f"TTS produced {len(tts_audio)//1024}KB")
 
-                    await send_json({"type": "audio_start"})
+                    # Stream text deltas to client while waiting
+                    accumulated = ""
+                    while not jarvis_task.done():
+                        if cancelled:
+                            jarvis_task.cancel()
+                            break
+                        try:
+                            delta = await asyncio.wait_for(delta_queue.get(), timeout=0.5)
+                            accumulated += delta
+                            await send({"type": "response_text", "text": accumulated, "final": False})
+                        except asyncio.TimeoutError:
+                            pass
 
-                    # Stream audio in 32KB chunks
+                    if cancelled:
+                        continue
+
+                    try:
+                        final_response = await jarvis_task
+                    except asyncio.CancelledError:
+                        continue
+
+                    if not final_response:
+                        final_response = accumulated
+
+                    logger.info(f"Jarvis replied ({len(final_response)} chars)")
+                    await send({"type": "response_text", "text": final_response, "final": True})
+
+                    if cancelled:
+                        continue
+
+                    # ── TTS ──────────────────────────────────────────────────
+                    logger.info("Synthesizing TTS…")
+                    wav_bytes = await loop.run_in_executor(
+                        None, synthesize_wav_bytes, final_response, voice_name
+                    )
+                    logger.info(f"TTS: {len(wav_bytes)//1024}KB WAV")
+
+                    # Send in 32KB chunks as base64
                     chunk_size = 32768
-                    for i in range(0, len(tts_audio), chunk_size):
-                        await ws.send_bytes(tts_audio[i : i + chunk_size])
+                    for i in range(0, len(wav_bytes), chunk_size):
+                        if cancelled:
+                            break
+                        chunk = wav_bytes[i : i + chunk_size]
+                        await send({"type": "audio_chunk", "data": base64.b64encode(chunk).decode()})
 
-                    await send_json({"type": "audio_end"})
+                    await send({"type": "audio_end"})
 
                 except Exception as exc:
-                    logger.error(f"Voice pipeline error: {exc}", exc_info=True)
-                    await send_json({"type": "error", "message": str(exc)})
+                    logger.error(f"Pipeline error: {exc}", exc_info=True)
+                    await send({"type": "error", "message": str(exc)})
                 finally:
-                    await send_state("idle")
+                    processing = False
 
     except WebSocketDisconnect:
         logger.info("Voice WebSocket disconnected")
@@ -374,30 +475,18 @@ async def voice_websocket(ws: WebSocket):
         logger.error(f"Voice WebSocket error: {exc}", exc_info=True)
 
 
-# ─── Startup: pre-load models ────────────────────────────────────────────────
+# ─── Startup ─────────────────────────────────────────────────────────────────
 
 @app.on_event("startup")
-async def startup_event():
-    """Pre-load models in the background so first request is fast."""
-    logger.info("Voice sidecar starting up…")
+async def startup():
+    logger.info("Voice sidecar starting up — pre-loading models in background…")
     loop = asyncio.get_event_loop()
-
-    # Load Whisper in background thread
-    loop.run_in_executor(None, get_whisper_model)
-    # Load Piper in background thread
-    loop.run_in_executor(None, get_piper_voice)
-
-    logger.info(f"Voice sidecar ready on port {PORT}")
+    loop.run_in_executor(None, get_whisper)
+    loop.run_in_executor(None, get_piper)
+    logger.info(f"Voice sidecar ready — listening on :{PORT}")
 
 
-# ─── Entry point ────────────────────────────────────────────────────────────
+# ─── Entry point ─────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
-
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=PORT,
-        log_level="info",
-        reload=False,
-    )
+    uvicorn.run("main:app", host="0.0.0.0", port=PORT, log_level="info", reload=False)
