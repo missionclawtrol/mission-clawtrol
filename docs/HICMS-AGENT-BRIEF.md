@@ -1,6 +1,6 @@
-# How Your Memory Works (HICMS)
+# How Your Memory Works
 
-*Human-Inspired Cognitive Memory System — your brain, explained.*
+*Human-Inspired Cognitive Memory System (HICMS) — your brain, explained.*
 
 You have 5 memory types, modeled on how humans think:
 

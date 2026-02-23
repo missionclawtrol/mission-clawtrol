@@ -1,6 +1,6 @@
-# Agent Memory Architecture
+# Human-Inspired Cognitive Memory System (HICMS)
 
-*A cognitive memory system for AI agents, modeled on human memory types.*
+*Agent Memory Architecture — modeled on how humans encode, store, and retrieve information.*
 
 ---
 
