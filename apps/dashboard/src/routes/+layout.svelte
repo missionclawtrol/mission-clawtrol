@@ -8,7 +8,6 @@
   import { initTaskWebSocket, setCurrentUserId } from '$lib/taskWebSocket';
   import Toast from '$lib/components/Toast.svelte';
   import SlidePanel from '$lib/components/SlidePanel.svelte';
-  import VoiceMic from '$lib/components/VoiceMic.svelte';
   import { panel } from '$lib/stores/panel';
   import { fetchSetupStatus, createFirstProject, type SetupStatus } from '$lib/api';
 
@@ -25,7 +24,6 @@
     // { name: 'Webhooks', href: '/webhooks', icon: '🔔' }, // Hidden
     { name: 'Rules', href: '/rules', icon: '⚡' },
     { name: 'Onboarding', href: '/onboarding', icon: '📚' },
-    { name: 'Voice', href: '/voice', icon: '🎙️' },
     { name: 'Settings', href: '/settings', icon: '⚙️' },
   ];
   
@@ -253,9 +251,9 @@
           <button
             on:click={() => panel.toggle()}
             class="p-2 hover:bg-slate-700/50 dark:hover:bg-slate-700 rounded-lg transition-colors"
-            title="Toggle terminal panel"
+            title="Toggle chat / terminal panel"
           >
-            <span class="text-xl">💻</span>
+            <span class="text-xl">💬</span>
           </button>
           <!-- User Menu -->
           {#if currentUser}
@@ -380,10 +378,5 @@
 
     <!-- Slide-out Chat + Terminal Panel -->
     <SlidePanel />
-
-    <!-- Floating Voice Widget (only for authenticated users) -->
-    {#if currentUser && $page.url.pathname !== '/voice'}
-      <VoiceMic />
-    {/if}
   </div>
 {/if}

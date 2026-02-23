@@ -30,8 +30,6 @@ import { setupRoutes } from './routes/setup.js';
 import { agentsConfigRoutes } from './routes/agents-config.js';
 import { chatProxyRoutes } from './routes/chat-proxy.js';
 import { ptyRoutes } from './routes/pty.js';
-import { voiceProxyRoutes } from './routes/voice-proxy.js';
-import { voiceRestRoutes } from './routes/voice-rest.js';
 import { onboardingRoutes } from './routes/onboarding.js';
 import { rulesRoutes } from './routes/rules.js';
 import { agentMemoryRoutes } from './routes/agent-memory.js';
@@ -524,8 +522,6 @@ if (process.env.DISABLE_AUTH === 'true') {
     /^\/api\/chat\/ws$/,          // Chat WebSocket endpoint
     /^\/ws\/gateway$/,            // Chat gateway proxy WebSocket
     /^\/ws\/pty$/,                // Terminal PTY WebSocket
-    /^\/ws\/voice$/,              // Voice interface WebSocket
-    /^\/api\/voice\//,            // Voice sidecar REST proxy
   ]);
 
   fastify.addHook('preHandler', authMiddleware);
@@ -542,7 +538,6 @@ await fastify.register(sessionRoutes, { prefix: '/api/sessions' });
 await fastify.register(settingsRoutes, { prefix: '/api/settings' });
 await fastify.register(costRoutes, { prefix: '/api/costs' });
 await fastify.register(messageRoutes, { prefix: '/api/message' });
-await fastify.register(voiceRestRoutes, { prefix: '/api/voice' });
 await fastify.register(authRoutes, { prefix: '/api/auth' });
 await fastify.register(userRoutes, { prefix: '/api/users' });
 await fastify.register(commentRoutes, { prefix: '/api/tasks' });
@@ -555,7 +550,6 @@ await fastify.register(agentsConfigRoutes, { prefix: '/api/agents-config' });
 await fastify.register(contextRoutes, { prefix: '/api/context' });
 await fastify.register(chatProxyRoutes, { prefix: '/ws' });
 await fastify.register(ptyRoutes, { prefix: '/ws' });
-await fastify.register(voiceProxyRoutes, { prefix: '/ws' });
 await fastify.register(onboardingRoutes, { prefix: '/api/onboarding' });
 await fastify.register(rulesRoutes, { prefix: '/api/rules' });
 await fastify.register(agentMemoryRoutes, { prefix: '/api/agent' });
