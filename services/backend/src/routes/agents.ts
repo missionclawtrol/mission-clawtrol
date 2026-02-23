@@ -182,14 +182,18 @@ export async function agentRoutes(fastify: FastifyInstance) {
             const sessionsData = await readFile(sessionsPath, 'utf-8');
             const sessions = JSON.parse(sessionsData) as Record<string, SessionData>;
             
-            // Find the main session for this agent
-            const mainSessionKey = `agent:${def.id}:main`;
-            const session = sessions[mainSessionKey];
-            
-            if (session) {
-              const sessionStatus = determineStatus(session);
-              status = sessionStatus === 'working' ? 'online' : sessionStatus === 'idle' ? 'idle' : 'offline';
-              activeSession = mainSessionKey;
+            // Check ALL sessions for this agent, not just main
+            // Priority: working > idle > offline
+            for (const [key, session] of Object.entries(sessions)) {
+              const sessionStatus = determineStatus(session as SessionData);
+              if (sessionStatus === 'working') {
+                status = 'online';
+                activeSession = key;
+                break; // Working trumps everything
+              } else if (sessionStatus === 'idle' && status !== 'online') {
+                status = 'idle';
+                activeSession = key;
+              }
             }
           } catch (err) {
             // No sessions file or error reading it - agent is offline
