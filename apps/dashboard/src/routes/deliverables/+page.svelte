@@ -289,9 +289,6 @@
               <p class="text-xs text-slate-500 capitalize">{previewDeliverable.type} · {new Date(previewDeliverable.createdAt).toLocaleDateString()}</p>
             </div>
             <div class="flex items-center gap-2">
-              {#if previewDeliverable.content || previewDeliverable.filePath}
-                <button on:click={() => downloadDeliverable(previewDeliverable!)} class="text-xs px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white font-medium">⬇ Download</button>
-              {/if}
               <button on:click={() => previewDeliverable = null} class="text-slate-400 hover:text-slate-200 text-lg leading-none">×</button>
             </div>
           </div>
@@ -321,8 +318,7 @@
               <div class="flex flex-col items-center justify-center gap-4 py-10 text-center">
                 <div class="text-5xl">📁</div>
                 <div>
-                  <p class="text-slate-200 font-medium mb-1">{previewDeliverable.title}</p>
-                  <p class="text-xs text-slate-500 font-mono break-all mb-4">{previewDeliverable.filePath}</p>
+                  <p class="text-slate-200 font-medium mb-4">{previewDeliverable.title}</p>
                   <button
                     on:click={() => downloadDeliverable(previewDeliverable!)}
                     class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-semibold text-sm transition-colors inline-flex items-center gap-2"
