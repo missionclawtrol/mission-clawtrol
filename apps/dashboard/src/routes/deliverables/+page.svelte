@@ -65,10 +65,12 @@
   function getStatusBadge(status: DeliverableStatus): { label: string; classes: string } {
     switch (status) {
       case 'draft': return { label: '📝 Draft', classes: 'bg-slate-500/20 text-slate-300 border-slate-500/30' };
+      case 'pending_review': return { label: '🔍 Pending Review', classes: 'bg-purple-500/20 text-purple-300 border-purple-500/30' };
       case 'review': return { label: '🔍 Review', classes: 'bg-purple-500/20 text-purple-300 border-purple-500/30' };
       case 'approved': return { label: '✅ Approved', classes: 'bg-green-500/20 text-green-300 border-green-500/30' };
       case 'rejected': return { label: '❌ Rejected', classes: 'bg-red-500/20 text-red-300 border-red-500/30' };
       case 'changes_requested': return { label: '🔄 Changes', classes: 'bg-amber-500/20 text-amber-300 border-amber-500/30' };
+      default: return { label: '📎 ' + (status || 'Unknown'), classes: 'bg-slate-500/20 text-slate-300 border-slate-500/30' };
     }
   }
 
