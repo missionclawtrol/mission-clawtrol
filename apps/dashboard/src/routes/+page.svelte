@@ -193,7 +193,7 @@
           fetchAgents(),
           fetchTasks(),
           fetchAuditLog({ limit: 30 }),
-          fetchDeliverables({ status: 'review' }),
+          fetchDeliverables({ status: ['review', 'pending_review'] }),
         ]);
         
         agents = agentsData;

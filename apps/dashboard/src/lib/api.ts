@@ -1222,14 +1222,18 @@ export async function fetchDeliverables(filters?: {
   taskId?: string;
   agentId?: string;
   projectId?: string;
-  status?: DeliverableStatus;
+  status?: DeliverableStatus | DeliverableStatus[];
 }): Promise<Deliverable[]> {
   try {
     const params = new URLSearchParams();
     if (filters?.taskId) params.set('taskId', filters.taskId);
     if (filters?.agentId) params.set('agentId', filters.agentId);
     if (filters?.projectId) params.set('projectId', filters.projectId);
-    if (filters?.status) params.set('status', filters.status);
+    if (filters?.status) {
+      // Support array of statuses — join as comma-separated for backend
+      const statusValue = Array.isArray(filters.status) ? filters.status.join(',') : filters.status;
+      params.set('status', statusValue);
+    }
     const qs = params.toString();
     const res = await fetchWithTimeout(`${API_BASE}/deliverables${qs ? '?' + qs : ''}`);
     const data = await res.json();

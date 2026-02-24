@@ -51,7 +51,7 @@ export async function getDeliverables(filters?: {
   taskId?: string;
   agentId?: string;
   projectId?: string;
-  status?: DeliverableStatus;
+  status?: DeliverableStatus | DeliverableStatus[];
 }): Promise<Deliverable[]> {
   const conditions: string[] = [];
   const params: any[] = [];
@@ -69,8 +69,15 @@ export async function getDeliverables(filters?: {
     params.push(filters.projectId);
   }
   if (filters?.status) {
-    conditions.push('status = ?');
-    params.push(filters.status);
+    const statuses = Array.isArray(filters.status) ? filters.status : [filters.status];
+    if (statuses.length === 1) {
+      conditions.push('status = ?');
+      params.push(statuses[0]);
+    } else if (statuses.length > 1) {
+      const placeholders = statuses.map(() => '?').join(', ');
+      conditions.push(`status IN (${placeholders})`);
+      params.push(...statuses);
+    }
   }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -105,7 +112,7 @@ export async function getDeliverablesByTask(taskId: string): Promise<Deliverable
  */
 export async function countPendingReview(): Promise<number> {
   const row = await db.queryOne<{ count: number }>(
-    "SELECT COUNT(*) as count FROM deliverables WHERE status = 'review'",
+    "SELECT COUNT(*) as count FROM deliverables WHERE status IN ('review', 'pending_review')",
     []
   );
   return row?.count ?? 0;

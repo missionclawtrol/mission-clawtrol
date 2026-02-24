@@ -61,18 +61,24 @@ export async function deliverableRoutes(fastify: FastifyInstance) {
 
   /**
    * GET /api/deliverables — list all deliverables with optional filters
-   * Query params: taskId, agentId, projectId, status
+   * Query params: taskId, agentId, projectId, status (single or comma-separated for multiple)
    */
   fastify.get<{
     Querystring: {
       taskId?: string;
       agentId?: string;
       projectId?: string;
-      status?: DeliverableStatus;
+      status?: string;
     };
   }>('/', async (request, _reply) => {
     const { taskId, agentId, projectId, status } = request.query;
-    const deliverables = await getDeliverables({ taskId, agentId, projectId, status });
+    // Support comma-separated status values (e.g. "review,pending_review")
+    const statusFilter = status
+      ? (status.includes(',')
+          ? (status.split(',').map(s => s.trim()) as DeliverableStatus[])
+          : status as DeliverableStatus)
+      : undefined;
+    const deliverables = await getDeliverables({ taskId, agentId, projectId, status: statusFilter });
     return { deliverables, count: deliverables.length };
   });
 
