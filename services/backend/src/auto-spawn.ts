@@ -198,7 +198,16 @@ ${taskDesc}
 - Include clear handoff notes explaining what you did and where deliverables are
 - If the task involves code, commit and push before marking done
 - If the task involves documents/research, save files and note their location in handoff notes
-- If you are unsure about scope, check the task description and workflow rules before guessing`;
+- If you are unsure about scope, check the task description and workflow rules before guessing
+
+## Registering Deliverables
+If you produce a file (document, report, spreadsheet, image, etc.), register it in MC so the human can review it:
+\`\`\`
+curl -s -X POST ${BACKEND_URL}/api/tasks/${task.id}/deliverables \\
+  -H "Content-Type: application/json" \\
+  -d '{"title":"<descriptive title>","description":"<what it contains>","fileType":"<docx|pdf|md|csv|png|etc>","filePath":"<absolute path to file>","agentId":"<your agent id>","status":"pending_review"}'
+\`\`\`
+Always register deliverables BEFORE marking the task done.`;
 
   // ── Fetch Agent Memory (Phase 2) ────────────────────────────────────────
   let memorySection = '';
