@@ -338,6 +338,49 @@
   </div>
   {/if}
 
+  <!-- Memory Health Widget -->
+  <div class="bg-white dark:bg-slate-800 rounded-lg border border-purple-500/30 overflow-hidden">
+    <div class="px-4 py-3 border-b border-purple-500/20 bg-purple-500/5 flex items-center justify-between">
+      <h2 class="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+        <span>🧠</span> HICMS Memory Health
+      </h2>
+      <a href="/memory" class="text-sm text-purple-400 hover:text-purple-200 underline transition-colors">View full dashboard →</a>
+    </div>
+    <div class="px-4 py-4">
+      <div class="grid grid-cols-5 gap-3 mb-3">
+        <div class="p-3 bg-orange-500/10 border border-orange-500/15 rounded-lg text-center">
+          <div class="text-lg">🔧</div>
+          <div class="text-xs font-medium text-orange-400 mt-1">Procedural</div>
+          <div class="text-xs text-slate-400 mt-0.5">SOUL.md · Rules</div>
+        </div>
+        <div class="p-3 bg-blue-500/10 border border-blue-500/15 rounded-lg text-center">
+          <div class="text-lg">📚</div>
+          <div class="text-xs font-medium text-blue-400 mt-1">Semantic</div>
+          <div class="text-xs text-slate-400 mt-0.5">LEARNED.md</div>
+        </div>
+        <div class="p-3 bg-green-500/10 border border-green-500/15 rounded-lg text-center">
+          <div class="text-lg">📖</div>
+          <div class="text-xs font-medium text-green-400 mt-1">Episodic</div>
+          <div class="text-xs text-slate-400 mt-0.5">Task history</div>
+        </div>
+        <div class="p-3 bg-yellow-500/10 border border-yellow-500/15 rounded-lg text-center">
+          <div class="text-lg">⚡</div>
+          <div class="text-xs font-medium text-yellow-400 mt-1">Short-term</div>
+          <div class="text-xs text-slate-400 mt-0.5">Active session</div>
+        </div>
+        <div class="p-3 bg-purple-500/10 border border-purple-500/15 rounded-lg text-center">
+          <div class="text-lg">🔮</div>
+          <div class="text-xs font-medium text-purple-400 mt-1">Prospective</div>
+          <div class="text-xs text-slate-400 mt-0.5">Upcoming tasks</div>
+        </div>
+      </div>
+      <p class="text-xs text-slate-400 text-center">
+        Track agent memory health across all 5 HICMS types · Learning rate = LEARNED.md entries ÷ completed tasks
+        · <a href="/memory" class="text-purple-400 hover:underline">Open memory dashboard →</a>
+      </p>
+    </div>
+  </div>
+
   <!-- Charts Row -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
     <!-- Task Status Breakdown Chart -->

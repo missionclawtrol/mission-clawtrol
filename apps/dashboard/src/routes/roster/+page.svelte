@@ -406,7 +406,7 @@
 
           <!-- Actions -->
           <div class="mt-4 pt-4 border-t border-slate-700">
-            <div class="flex space-x-2">
+            <div class="flex space-x-2 mb-2">
               <button
                 class="flex-1 px-3 py-1.5 text-xs font-medium text-blue-400 bg-blue-500/10 rounded hover:bg-blue-500/20"
                 on:click={() => openDetails(agent)}
@@ -420,6 +420,12 @@
                 Message
               </button>
             </div>
+            <a
+              href="/memory"
+              class="block w-full px-3 py-1.5 text-xs font-medium text-center text-purple-400 bg-purple-500/10 rounded hover:bg-purple-500/20"
+            >
+              🧠 Memory Health
+            </a>
           </div>
 
           <!-- Workspace path (collapsed) -->
@@ -649,6 +655,13 @@
             on:click={closeDetails}
           >
             View Sessions
+          </a>
+          <a
+            href="/memory"
+            class="px-4 py-2 text-sm font-medium text-purple-400 bg-purple-500/10 rounded-lg hover:bg-purple-500/20"
+            on:click={closeDetails}
+          >
+            🧠 Memory Health
           </a>
           <button
             on:click={() => { openEditModal(selectedAgent!); closeDetails(); }}

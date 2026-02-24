@@ -437,4 +437,171 @@ export async function agentMemoryRoutes(fastify: FastifyInstance) {
       return reply.status(500).send({ error: 'Failed to assemble agent memory' });
     }
   });
+
+  /**
+   * GET /api/agent/overview
+   *
+   * Returns memory health summary for ALL agents — used by the HICMS Memory Dashboard.
+   * Aggregates procedural, semantic, episodic, short-term, and prospective stats per agent.
+   *
+   * Returns:
+   *   agents: Array of per-agent memory health snapshots
+   *   assembledAt: ISO timestamp
+   */
+  fastify.get('/overview', async (request, reply) => {
+    // Import readConfig here to avoid circular deps at module top
+    const { readConfig } = await import('../config-reader.js');
+    const config = await readConfig();
+    const agentList = config.agents?.list ?? [];
+
+    // Load company profile to check if it exists
+    const companyProfile = await readJsonSafe<Record<string, any>>(
+      join(HOME, '.openclaw', 'business', 'PROFILE.json')
+    );
+    const companyLoaded = !!companyProfile && !!companyProfile.companyName;
+
+    // Build per-agent health in parallel
+    const agentHealthItems = await Promise.all(
+      agentList.map(async (agentDef) => {
+        const agentId = agentDef.id;
+        const workspace = agentDef.workspace;
+
+        // ── Procedural ────────────────────────────────────────────
+        const soulExists = !!(await readFileSafe(join(workspace, 'SOUL.md')));
+        const agentsMdExists = !!(await readFileSafe(join(workspace, 'AGENTS.md')));
+
+        const allRules = await getAllRules();
+        const activeRulesCount = allRules.filter(
+          (r) => r.enabled && (r.projectId === null || r.projectId === undefined)
+        ).length;
+
+        // ── Semantic ──────────────────────────────────────────────
+        const learnedContent = await readFileSafe(join(workspace, 'LEARNED.md'));
+        let learnedEntries = 0;
+        let learnedLastUpdated: string | null = null;
+
+        if (learnedContent) {
+          // Count ## heading entries as "entries" in LEARNED.md
+          learnedEntries = (learnedContent.match(/^##\s+/gm) || []).length;
+          // If no ## entries, count non-empty lines as rough proxy
+          if (learnedEntries === 0) {
+            learnedEntries = learnedContent.split('\n').filter(l => l.trim().length > 0).length;
+          }
+        }
+
+        // Get LEARNED.md last modified time
+        try {
+          const stat = await fs.stat(join(workspace, 'LEARNED.md'));
+          learnedLastUpdated = stat.mtime.toISOString();
+        } catch {
+          learnedLastUpdated = null;
+        }
+
+        // ── Episodic ──────────────────────────────────────────────
+        const completedTasks = await db.query<{ id: string; completedAt: string | null }>(
+          `SELECT id, completedAt FROM tasks WHERE agentId = ? AND status = 'done' ORDER BY completedAt DESC`,
+          [agentId]
+        );
+        const failedTasks = await db.query<{ id: string }>(
+          `SELECT id FROM tasks WHERE agentId = ? AND status IN ('cancelled', 'failed')`,
+          [agentId]
+        );
+
+        const completedCount = completedTasks.length;
+        const failedCount = failedTasks.length;
+
+        // ── Short-term ────────────────────────────────────────────
+        // Check agent sessions directory for active sessions
+        let sessionStatus: 'active' | 'idle' | 'offline' = 'offline';
+        let tokenEstimate: number | null = null;
+
+        try {
+          const sessionsDir = join(HOME, '.openclaw', 'agents', agentId, 'sessions');
+          const sessionDirs = await fs.readdir(sessionsDir).catch(() => []);
+
+          if (sessionDirs.length > 0) {
+            // Check the most recent session
+            const sessionMetas = await Promise.all(
+              sessionDirs.slice(-3).map(async (dir) => {
+                const metaPath = join(sessionsDir, dir, 'metadata.json');
+                return readJsonSafe<{ status?: string; tokens?: number }>(metaPath);
+              })
+            );
+            const activeMeta = sessionMetas.find((m) => m?.status === 'active');
+            if (activeMeta) {
+              sessionStatus = 'active';
+              tokenEstimate = activeMeta.tokens ?? null;
+            } else {
+              sessionStatus = 'idle';
+            }
+          }
+        } catch {
+          sessionStatus = 'offline';
+        }
+
+        // Also cross-check with active sessions from the DB / live sessions
+        // We'll rely on the workspace sessions for now
+
+        // ── Prospective ───────────────────────────────────────────
+        const pendingDeps = await db.query<{ id: string }>(
+          `SELECT id FROM tasks WHERE agentId = ? AND (status = 'blocked' OR blocked = 1)`,
+          [agentId]
+        );
+        const scheduledItems = await db.query<{ id: string }>(
+          `SELECT id FROM tasks WHERE agentId = ? AND status IN ('todo', 'backlog')`,
+          [agentId]
+        );
+
+        const pendingCount = pendingDeps.length;
+        const scheduledCount = scheduledItems.length;
+
+        // ── Learning Rate ─────────────────────────────────────────
+        // = (tasks that preceded a LEARNED.md update) / total done × 100
+        // Simplified v1: learnedEntries / completedCount × 100, capped at 100
+        let learningRate = 0;
+        if (completedCount > 0 && learnedEntries > 0) {
+          learningRate = Math.min(100, Math.round((learnedEntries / completedCount) * 100));
+        }
+
+        return {
+          agentId,
+          name: agentDef.name,
+          emoji: agentDef.identity?.emoji ?? '🤖',
+          procedural: {
+            soulExists,
+            agentsMdExists,
+            activeRulesCount,
+            healthy: soulExists && agentsMdExists,
+          },
+          semantic: {
+            learnedEntries,
+            learnedLastUpdated,
+            companyLoaded,
+            healthy: learnedEntries > 0 && companyLoaded,
+          },
+          episodic: {
+            completedCount,
+            failedCount,
+            healthy: completedCount > 0,
+          },
+          shortTerm: {
+            sessionStatus,
+            tokenEstimate,
+            healthy: sessionStatus === 'active',
+          },
+          prospective: {
+            pendingCount,
+            scheduledCount,
+            healthy: pendingCount === 0,
+          },
+          learningRate,
+        };
+      })
+    );
+
+    return reply.send({
+      agents: agentHealthItems,
+      assembledAt: new Date().toISOString(),
+    });
+  });
 }

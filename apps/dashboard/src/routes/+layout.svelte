@@ -22,6 +22,7 @@
     { name: 'Costs', href: '/costs', icon: '💰' },
     { name: 'Team', href: '/team', icon: '🔐' },
     // { name: 'Webhooks', href: '/webhooks', icon: '🔔' }, // Hidden
+    { name: 'Memory', href: '/memory', icon: '🧠' },
     { name: 'Rules', href: '/rules', icon: '⚡' },
     { name: 'Onboarding', href: '/onboarding', icon: '📚' },
     { name: 'Settings', href: '/settings', icon: '⚙️' },

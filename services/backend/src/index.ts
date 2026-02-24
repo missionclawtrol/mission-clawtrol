@@ -516,6 +516,7 @@ if (process.env.DISABLE_AUTH === 'true') {
     /^\/api\/context$/,           // Context endpoint (used by agents locally)
     /^\/api\/workflow/,           // Workflow endpoints (used by agents locally)
     /^\/api\/agent\/[^/]+\/memory$/, // Agent memory endpoint (used by agents locally)
+    /^\/api\/agent\/overview$/,       // Memory overview endpoint (used by dashboard)
     /^\/api\/deliverables/,           // Deliverables API (agents create deliverables)
     /^\/api\/tasks\/[^/]+\/deliverables$/, // Task deliverables (nested)
     /^\/ws$/,                     // WebSocket endpoint (used by dashboard before login)
