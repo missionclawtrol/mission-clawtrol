@@ -234,9 +234,9 @@
 
     try {
       const formData = new FormData();
-      formData.append('file', fileInput.files[0]);
       formData.append('category', agentId ? 'agent' : category);
       if (agentId) formData.append('agentId', agentId);
+      formData.append('file', fileInput.files[0]);
 
       const res = await fetch(`${API_BASE}/api/onboarding/upload`, {
         method: 'POST',

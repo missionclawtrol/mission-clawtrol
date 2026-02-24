@@ -228,11 +228,28 @@ export async function onboardingRoutes(fastify: FastifyInstance) {
       let agentId: string | undefined;
       let uploadedFile: string | undefined;
 
+      // Collect all parts — buffer file data so fields are processed first
+      const fields: { name: string; value: string }[] = [];
+      const files: { filename: string; data: Buffer }[] = [];
+
       for await (const part of parts) {
         if (part.type === 'field') {
-          if (part.fieldname === 'category') category = part.value as string;
-          if (part.fieldname === 'agentId') agentId = part.value as string;
+          fields.push({ name: part.fieldname, value: part.value as string });
         } else if (part.type === 'file') {
+          const chunks: Buffer[] = [];
+          for await (const chunk of part.file) chunks.push(chunk);
+          files.push({ filename: part.filename, data: Buffer.concat(chunks) });
+        }
+      }
+
+      // Apply fields first (order-independent)
+      for (const f of fields) {
+        if (f.name === 'category') category = f.value;
+        if (f.name === 'agentId') agentId = f.value;
+      }
+
+      // Now write files with correct category
+      for (const file of files) {
           // Determine directory
           let targetDir: string;
           if (category === 'agent' && agentId) {
@@ -242,19 +259,10 @@ export async function onboardingRoutes(fastify: FastifyInstance) {
           }
           await ensureDir(targetDir);
 
-          // Generate safe filename
-          const ext = extname(part.filename) || '';
-          const safeName = part.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+          const safeName = file.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
           const destPath = join(targetDir, safeName);
-
-          // Stream file to disk
-          const chunks: Buffer[] = [];
-          for await (const chunk of part.file) {
-            chunks.push(chunk);
-          }
-          await fs.writeFile(destPath, Buffer.concat(chunks));
+          await fs.writeFile(destPath, file.data);
           uploadedFile = safeName;
-        }
       }
 
       if (!uploadedFile) {
