@@ -9,8 +9,5 @@
     "status": "npx pm2 status",
     "logs": "npx pm2 logs",
     "kill": "npx pm2 kill"
-  },
-  "devDependencies": {
-    "pm2": "^6.0.14"
   }
 }
