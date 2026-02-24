@@ -34,6 +34,7 @@ import { onboardingRoutes } from './routes/onboarding.js';
 import { rulesRoutes } from './routes/rules.js';
 import { agentMemoryRoutes } from './routes/agent-memory.js';
 import { deliverableRoutes, taskDeliverableRoutes } from './routes/deliverables.js';
+import { overviewRoutes } from './routes/overview.js';
 import { seedBuiltInRules } from './rule-store.js';
 import { createAuthMiddleware } from './middleware/auth.js';
 import { gatewayClient, ApprovalRequest, ApprovalResolved } from './gateway-client.js';
@@ -556,6 +557,7 @@ await fastify.register(rulesRoutes, { prefix: '/api/rules' });
 await fastify.register(agentMemoryRoutes, { prefix: '/api/agent' });
 await fastify.register(deliverableRoutes, { prefix: '/api/deliverables' });
 await fastify.register(taskDeliverableRoutes, { prefix: '/api/tasks' });
+await fastify.register(overviewRoutes, { prefix: '/api/overview' });
 
 // Health check with comprehensive system status
 fastify.get('/api/health', async () => {
