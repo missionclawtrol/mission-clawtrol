@@ -165,6 +165,7 @@ export async function updateDeliverable(
     filePath?: string | null;
     status?: DeliverableStatus;
     feedback?: string | null;
+    projectId?: string | null;
   }
 ): Promise<Deliverable | null> {
   const now = new Date().toISOString();
@@ -177,6 +178,7 @@ export async function updateDeliverable(
   if (updates.filePath !== undefined) { fields.push('filePath = ?'); params.push(updates.filePath); }
   if (updates.status !== undefined) { fields.push('status = ?'); params.push(updates.status); }
   if (updates.feedback !== undefined) { fields.push('feedback = ?'); params.push(updates.feedback); }
+  if (updates.projectId !== undefined) { fields.push('projectId = ?'); params.push(updates.projectId); }
 
   params.push(id);
   const result = await db.execute(

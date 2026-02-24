@@ -177,12 +177,13 @@ export async function deliverableRoutes(fastify: FastifyInstance) {
       content?: string;
       type?: DeliverableType;
       filePath?: string;
+      projectId?: string;
     };
   }>('/:id', async (request, reply) => {
     const existing = await getDeliverable(request.params.id);
     if (!existing) return reply.status(404).send({ error: 'Deliverable not found' });
 
-    const { status, feedback, title, content, type, filePath } = request.body;
+    const { status, feedback, title, content, type, filePath, projectId } = request.body;
 
     const updated = await updateDeliverable(request.params.id, {
       status,
@@ -191,6 +192,7 @@ export async function deliverableRoutes(fastify: FastifyInstance) {
       content,
       type,
       filePath,
+      projectId,
     });
 
     const user = (request as any).user;
