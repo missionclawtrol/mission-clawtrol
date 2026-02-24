@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { mkdir, readFile, writeFile } from 'fs/promises';
+import { statSync } from 'fs';
 import { join } from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -167,6 +168,24 @@ function hasReviewChecklist(handoffNotes?: string | null): boolean {
   if (!handoffNotes) return false;
   const required = ['Files changed', 'How tested', 'Edge cases', 'Rollback', 'Commit hash'];
   return required.every((item) => handoffNotes.includes(item));
+}
+
+/**
+ * Returns true if the agent's LEARNED.md was modified after the task was created.
+ * Returns true (pass) if the file can't be found or agentId/createdAt are missing — we
+ * don't want to block the transition in that case, just skip the flag.
+ */
+function checkLearnedMdUpdated(agentId: string | null | undefined, taskCreatedAt: string | null | undefined): boolean {
+  if (!agentId || !taskCreatedAt) return true;
+  try {
+    const learnedMdPath = join(process.env.HOME || '', '.openclaw', `workspace-${agentId}`, 'LEARNED.md');
+    const stats = statSync(learnedMdPath);
+    const createdMs = new Date(taskCreatedAt).getTime();
+    return stats.mtimeMs > createdMs;
+  } catch {
+    // LEARNED.md doesn't exist or can't be read — don't block, just skip the flag
+    return true;
+  }
 }
 
 export async function taskRoutes(fastify: FastifyInstance) {
@@ -448,6 +467,28 @@ export async function taskRoutes(fastify: FastifyInstance) {
           return reply.status(404).send({ error: 'Task not found' });
         }
         await enrichDoneTransition(task, updates);
+      }
+
+      // LEARNED.md enforcement: when a task moves to review or done, check whether the
+      // assigned agent updated their LEARNED.md since the task was created.  If not, append
+      // a soft warning flag to handoffNotes so it's visible in the review panel and in the
+      // Learning Rate metric.  This never blocks the transition — it's informational only.
+      if (updates.status === 'review' || updates.status === 'done') {
+        // existingTask is guaranteed to be loaded above for these status values
+        const agentId = existingTask?.agentId;
+        const taskCreatedAt = existingTask?.createdAt;
+        if (agentId && taskCreatedAt && !checkLearnedMdUpdated(agentId, taskCreatedAt)) {
+          const learnedFlag =
+            '\n\n⚠️ LEARNED.md not updated — agent should document patterns, gotchas, or preferences discovered.';
+          const currentNotes: string = (updates.handoffNotes ?? existingTask?.handoffNotes) || '';
+          if (!currentNotes.includes('LEARNED.md not updated')) {
+            updates.handoffNotes = currentNotes ? currentNotes + learnedFlag : learnedFlag.trim();
+          }
+          fastify.log.warn(
+            { taskId: id, agentId, taskCreatedAt },
+            '[LearnedMd] Agent did not update LEARNED.md since task started — flagged in handoffNotes'
+          );
+        }
       }
 
       // Validate priority if provided
