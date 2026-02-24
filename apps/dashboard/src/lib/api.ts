@@ -1189,7 +1189,7 @@ export async function deleteRule(id: string): Promise<{ success: boolean }> {
 
 // ─── Deliverables ────────────────────────────────────────────────────────────
 
-export type DeliverableStatus = 'draft' | 'review' | 'approved' | 'rejected' | 'changes_requested';
+export type DeliverableStatus = 'draft' | 'pending_review' | 'review' | 'approved' | 'rejected' | 'changes_requested';
 export type DeliverableType = 'markdown' | 'text' | 'csv' | 'html' | 'pdf' | 'other';
 
 export interface Deliverable {

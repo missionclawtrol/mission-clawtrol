@@ -32,7 +32,7 @@
     return true;
   });
 
-  $: pendingReview = deliverables.filter(d => d.status === 'review').length;
+  $: pendingReview = deliverables.filter(d => d.status === 'review' || d.status === 'pending_review').length;
 
   async function loadData() {
     loading = true;
@@ -44,15 +44,19 @@
   }
 
   async function handleReview(id: string, action: 'approved' | 'rejected' | 'changes_requested') {
-    await reviewDeliverable(id, action, reviewFeedback || undefined);
+    const result = await reviewDeliverable(id, action, reviewFeedback || undefined);
     reviewFeedback = '';
     reviewingId = null;
-    if (previewDeliverable?.id === id) {
-      // Refresh the preview
-      const updated = deliverables.find(d => d.id === id);
-      if (updated) previewDeliverable = { ...updated, status: action };
+    if (previewDeliverable?.id === id && result) {
+      // Update preview with the server response so review actions disappear immediately
+      previewDeliverable = result;
     }
     await loadData();
+    // Sync preview with freshly loaded data
+    if (previewDeliverable?.id === id) {
+      const refreshed = deliverables.find(d => d.id === id);
+      if (refreshed) previewDeliverable = refreshed;
+    }
   }
 
   async function handleDelete(id: string) {
@@ -160,6 +164,7 @@
     <select bind:value={filterStatus} class="px-3 py-2 bg-slate-700 border border-slate-600 rounded text-sm focus:outline-none focus:border-blue-500">
       <option value="">All Statuses</option>
       <option value="draft">📝 Draft</option>
+      <option value="pending_review">🔍 Pending Review</option>
       <option value="review">🔍 Review</option>
       <option value="approved">✅ Approved</option>
       <option value="rejected">❌ Rejected</option>
@@ -243,7 +248,7 @@
                     title="Download"
                   >⬇</button>
                 {/if}
-                {#if d.status === 'review'}
+                {#if d.status === 'review' || d.status === 'pending_review'}
                   <button
                     on:click={() => { reviewingId = reviewingId === d.id ? null : d.id; reviewFeedback = ''; previewDeliverable = d; }}
                     class="text-xs px-2 py-1 bg-purple-600 hover:bg-purple-700 rounded text-white"
@@ -336,6 +341,33 @@
               </div>
             {/if}
           </div>
+
+          <!-- Review actions panel — shown when deliverable is awaiting review -->
+          {#if previewDeliverable.status === 'review' || previewDeliverable.status === 'pending_review'}
+            <div class="border-t border-slate-600 px-4 py-3 bg-slate-800/50 rounded-b-lg">
+              <p class="text-xs font-medium text-slate-400 mb-2">📋 Review Actions</p>
+              <textarea
+                bind:value={reviewFeedback}
+                placeholder="Optional feedback or comments for the agent..."
+                rows="2"
+                class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 mb-2 resize-none"
+              ></textarea>
+              <div class="flex gap-2 flex-wrap">
+                <button
+                  on:click={() => handleReview(previewDeliverable!.id, 'approved')}
+                  class="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-sm text-white font-medium transition-colors"
+                >✅ Approve</button>
+                <button
+                  on:click={() => handleReview(previewDeliverable!.id, 'changes_requested')}
+                  class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 rounded text-sm text-white font-medium transition-colors"
+                >🔄 Send Back with Comments</button>
+                <button
+                  on:click={() => handleReview(previewDeliverable!.id, 'rejected')}
+                  class="px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded text-sm text-white font-medium transition-colors"
+                >❌ Reject</button>
+              </div>
+            </div>
+          {/if}
         </div>
       {/if}
     </div>
