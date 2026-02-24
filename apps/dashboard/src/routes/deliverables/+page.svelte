@@ -2,7 +2,7 @@
 
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { fetchDeliverables, fetchProjects, reviewDeliverable, deleteDeliverable, type Deliverable, type DeliverableStatus, type Project } from '$lib/api';
+  import { fetchDeliverables, fetchProjects, reviewDeliverable, deleteDeliverable, API_BASE, type Deliverable, type DeliverableStatus, type Project } from '$lib/api';
 
   let deliverables: Deliverable[] = [];
   let projects: Project[] = [];
@@ -108,14 +108,27 @@
   }
 
   function downloadDeliverable(d: Deliverable) {
-    const ext = d.type === 'markdown' ? 'md' : d.type === 'csv' ? 'csv' : 'txt';
-    const blob = new Blob([d.content || ''], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${d.title.replace(/[^a-z0-9_\-]/gi, '_')}.${ext}`;
-    a.click();
-    URL.revokeObjectURL(url);
+    if (d.filePath) {
+      // Stream from API — works for binary and text files alike
+      const a = document.createElement('a');
+      a.href = `${API_BASE}/deliverables/${d.id}/download`;
+      a.download = '';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } else if (d.content) {
+      // Fallback: build blob from inline content (legacy deliverables with no filePath)
+      const ext = d.type === 'markdown' ? 'md' : d.type === 'csv' ? 'csv' : 'txt';
+      const blob = new Blob([d.content], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${d.title.replace(/[^a-z0-9_\-]/gi, '_')}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
   }
 
   onMount(loadData);
@@ -223,7 +236,7 @@
               <!-- Action buttons -->
               <!-- svelte-ignore a11y-no-static-element-interactions a11y-click-events-have-key-events -->
               <div class="flex items-center gap-1 flex-shrink-0" on:click|stopPropagation role="none">
-                {#if d.content}
+                {#if d.content || d.filePath}
                   <button
                     on:click={() => downloadDeliverable(d)}
                     class="text-xs px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded transition-colors"
@@ -276,8 +289,8 @@
               <p class="text-xs text-slate-500 capitalize">{previewDeliverable.type} · {new Date(previewDeliverable.createdAt).toLocaleDateString()}</p>
             </div>
             <div class="flex items-center gap-2">
-              {#if previewDeliverable.content}
-                <button on:click={() => downloadDeliverable(previewDeliverable!)} class="text-xs px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded">⬇ Download</button>
+              {#if previewDeliverable.content || previewDeliverable.filePath}
+                <button on:click={() => downloadDeliverable(previewDeliverable!)} class="text-xs px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-white font-medium">⬇ Download</button>
               {/if}
               <button on:click={() => previewDeliverable = null} class="text-slate-400 hover:text-slate-200 text-lg leading-none">×</button>
             </div>
@@ -305,7 +318,18 @@
                 <pre class="text-sm text-slate-300 whitespace-pre-wrap">{previewDeliverable.content}</pre>
               {/if}
             {:else if previewDeliverable.filePath}
-              <p class="text-sm text-slate-400">📂 File: <code class="bg-slate-700 px-2 py-0.5 rounded text-xs">{previewDeliverable.filePath}</code></p>
+              <div class="flex flex-col items-center justify-center gap-4 py-10 text-center">
+                <div class="text-5xl">📁</div>
+                <div>
+                  <p class="text-slate-200 font-medium mb-1">{previewDeliverable.title}</p>
+                  <p class="text-xs text-slate-500 font-mono break-all mb-4">{previewDeliverable.filePath}</p>
+                  <button
+                    on:click={() => downloadDeliverable(previewDeliverable!)}
+                    class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-semibold text-sm transition-colors inline-flex items-center gap-2"
+                  >⬇ Download File</button>
+                </div>
+                <p class="text-xs text-slate-500">Preview not available for this file type. Download to open it.</p>
+              </div>
             {:else}
               <p class="text-slate-500 text-sm italic">No content available for preview.</p>
             {/if}

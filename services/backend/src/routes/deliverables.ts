@@ -14,6 +14,8 @@
  */
 
 import { FastifyInstance } from 'fastify';
+import fs from 'fs';
+import path from 'path';
 import {
   getDeliverables,
   getDeliverable,
@@ -27,6 +29,22 @@ import {
 } from '../deliverable-store.js';
 import { findTaskById } from '../task-store.js';
 import { logAudit } from '../audit-store.js';
+
+/** Map file extension → Content-Type */
+function getContentType(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  switch (ext) {
+    case '.docx': return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    case '.pdf':  return 'application/pdf';
+    case '.md':
+    case '.txt':  return 'text/plain';
+    case '.csv':  return 'text/csv';
+    case '.png':  return 'image/png';
+    case '.jpg':
+    case '.jpeg': return 'image/jpeg';
+    default:      return 'application/octet-stream';
+  }
+}
 
 /**
  * Top-level deliverable routes (/api/deliverables/*)
@@ -106,6 +124,35 @@ export async function deliverableRoutes(fastify: FastifyInstance) {
     });
 
     return reply.status(201).send(deliverable);
+  });
+
+  /**
+   * GET /api/deliverables/:id/download — stream the file to the browser
+   * Uses the filePath stored on the deliverable record.
+   * Returns 404 if deliverable not found or file does not exist on disk.
+   */
+  fastify.get<{ Params: { id: string } }>('/:id/download', async (request, reply) => {
+    const deliverable = await getDeliverable(request.params.id);
+    if (!deliverable) return reply.status(404).send({ error: 'Deliverable not found' });
+
+    if (!deliverable.filePath) {
+      return reply.status(404).send({ error: 'No file path associated with this deliverable' });
+    }
+
+    const absPath = path.resolve(deliverable.filePath);
+
+    if (!fs.existsSync(absPath)) {
+      return reply.status(404).send({ error: `File not found on disk: ${deliverable.filePath}` });
+    }
+
+    const contentType = getContentType(absPath);
+    const filename = path.basename(absPath);
+
+    reply.header('Content-Type', contentType);
+    reply.header('Content-Disposition', `attachment; filename="${filename}"`);
+
+    const stream = fs.createReadStream(absPath);
+    return reply.send(stream);
   });
 
   /**
