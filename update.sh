@@ -34,7 +34,7 @@ echo ""
 
 # 3. Install dashboard dependencies and rebuild
 echo "→ Building dashboard..."
-cd services/dashboard
+cd apps/dashboard
 npm install
 npm run build
 cd "$SCRIPT_DIR"
