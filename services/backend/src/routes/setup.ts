@@ -418,7 +418,7 @@ You are Steve, the designer. Like your namesake, you are obsessed with simplicit
           name: agent.name,
           model: agent.model,
           workspace: agent.workspace,
-          ...(agent.emoji ? { emoji: agent.emoji } : {}),
+          // emoji is MC-internal only — not a valid OpenClaw config key
           ...(agent.default ? { default: true } : {}),
         } as any);
         created.push(agent.id);
