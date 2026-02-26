@@ -73,11 +73,20 @@
   // ── Load preview when deliverable changes ─────────────────────────────────
   let currentId = '';
 
+  // Plain (non-reactive) snapshot of the current deliverable.
+  // Svelte 5 re-wraps props as reactive proxies even when the parent passes a
+  // plain object — accessing .filePath or .content through the proxy can return
+  // the getter function instead of the string value.  Deep-cloning via
+  // JSON.parse(JSON.stringify()) fully escapes the proxy before we use the
+  // values in async functions or template expressions.
+  let plainDeliverable: Deliverable | null = null;
+
   $: if (deliverable) {
     if (deliverable.id !== currentId) {
       currentId = deliverable.id;
       resetState();
-      loadPreview(deliverable);
+      plainDeliverable = JSON.parse(JSON.stringify(deliverable)) as Deliverable;
+      loadPreview(plainDeliverable);
       // Trigger slide-in animation
       requestAnimationFrame(() => { visible = true; });
     }
@@ -460,7 +469,7 @@
           </div>
 
         {:else}
-          {#if detectRenderMode(deliverable) === 'csv'}
+          {#if detectRenderMode(plainDeliverable ?? deliverable) === 'csv'}
             <!-- CSV renderer -->
             <div class="p-4">
               <div class="mb-2 flex items-center gap-3 text-xs text-slate-500">
@@ -503,7 +512,7 @@
               </div>
             </div>
 
-          {:else if detectRenderMode(deliverable) === 'docx'}
+          {:else if detectRenderMode(plainDeliverable ?? deliverable) === 'docx'}
             <!-- DOCX renderer (mammoth output) -->
             {#if docxHtml}
               <div
@@ -519,7 +528,7 @@
               </div>
             {/if}
 
-          {:else if detectRenderMode(deliverable) === 'pdf'}
+          {:else if detectRenderMode(plainDeliverable ?? deliverable) === 'pdf'}
             <!-- PDF renderer — native browser iframe -->
             {#if pdfUrl}
               <iframe
@@ -536,7 +545,7 @@
               </div>
             {/if}
 
-          {:else if detectRenderMode(deliverable) === 'image'}
+          {:else if detectRenderMode(plainDeliverable ?? deliverable) === 'image'}
             <!-- Image renderer -->
             {#if pdfUrl}
               <div class="flex items-start justify-center p-4">
@@ -544,17 +553,17 @@
               </div>
             {/if}
 
-          {:else if detectRenderMode(deliverable) === 'markdown'}
+          {:else if detectRenderMode(plainDeliverable ?? deliverable) === 'markdown'}
             <!-- Markdown renderer -->
             <div class="px-6 py-4 prose prose-invert prose-sm max-w-none text-slate-200 text-sm leading-relaxed">
               <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-              {@html '<p class="mb-2">' + renderMarkdown(textContent || deliverable.content || '') + '</p>'}
+              {@html '<p class="mb-2">' + renderMarkdown(textContent || (plainDeliverable ?? deliverable).content || '') + '</p>'}
             </div>
 
-          {:else if detectRenderMode(deliverable) === 'text'}
+          {:else if detectRenderMode(plainDeliverable ?? deliverable) === 'text'}
             <!-- Plain text renderer -->
             <div class="p-6">
-              <pre class="text-sm text-slate-300 whitespace-pre-wrap font-mono bg-slate-800/60 rounded p-4 border border-slate-700">{textContent || deliverable.content || ''}</pre>
+              <pre class="text-sm text-slate-300 whitespace-pre-wrap font-mono bg-slate-800/60 rounded p-4 border border-slate-700">{textContent || (plainDeliverable ?? deliverable).content || ''}</pre>
             </div>
 
           {:else}
