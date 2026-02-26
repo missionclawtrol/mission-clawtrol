@@ -109,9 +109,11 @@
     const mode = detectRenderMode(d);
 
     // If content is inline, use it directly for CSV/Markdown/text
-    if (d.content && !d.filePath) {
-      if (mode === 'csv') { parseCSV(d.content); return; }
-      if (mode === 'markdown' || mode === 'text') { textContent = d.content; return; }
+    // Guard: ensure content is a plain string (not a Svelte reactive proxy)
+    const inlineContent = typeof d.content === 'string' ? d.content : '';
+    if (inlineContent && !d.filePath) {
+      if (mode === 'csv') { parseCSV(inlineContent); return; }
+      if (mode === 'markdown' || mode === 'text') { textContent = inlineContent; return; }
     }
 
     // For PDF, just set the URL (iframe will fetch it)
