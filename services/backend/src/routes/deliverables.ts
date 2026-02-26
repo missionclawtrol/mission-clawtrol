@@ -162,6 +162,36 @@ export async function deliverableRoutes(fastify: FastifyInstance) {
   });
 
   /**
+   * GET /api/deliverables/:id/serve — stream the file inline (for iframe/browser preview)
+   * Like /download but uses Content-Disposition: inline so PDF renders in-browser.
+   * Must be registered BEFORE /:id to avoid route conflict.
+   */
+  fastify.get<{ Params: { id: string } }>('/:id/serve', async (request, reply) => {
+    const deliverable = await getDeliverable(request.params.id);
+    if (!deliverable) return reply.status(404).send({ error: 'Deliverable not found' });
+
+    if (!deliverable.filePath) {
+      return reply.status(404).send({ error: 'No file path associated with this deliverable' });
+    }
+
+    const absPath = path.resolve(deliverable.filePath);
+
+    if (!fs.existsSync(absPath)) {
+      return reply.status(404).send({ error: `File not found on disk: ${deliverable.filePath}` });
+    }
+
+    const contentType = getContentType(absPath);
+    const filename = path.basename(absPath);
+
+    reply.header('Content-Type', contentType);
+    reply.header('Content-Disposition', `inline; filename="${filename}"`);
+    reply.header('Access-Control-Allow-Origin', '*');
+
+    const stream = fs.createReadStream(absPath);
+    return reply.send(stream);
+  });
+
+  /**
    * GET /api/deliverables/:id — get single deliverable
    */
   fastify.get<{ Params: { id: string } }>('/:id', async (request, reply) => {
