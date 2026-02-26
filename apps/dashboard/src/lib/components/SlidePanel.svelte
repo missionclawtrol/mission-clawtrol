@@ -669,9 +669,9 @@
   /* ── Slide panel ────────────────────────────────────────────────────────── */
   .slide-panel {
     position: fixed;
-    top: 112px;
+    top: 0;
     right: 0;
-    bottom: 0;
+    bottom: 80px;
     width: min(520px, 100vw);
     background: #0f172a;
     border-left: 1px solid rgba(255, 255, 255, 0.08);
@@ -681,7 +681,7 @@
     transform: translateX(100%);
     transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5);
-    border-radius: 8px 0 0 0;
+    border-radius: 0 0 0 8px;
   }
 
   .slide-panel.open {
