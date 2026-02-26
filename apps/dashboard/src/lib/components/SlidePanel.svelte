@@ -411,6 +411,11 @@
     if (!fitAddon || !terminalEl) return;
     try {
       fitAddon.fit();
+      // Shrink by 2 rows so the TUI input line isn't clipped at the bottom
+      const fitted = xterm.rows;
+      if (fitted > 4) {
+        xterm.resize(xterm.cols, fitted - 2);
+      }
       xterm?.scrollToBottom();
       if (ptyWs?.readyState === WebSocket.OPEN) {
         const { cols, rows } = xterm;
