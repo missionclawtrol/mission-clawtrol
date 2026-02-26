@@ -78,8 +78,13 @@ export async function readConfig(): Promise<OpenClawConfig> {
  * Get all agent definitions
  */
 export async function getAgentDefinitions(): Promise<AgentDefinition[]> {
-  const config = await readConfig();
-  return config.agents.list || [];
+  try {
+    const config = await readConfig();
+    return config.agents?.list || [];
+  } catch {
+    // Config not yet set up (fresh install) — return empty list gracefully
+    return [];
+  }
 }
 
 /**
