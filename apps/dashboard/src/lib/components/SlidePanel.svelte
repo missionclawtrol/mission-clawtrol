@@ -1049,6 +1049,30 @@
     width: 100%;
   }
 
+  /* Enable visible scrollbar inside xterm viewport */
+  :global(.xterm-viewport) {
+    overflow-y: scroll !important;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+  }
+
+  :global(.xterm-viewport::-webkit-scrollbar) {
+    width: 6px;
+  }
+
+  :global(.xterm-viewport::-webkit-scrollbar-track) {
+    background: transparent;
+  }
+
+  :global(.xterm-viewport::-webkit-scrollbar-thumb) {
+    background-color: rgba(148, 163, 184, 0.4);
+    border-radius: 3px;
+  }
+
+  :global(.xterm-viewport::-webkit-scrollbar-thumb:hover) {
+    background-color: rgba(148, 163, 184, 0.7);
+  }
+
   :global(.xterm-viewport) {
     background: #0f172a !important;
   }
