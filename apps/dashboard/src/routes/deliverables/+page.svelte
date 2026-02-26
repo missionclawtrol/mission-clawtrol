@@ -216,10 +216,10 @@
         <!-- svelte-ignore a11y-no-static-element-interactions -->
         <div
           class="group bg-slate-800 border rounded-lg p-4 cursor-pointer transition-all hover:border-slate-500 {previewDeliverable?.id === d.id ? 'border-blue-500 ring-1 ring-blue-500/30' : 'border-slate-600'}"
-          on:click={() => { previewDeliverable = previewDeliverable?.id === d.id ? null : { ...d }; }}
+          on:click={() => { previewDeliverable = previewDeliverable?.id === d.id ? null : JSON.parse(JSON.stringify(d)) as Deliverable; }}
           role="button"
           tabindex="0"
-          on:keydown={(e) => e.key === 'Enter' && (previewDeliverable = previewDeliverable?.id === d.id ? null : d)}
+          on:keydown={(e) => e.key === 'Enter' && (previewDeliverable = previewDeliverable?.id === d.id ? null : JSON.parse(JSON.stringify(d)) as Deliverable)}
         >
           <div class="flex items-start gap-3">
             <span class="text-xl flex-shrink-0 mt-0.5">{getTypeIcon(d.type)}</span>
@@ -245,7 +245,7 @@
             <div class="flex items-center gap-1 flex-shrink-0" on:click|stopPropagation role="none">
               <!-- 👁 Preview eye — visible on row hover -->
               <button
-                on:click={() => { previewDeliverable = previewDeliverable?.id === d.id ? null : { ...d }; }}
+                on:click={() => { previewDeliverable = previewDeliverable?.id === d.id ? null : JSON.parse(JSON.stringify(d)) as Deliverable; }}
                 class="text-sm px-2 py-1 rounded text-slate-400 hover:text-blue-300 hover:bg-blue-500/10 transition-all opacity-0 group-hover:opacity-100"
                 title="Preview"
               >👁</button>
