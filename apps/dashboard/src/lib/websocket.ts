@@ -28,20 +28,24 @@ let socket: WebSocket | null = null;
 let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
 export function connectWebSocket() {
-  if (socket?.readyState === WebSocket.OPEN) return;
+  if (socket?.readyState === WebSocket.OPEN || socket?.readyState === WebSocket.CONNECTING) return;
   
   try {
     socket = new WebSocket(WS_URL);
     
-    socket.onopen = () => {
+    socket.onopen = (event) => {
       console.log('WebSocket connected');
       wsConnected.set(true);
       
-      // Subscribe to all channels
-      socket?.send(JSON.stringify({
-        type: 'subscribe',
-        channels: ['activity', 'agents', 'approvals', 'tasks']
-      }));
+      // Use event.target to avoid race condition where module-level `socket`
+      // may have been reassigned to a new CONNECTING socket before this fires
+      const ws = event.target as WebSocket;
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'subscribe',
+          channels: ['activity', 'agents', 'approvals', 'tasks']
+        }));
+      }
     };
     
     socket.onmessage = (event) => {
