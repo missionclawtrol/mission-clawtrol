@@ -411,6 +411,7 @@
     if (!fitAddon || !terminalEl) return;
     try {
       fitAddon.fit();
+      xterm?.scrollToBottom();
       if (ptyWs?.readyState === WebSocket.OPEN) {
         const { cols, rows } = xterm;
         ptyWs.send(JSON.stringify({ type: 'resize', cols, rows }));
@@ -438,8 +439,9 @@
     ptyWs.onmessage = (e) => {
       try {
         const msg = JSON.parse(e.data);
-        if (msg.type === 'output') xterm?.write(msg.data);
-        else if (msg.type === 'exit') {
+        if (msg.type === 'output') {
+          xterm?.write(msg.data, () => xterm?.scrollToBottom());
+        } else if (msg.type === 'exit') {
           xterm?.write(`\r\n\x1b[33m[Process exited with code ${msg.exitCode}]\x1b[0m\r\n`);
           termConnected = false;
           schedulePtyReconnect();
@@ -671,7 +673,7 @@
     position: fixed;
     top: 0;
     right: 0;
-    bottom: 80px;
+    bottom: 0;
     width: min(520px, 100vw);
     background: #0f172a;
     border-left: 1px solid rgba(255, 255, 255, 0.08);
@@ -681,7 +683,7 @@
     transform: translateX(100%);
     transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5);
-    border-radius: 0 0 0 8px;
+    border-radius: 0;
   }
 
   .slide-panel.open {
