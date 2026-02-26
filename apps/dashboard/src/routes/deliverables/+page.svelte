@@ -3,7 +3,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fetchDeliverables, fetchProjects, reviewDeliverable, deleteDeliverable, API_BASE, type Deliverable, type DeliverableStatus, type Project } from '$lib/api';
-  import DeliverablePreviewPanel from '$lib/components/DeliverablePreviewPanel.svelte';
 
   let deliverables: Deliverable[] = [];
   let projects: Project[] = [];
@@ -44,8 +43,8 @@
     loading = false;
   }
 
-  async function handleReview(id: string, action: 'approved' | 'rejected' | 'changes_requested', feedbackText?: string) {
-    const result = await reviewDeliverable(id, action, feedbackText || reviewFeedback || undefined);
+  async function handleReview(id: string, action: 'approved' | 'rejected' | 'changes_requested') {
+    const result = await reviewDeliverable(id, action, reviewFeedback || undefined);
     reviewFeedback = '';
     reviewingId = null;
     if (previewDeliverable?.id === id && result) {
@@ -209,69 +208,168 @@
       <p class="text-sm mt-1">When agents complete work, their output will appear here.</p>
     </div>
   {:else}
-    <!-- Deliverables list -->
-    <div class="space-y-2">
-      {#each filtered as d (d.id)}
-        {@const badge = getStatusBadge(d.status)}
-        <!-- svelte-ignore a11y-no-static-element-interactions -->
-        <div
-          class="group bg-slate-800 border rounded-lg p-4 cursor-pointer transition-all hover:border-slate-500 {previewDeliverable?.id === d.id ? 'border-blue-500 ring-1 ring-blue-500/30' : 'border-slate-600'}"
-          on:click={() => { previewDeliverable = previewDeliverable?.id === d.id ? null : JSON.parse(JSON.stringify(d)) as Deliverable; }}
-          role="button"
-          tabindex="0"
-          on:keydown={(e) => e.key === 'Enter' && (previewDeliverable = previewDeliverable?.id === d.id ? null : JSON.parse(JSON.stringify(d)) as Deliverable)}
-        >
-          <div class="flex items-start gap-3">
-            <span class="text-xl flex-shrink-0 mt-0.5">{getTypeIcon(d.type)}</span>
-            <div class="flex-1 min-w-0">
-              <div class="flex items-start gap-2 flex-wrap">
-                <p class="font-semibold text-slate-100">{d.title}</p>
-                <span class="text-xs px-2 py-0.5 rounded border {badge.classes} flex-shrink-0">{badge.label}</span>
-              </div>
-              <div class="flex items-center gap-3 mt-1 text-xs text-slate-500 flex-wrap">
-                {#if d.agentId}<span>🤖 {d.agentId}</span>{/if}
-                {#if d.projectId}<span>📁 {getProjectName(d.projectId)}</span>{/if}
-                <span>{new Date(d.createdAt).toLocaleString()}</span>
-              </div>
-              {#if d.feedback}
-                <div class="mt-2 px-2 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded text-xs text-amber-300">
-                  💬 {d.feedback}
+    <div class="flex gap-4">
+      <!-- Deliverables list -->
+      <div class="flex-1 space-y-2 min-w-0">
+        {#each filtered as d (d.id)}
+          {@const badge = getStatusBadge(d.status)}
+          <div
+            class="bg-slate-800 border rounded-lg p-4 cursor-pointer transition-all hover:border-slate-500 {previewDeliverable?.id === d.id ? 'border-blue-500 ring-1 ring-blue-500/30' : 'border-slate-600'}"
+            on:click={() => { previewDeliverable = previewDeliverable?.id === d.id ? null : d; }}
+            role="button"
+            tabindex="0"
+            on:keydown={(e) => e.key === 'Enter' && (previewDeliverable = previewDeliverable?.id === d.id ? null : d)}
+          >
+            <div class="flex items-start gap-3">
+              <span class="text-xl flex-shrink-0 mt-0.5">{getTypeIcon(d.type)}</span>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-start gap-2 flex-wrap">
+                  <p class="font-semibold text-slate-100">{d.title}</p>
+                  <span class="text-xs px-2 py-0.5 rounded border {badge.classes} flex-shrink-0">{badge.label}</span>
                 </div>
-              {/if}
+                <div class="flex items-center gap-3 mt-1 text-xs text-slate-500 flex-wrap">
+                  {#if d.agentId}<span>🤖 {d.agentId}</span>{/if}
+                  {#if d.projectId}<span>📁 {getProjectName(d.projectId)}</span>{/if}
+                  <span>{new Date(d.createdAt).toLocaleString()}</span>
+                </div>
+                {#if d.feedback}
+                  <div class="mt-2 px-2 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded text-xs text-amber-300">
+                    💬 {d.feedback}
+                  </div>
+                {/if}
+              </div>
+              <!-- Action buttons -->
+              <!-- svelte-ignore a11y-no-static-element-interactions a11y-click-events-have-key-events -->
+              <div class="flex items-center gap-1 flex-shrink-0" on:click|stopPropagation role="none">
+                {#if d.content || d.filePath}
+                  <button
+                    on:click={() => downloadDeliverable(d)}
+                    class="text-xs px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+                    title="Download"
+                  >⬇</button>
+                {/if}
+                {#if d.status === 'review' || d.status === 'pending_review'}
+                  <button
+                    on:click={() => { reviewingId = reviewingId === d.id ? null : d.id; reviewFeedback = ''; previewDeliverable = d; }}
+                    class="text-xs px-2 py-1 bg-purple-600 hover:bg-purple-700 rounded text-white"
+                  >📋 Review</button>
+                {/if}
+                <button
+                  on:click={() => handleDelete(d.id)}
+                  class="text-xs px-2 py-1 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-colors"
+                  title="Delete"
+                >✕</button>
+              </div>
             </div>
 
-            <!-- Action buttons (always visible) + eye icon (hover) -->
-            <!-- svelte-ignore a11y-no-static-element-interactions a11y-click-events-have-key-events -->
-            <div class="flex items-center gap-1 flex-shrink-0" on:click|stopPropagation role="none">
-              <!-- 👁 Preview eye — visible on row hover -->
-              <button
-                on:click={() => { previewDeliverable = previewDeliverable?.id === d.id ? null : JSON.parse(JSON.stringify(d)) as Deliverable; }}
-                class="text-sm px-2 py-1 rounded text-slate-400 hover:text-blue-300 hover:bg-blue-500/10 transition-all opacity-0 group-hover:opacity-100"
-                title="Preview"
-              >👁</button>
-              {#if d.content || d.filePath}
-                <button
-                  on:click={() => downloadDeliverable(d)}
-                  class="text-xs px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded transition-colors"
-                  title="Download"
-                >⬇</button>
-              {/if}
-              <button
-                on:click={() => handleDelete(d.id)}
-                class="text-xs px-2 py-1 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-colors"
-                title="Delete"
-              >✕</button>
+            <!-- Inline review panel -->
+            {#if reviewingId === d.id}
+              <!-- svelte-ignore a11y-no-static-element-interactions a11y-click-events-have-key-events -->
+              <div class="mt-3 pt-3 border-t border-slate-600" on:click|stopPropagation role="none">
+                <p class="text-xs text-slate-400 mb-2">Review "{d.title}"</p>
+                <input
+                  type="text"
+                  bind:value={reviewFeedback}
+                  placeholder="Optional feedback for the agent..."
+                  class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 mb-2"
+                />
+                <div class="flex gap-2 flex-wrap">
+                  <button on:click={() => handleReview(d.id, 'approved')} class="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-sm text-white font-medium">✅ Approve</button>
+                  <button on:click={() => handleReview(d.id, 'changes_requested')} class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 rounded text-sm text-white font-medium">🔄 Request Changes</button>
+                  <button on:click={() => handleReview(d.id, 'rejected')} class="px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded text-sm text-white font-medium">❌ Reject</button>
+                  <button on:click={() => { reviewingId = null; reviewFeedback = ''; }} class="px-3 py-1.5 bg-slate-600 hover:bg-slate-500 rounded text-sm">Cancel</button>
+                </div>
+              </div>
+            {/if}
+          </div>
+        {/each}
+      </div>
+
+      <!-- Preview side panel -->
+      {#if previewDeliverable}
+        <div class="w-[480px] flex-shrink-0 bg-slate-800 border border-slate-600 rounded-lg flex flex-col max-h-[calc(100vh-200px)] sticky top-4">
+          <div class="px-4 py-3 border-b border-slate-600 flex items-center justify-between">
+            <div>
+              <p class="font-semibold text-slate-100">{previewDeliverable.title}</p>
+              <p class="text-xs text-slate-500 capitalize">{previewDeliverable.type} · {new Date(previewDeliverable.createdAt).toLocaleDateString()}</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button on:click={() => previewDeliverable = null} class="text-slate-400 hover:text-slate-200 text-lg leading-none">×</button>
             </div>
           </div>
+          <div class="flex-1 overflow-y-auto p-4">
+            {#if previewDeliverable.content}
+              {#if previewDeliverable.type === 'markdown'}
+                <div class="prose prose-invert prose-sm max-w-none text-slate-200 text-sm leading-relaxed">
+                  <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+                  {@html '<p class="mb-2">' + renderMarkdown(previewDeliverable.content) + '</p>'}
+                </div>
+              {:else if previewDeliverable.type === 'csv'}
+                <div class="overflow-x-auto">
+                  <table class="text-xs w-full border-collapse">
+                    {#each previewDeliverable.content.trim().split('\n') as row, i}
+                      <tr class="{i === 0 ? 'font-semibold bg-slate-600' : 'even:bg-slate-700/40'}">
+                        {#each row.split(',') as cell}
+                          <td class="border border-slate-600 px-2 py-1 text-slate-200">{cell.trim()}</td>
+                        {/each}
+                      </tr>
+                    {/each}
+                  </table>
+                </div>
+              {:else}
+                <pre class="text-sm text-slate-300 whitespace-pre-wrap">{previewDeliverable.content}</pre>
+              {/if}
+            {:else if previewDeliverable.filePath}
+              <div class="flex flex-col items-center justify-center gap-4 py-10 text-center">
+                <div class="text-5xl">📁</div>
+                <div>
+                  <p class="text-slate-200 font-medium mb-4">{previewDeliverable.title}</p>
+                  <button
+                    on:click={() => downloadDeliverable(previewDeliverable!)}
+                    class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-semibold text-sm transition-colors inline-flex items-center gap-2"
+                  >⬇ Download File</button>
+                </div>
+                <p class="text-xs text-slate-500">Preview not available for this file type. Download to open it.</p>
+              </div>
+            {:else}
+              <p class="text-slate-500 text-sm italic">No content available for preview.</p>
+            {/if}
+
+            {#if previewDeliverable.feedback}
+              <div class="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded text-sm text-amber-300">
+                <strong>Feedback:</strong> {previewDeliverable.feedback}
+              </div>
+            {/if}
+          </div>
+
+          <!-- Review actions panel — shown when deliverable is awaiting review -->
+          {#if previewDeliverable.status === 'review' || previewDeliverable.status === 'pending_review'}
+            <div class="border-t border-slate-600 px-4 py-3 bg-slate-800/50 rounded-b-lg">
+              <p class="text-xs font-medium text-slate-400 mb-2">📋 Review Actions</p>
+              <textarea
+                bind:value={reviewFeedback}
+                placeholder="Optional feedback or comments for the agent..."
+                rows="2"
+                class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 mb-2 resize-none"
+              ></textarea>
+              <div class="flex gap-2 flex-wrap">
+                <button
+                  on:click={() => handleReview(previewDeliverable!.id, 'approved')}
+                  class="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-sm text-white font-medium transition-colors"
+                >✅ Approve</button>
+                <button
+                  on:click={() => handleReview(previewDeliverable!.id, 'changes_requested')}
+                  class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 rounded text-sm text-white font-medium transition-colors"
+                >🔄 Send Back with Comments</button>
+                <button
+                  on:click={() => handleReview(previewDeliverable!.id, 'rejected')}
+                  class="px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded text-sm text-white font-medium transition-colors"
+                >❌ Reject</button>
+              </div>
+            </div>
+          {/if}
         </div>
-      {/each}
+      {/if}
     </div>
   {/if}
-
-  <!-- Slide-out preview panel (fixed overlay from right) -->
-  <DeliverablePreviewPanel
-    deliverable={previewDeliverable}
-    onClose={() => { previewDeliverable = null; }}
-    onReview={(action, fb) => handleReview(previewDeliverable!.id, action, fb)}
-  />
 </div>
