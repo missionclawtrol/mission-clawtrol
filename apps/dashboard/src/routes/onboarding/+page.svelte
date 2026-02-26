@@ -48,6 +48,29 @@
 
   type FileMap = Record<string, UploadedFile[]>;
 
+  // ── State: API Keys ────────────────────────────────────────────────────────
+
+  interface ApiKeyStatus {
+    anthropicKey: string;
+    anthropicConfigured: boolean;
+    openaiKey: string;
+    openaiConfigured: boolean;
+  }
+
+  let apiKeys: ApiKeyStatus = {
+    anthropicKey: '',
+    anthropicConfigured: false,
+    openaiKey: '',
+    openaiConfigured: false,
+  };
+  let apiKeyInput = { anthropicKey: '', openaiKey: '' };
+  let showAnthropicKey = false;
+  let showOpenaiKey = false;
+  let showOpenaiTooltip = false;
+  let apiKeysSaving = false;
+  let apiKeysSaveMsg = '';
+  let apiKeysLoading = true;
+
   // ── State: Company ─────────────────────────────────────────────────────────
 
   let company: CompanyProfile = {
@@ -122,6 +145,59 @@
   }
 
   // ── API Calls ──────────────────────────────────────────────────────────────
+
+  async function loadApiKeys() {
+    apiKeysLoading = true;
+    try {
+      const res = await fetch(`${API_BASE}/api/onboarding/api-keys`, { credentials: 'include' });
+      if (res.ok) {
+        apiKeys = await res.json();
+        // Pre-fill inputs with masked values so user knows they're set
+        if (apiKeys.anthropicConfigured) apiKeyInput.anthropicKey = apiKeys.anthropicKey;
+        if (apiKeys.openaiConfigured) apiKeyInput.openaiKey = apiKeys.openaiKey;
+      }
+    } catch (e) {
+      console.error('Failed to load API key status', e);
+    } finally {
+      apiKeysLoading = false;
+    }
+  }
+
+  async function saveApiKeys() {
+    apiKeysSaving = true;
+    apiKeysSaveMsg = '';
+    try {
+      const body: Record<string, string> = {};
+      if (apiKeyInput.anthropicKey && !apiKeyInput.anthropicKey.includes('***')) {
+        body.anthropicKey = apiKeyInput.anthropicKey;
+      }
+      if (apiKeyInput.openaiKey && !apiKeyInput.openaiKey.includes('***')) {
+        body.openaiKey = apiKeyInput.openaiKey;
+      }
+      if (Object.keys(body).length === 0) {
+        apiKeysSaveMsg = '⚠️ No new keys to save (masked values are unchanged)';
+        return;
+      }
+      const res = await fetch(`${API_BASE}/api/onboarding/api-keys`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        apiKeysSaveMsg = '✅ API keys saved';
+        await loadApiKeys();
+      } else {
+        const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+        apiKeysSaveMsg = `❌ ${err.error || 'Failed to save'}`;
+      }
+    } catch {
+      apiKeysSaveMsg = '❌ Network error';
+    } finally {
+      apiKeysSaving = false;
+      setTimeout(() => (apiKeysSaveMsg = ''), 5000);
+    }
+  }
 
   async function loadCompany() {
     companyLoading = true;
@@ -277,6 +353,7 @@
   }
 
   onMount(() => {
+    loadApiKeys();
     loadCompany();
     loadAgents();
     loadFiles();
@@ -291,6 +368,147 @@
       <p class="text-sm text-slate-400 mt-0.5">Set up your company knowledge base and train your AI team</p>
     </div>
   </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       SECTION 0: API KEYS & CONFIGURATION
+       ══════════════════════════════════════════════════════════════════════ -->
+  <section>
+    <div class="flex items-center gap-2 mb-4">
+      <span class="text-xl">🔑</span>
+      <h2 class="text-lg font-semibold">API Keys & Configuration</h2>
+      <span class="text-xs text-slate-500 ml-1">— required to power AI agents</span>
+    </div>
+
+    {#if apiKeysLoading}
+      <div class="bg-slate-800 border border-slate-700 rounded-lg p-8 text-center text-slate-400">
+        Loading key status...
+      </div>
+    {:else}
+      <div class="bg-slate-800 border border-slate-700 rounded-lg divide-y divide-slate-700">
+
+        <!-- Warning banner if Anthropic key is missing -->
+        {#if !apiKeys.anthropicConfigured}
+          <div class="px-6 py-3 bg-amber-900/30 border-b border-amber-700/50 rounded-t-lg">
+            <p class="text-sm text-amber-300 flex items-center gap-2">
+              <span>⚠️</span>
+              <span>Anthropic API key required — agents will not work until this is set</span>
+            </p>
+          </div>
+        {/if}
+
+        <div class="p-6 space-y-6">
+
+          <!-- Anthropic API Key -->
+          <div>
+            <div class="flex items-center gap-2 mb-1">
+              <label class="block text-sm font-medium text-slate-300">Anthropic API Key</label>
+              <span class="text-xs font-medium text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full">Required</span>
+              {#if apiKeys.anthropicConfigured}
+                <span class="text-xs text-green-400 flex items-center gap-1">
+                  <span class="text-base leading-none">✅</span>
+                  Configured
+                </span>
+              {/if}
+            </div>
+            <div class="flex gap-2">
+              <div class="relative flex-1">
+                <input
+                  bind:value={apiKeyInput.anthropicKey}
+                  type={showAnthropicKey ? 'text' : 'password'}
+                  placeholder="sk-ant-..."
+                  autocomplete="off"
+                  class="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-sm pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono"
+                />
+                <button
+                  type="button"
+                  on:click={() => (showAnthropicKey = !showAnthropicKey)}
+                  class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 text-xs px-1"
+                  title={showAnthropicKey ? 'Hide' : 'Show'}
+                >
+                  {showAnthropicKey ? '🙈' : '👁'}
+                </button>
+              </div>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">
+              Required — powers all AI agents. Get yours at
+              <a href="https://console.anthropic.com" target="_blank" rel="noreferrer" class="text-blue-400 hover:underline">console.anthropic.com</a>
+            </p>
+          </div>
+
+          <!-- OpenAI API Key -->
+          <div>
+            <div class="flex items-center gap-2 mb-1">
+              <label class="block text-sm font-medium text-slate-300">OpenAI API Key</label>
+              <span class="text-xs font-medium text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full">Recommended</span>
+              {#if apiKeys.openaiConfigured}
+                <span class="text-xs text-green-400 flex items-center gap-1">
+                  <span class="text-base leading-none">✅</span>
+                  Configured
+                </span>
+              {/if}
+              <!-- Info tooltip -->
+              <div class="relative">
+                <button
+                  type="button"
+                  on:mouseenter={() => (showOpenaiTooltip = true)}
+                  on:mouseleave={() => (showOpenaiTooltip = false)}
+                  on:focus={() => (showOpenaiTooltip = true)}
+                  on:blur={() => (showOpenaiTooltip = false)}
+                  class="text-slate-500 hover:text-slate-300 text-xs w-4 h-4 rounded-full border border-slate-600 flex items-center justify-center leading-none"
+                  aria-label="Info about OpenAI key"
+                >
+                  i
+                </button>
+                {#if showOpenaiTooltip}
+                  <div class="absolute left-6 top-0 z-10 w-72 p-3 bg-slate-700 border border-slate-600 rounded-lg text-xs text-slate-300 shadow-xl">
+                    OpenClaw uses OpenAI embeddings to power <code class="bg-slate-900 px-1 rounded">memory_search</code> (fuzzy/semantic recall across agent notes). Without it, only direct file reads work.
+                  </div>
+                {/if}
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <div class="relative flex-1">
+                <input
+                  bind:value={apiKeyInput.openaiKey}
+                  type={showOpenaiKey ? 'text' : 'password'}
+                  placeholder="sk-..."
+                  autocomplete="off"
+                  class="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-sm pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono"
+                />
+                <button
+                  type="button"
+                  on:click={() => (showOpenaiKey = !showOpenaiKey)}
+                  class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 text-xs px-1"
+                  title={showOpenaiKey ? 'Hide' : 'Show'}
+                >
+                  {showOpenaiKey ? '🙈' : '👁'}
+                </button>
+              </div>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">
+              Optional — enables enhanced memory search. Without this, agents work but cannot do semantic memory lookups.
+            </p>
+          </div>
+
+        </div>
+
+        <!-- Save Button -->
+        <div class="p-6 flex items-center justify-end gap-3">
+          {#if apiKeysSaveMsg}
+            <span class="text-sm {apiKeysSaveMsg.startsWith('✅') ? 'text-green-400' : apiKeysSaveMsg.startsWith('⚠️') ? 'text-amber-400' : 'text-red-400'}">{apiKeysSaveMsg}</span>
+          {/if}
+          <button
+            on:click={saveApiKeys}
+            disabled={apiKeysSaving}
+            class="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg font-medium transition-colors"
+          >
+            {apiKeysSaving ? 'Saving...' : 'Save API Keys'}
+          </button>
+        </div>
+
+      </div>
+    {/if}
+  </section>
 
   <!-- ═══════════════════════════════════════════════════════════════════════
        SECTION 1: COMPANY KNOWLEDGE

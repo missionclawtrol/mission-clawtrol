@@ -3,6 +3,7 @@ import { promises as fs } from 'fs';
 import { join, extname } from 'path';
 import crypto from 'crypto';
 
+const OPENCLAW_CONFIG_PATH = join(process.env.HOME || '/root', '.openclaw', 'openclaw.json');
 const BUSINESS_DIR = join(process.env.HOME || '/root', '.openclaw', 'business');
 const PROFILE_JSON = join(BUSINESS_DIR, 'PROFILE.json');
 const PROFILE_MD = join(BUSINESS_DIR, 'PROFILE.md');
@@ -125,6 +126,57 @@ const DEFAULT_TRAINING: AgentTraining = {
   tools: [],
 };
 
+// ── API Key Helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Read openclaw.json safely, returning {} on failure
+ */
+async function readOpenClawConfig(): Promise<Record<string, any>> {
+  try {
+    const raw = await fs.readFile(OPENCLAW_CONFIG_PATH, 'utf-8');
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Write openclaw.json with a deep merge of the provided patch
+ */
+async function writeOpenClawConfig(patch: Record<string, any>): Promise<void> {
+  const existing = await readOpenClawConfig();
+  const merged = deepMerge(existing, patch);
+  await fs.writeFile(OPENCLAW_CONFIG_PATH, JSON.stringify(merged, null, 4), 'utf-8');
+}
+
+function deepMerge(target: Record<string, any>, source: Record<string, any>): Record<string, any> {
+  const result = { ...target };
+  for (const key of Object.keys(source)) {
+    if (
+      source[key] !== null &&
+      typeof source[key] === 'object' &&
+      !Array.isArray(source[key]) &&
+      target[key] !== null &&
+      typeof target[key] === 'object' &&
+      !Array.isArray(target[key])
+    ) {
+      result[key] = deepMerge(target[key] as Record<string, any>, source[key]);
+    } else {
+      result[key] = source[key];
+    }
+  }
+  return result;
+}
+
+/**
+ * Mask an API key: show first 8 chars then ***
+ * e.g. "sk-ant-api03-abc..." → "sk-ant-a***"
+ */
+function maskKey(key: string): string {
+  if (!key || key.length < 8) return '***';
+  return key.slice(0, 8) + '***';
+}
+
 export async function onboardingRoutes(fastify: FastifyInstance) {
   // Register multipart plugin for file uploads
   await fastify.register(import('@fastify/multipart'), {
@@ -132,6 +184,67 @@ export async function onboardingRoutes(fastify: FastifyInstance) {
       fileSize: 50 * 1024 * 1024, // 50MB
       files: 10,
     },
+  });
+
+  // ── API Keys ─────────────────────────────────────────────────────────────
+
+  // GET /api/onboarding/api-keys
+  fastify.get('/api-keys', async (_request, reply) => {
+    try {
+      const config = await readOpenClawConfig();
+      const env: Record<string, string> = config.env || {};
+
+      const anthropicKey = env.ANTHROPIC_API_KEY || '';
+      const openaiKey = env.OPENAI_API_KEY || '';
+
+      return {
+        anthropicKey: anthropicKey ? maskKey(anthropicKey) : '',
+        anthropicConfigured: !!anthropicKey,
+        openaiKey: openaiKey ? maskKey(openaiKey) : '',
+        openaiConfigured: !!openaiKey,
+      };
+    } catch (err) {
+      fastify.log.error(err);
+      return reply.status(500).send({ error: 'Failed to read API key configuration' });
+    }
+  });
+
+  // PUT /api/onboarding/api-keys
+  fastify.put<{ Body: { anthropicKey?: string; openaiKey?: string } }>('/api-keys', async (request, reply) => {
+    try {
+      const { anthropicKey, openaiKey } = request.body || {};
+
+      // Build env patch — only update keys that were provided and non-empty
+      const envPatch: Record<string, string> = {};
+      if (anthropicKey && anthropicKey.trim() && !anthropicKey.includes('***')) {
+        envPatch.ANTHROPIC_API_KEY = anthropicKey.trim();
+      }
+      if (openaiKey !== undefined && openaiKey.trim() && !openaiKey.includes('***')) {
+        envPatch.OPENAI_API_KEY = openaiKey.trim();
+      }
+
+      if (Object.keys(envPatch).length === 0) {
+        return reply.status(400).send({ error: 'No valid keys provided' });
+      }
+
+      // Check config is writable before attempting write
+      try {
+        await fs.access(OPENCLAW_CONFIG_PATH, fs.constants.W_OK);
+      } catch {
+        return reply.status(500).send({
+          error: `Config file is not writable: ${OPENCLAW_CONFIG_PATH}. Check file permissions.`,
+        });
+      }
+
+      await writeOpenClawConfig({ env: envPatch });
+
+      return { ok: true };
+    } catch (err: any) {
+      fastify.log.error(err);
+      return reply.status(500).send({
+        error: err?.message || 'Failed to save API keys',
+      });
+    }
   });
 
   // ── Company Profile ──────────────────────────────────────────────────────
