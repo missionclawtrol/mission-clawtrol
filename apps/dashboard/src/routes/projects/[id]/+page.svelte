@@ -4,6 +4,7 @@
   import { page } from '$app/stores';
   import { fetchProject, fetchTasks, createTask, updateTask, deleteTask, type Task, type Project } from '$lib/api';
   import { getApiBase } from '$lib/config';
+  import FileManager from '$lib/components/FileManager.svelte';
   
   let projectId = '';
   let project: Project | null = null;
@@ -608,8 +609,14 @@
       </button>
     </div>
     
-    <!-- Tasks List -->
-    <div class="flex-1 overflow-y-auto px-6 py-4">
+    <!-- Tasks + File Manager -->
+    <div class="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+      <!-- File Manager -->
+      {#if project}
+        <FileManager projectId={projectId} />
+      {/if}
+
+      <!-- Tasks -->
       {#if tasks.length === 0}
         <div class="text-center py-8 text-slate-500">
           <div class="text-2xl mb-2">📭</div>

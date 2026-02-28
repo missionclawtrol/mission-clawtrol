@@ -31,6 +31,7 @@ import { agentsConfigRoutes } from './routes/agents-config.js';
 import { chatProxyRoutes } from './routes/chat-proxy.js';
 import { ptyRoutes } from './routes/pty.js';
 import { onboardingRoutes } from './routes/onboarding.js';
+import { projectFilesRoutes } from './routes/project-files.js';
 import { rulesRoutes } from './routes/rules.js';
 import { agentMemoryRoutes } from './routes/agent-memory.js';
 import { deliverableRoutes, taskDeliverableRoutes } from './routes/deliverables.js';
@@ -532,6 +533,7 @@ if (process.env.DISABLE_AUTH === 'true') {
 // Routes
 await fastify.register(agentRoutes, { prefix: '/api/agents' });
 await fastify.register(projectRoutes, { prefix: '/api/projects' });
+await fastify.register(projectFilesRoutes, { prefix: '/api/projects' });
 await fastify.register(activityRoutes, { prefix: '/api/activity' });
 await fastify.register(approvalRoutes, { prefix: '/api/approvals' });
 await fastify.register(taskRoutes, { prefix: '/api/tasks' });
