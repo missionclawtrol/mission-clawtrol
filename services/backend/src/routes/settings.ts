@@ -1,5 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { db, getRawDb } from '../database.js';
+import { spawn } from 'child_process';
+import { join } from 'path';
 
 export interface Settings {
   humanHourlyRate: number;
@@ -76,6 +78,99 @@ export async function settingsRoutes(fastify: FastifyInstance) {
     } catch (error) {
       fastify.log.error(error);
       return reply.status(500).send({ error: 'Failed to update settings' });
+    }
+  });
+
+  // POST /settings/update - self-update: git pull, build dashboard, restart services
+  // Streams progress via Server-Sent Events (SSE)
+  fastify.post('/update', async (request, reply) => {
+    // Determine repo root — walk up from __dirname until we find update.sh
+    const repoRoot = join(new URL(import.meta.url).pathname, '..', '..', '..', '..', '..').replace(/\/+$/, '');
+
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+
+    const send = (type: string, message: string) => {
+      try {
+        reply.raw.write(`data: ${JSON.stringify({ type, message, ts: new Date().toISOString() })}\n\n`);
+      } catch {
+        // Client disconnected
+      }
+    };
+
+    const runCommand = (cmd: string, args: string[], cwd: string): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        const proc = spawn(cmd, args, { cwd, shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
+
+        proc.stdout.on('data', (data: Buffer) => {
+          const lines = data.toString().split('\n').filter(l => l.trim());
+          for (const line of lines) send('output', line);
+        });
+
+        proc.stderr.on('data', (data: Buffer) => {
+          const lines = data.toString().split('\n').filter(l => l.trim());
+          for (const line of lines) send('output', line);
+        });
+
+        proc.on('close', (code) => {
+          if (code === 0) {
+            resolve();
+          } else {
+            reject(new Error(`Command exited with code ${code}`));
+          }
+        });
+
+        proc.on('error', reject);
+      });
+    };
+
+    try {
+      // Step 1: git pull
+      send('step', '📥 Pulling latest from origin...');
+      try {
+        await runCommand('git', ['pull', '--ff-only', 'origin', 'main'], repoRoot);
+        send('step', '✅ Git pull complete');
+      } catch (err: any) {
+        send('error', `❌ Git pull failed: ${err.message}`);
+        reply.raw.end();
+        return;
+      }
+
+      // Step 2: build dashboard
+      send('step', '🔨 Building dashboard...');
+      try {
+        await runCommand('npm', ['install'], join(repoRoot, 'apps', 'dashboard'));
+        await runCommand('npm', ['run', 'build'], join(repoRoot, 'apps', 'dashboard'));
+        send('step', '✅ Dashboard build complete');
+      } catch (err: any) {
+        send('error', `❌ Build failed: ${err.message}`);
+        reply.raw.end();
+        return;
+      }
+
+      // Step 3: restart services — fire and forget (the dashboard will restart mid-response)
+      send('step', '🔄 Restarting services...');
+      send('restarting', '⏳ Dashboard is restarting — page will reload automatically...');
+
+      // Small delay so the SSE message makes it to the client before the server goes down
+      await new Promise(r => setTimeout(r, 500));
+      reply.raw.end();
+
+      // Restart after SSE connection closed
+      setTimeout(() => {
+        spawn('systemctl', ['restart', 'mission-clawtrol-backend', 'mission-clawtrol-dashboard'], {
+          detached: true,
+          stdio: 'ignore',
+        }).unref();
+      }, 200);
+
+    } catch (err: any) {
+      send('error', `❌ Update failed: ${err.message}`);
+      reply.raw.end();
     }
   });
 }

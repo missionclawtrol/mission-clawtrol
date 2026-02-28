@@ -5,6 +5,94 @@
   const API_BASE = getBackendBase();
   const WS_URL = getWsUrl();
 
+  // ── Self-Update ──────────────────────────────────────────────────────────────
+  type UpdateState = 'idle' | 'running' | 'restarting' | 'error';
+  let updateState: UpdateState = 'idle';
+  let updateLog: { type: string; message: string }[] = [];
+
+  async function runUpdate() {
+    updateState = 'running';
+    updateLog = [];
+
+    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+    try {
+      const res = await fetch(`${API_BASE}/api/settings/update`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      if (!res.ok || !res.body) {
+        updateLog = [...updateLog, { type: 'error', message: `❌ Failed to start update (HTTP ${res.status})` }];
+        updateState = 'error';
+        return;
+      }
+
+      reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() ?? '';
+
+        for (const part of parts) {
+          const line = part.trim();
+          if (!line.startsWith('data:')) continue;
+          try {
+            const event = JSON.parse(line.slice(5).trim());
+            updateLog = [...updateLog, { type: event.type, message: event.message }];
+
+            if (event.type === 'restarting') {
+              updateState = 'restarting';
+              // Dashboard is restarting — poll until it comes back, then reload
+              pollUntilBack();
+              return;
+            }
+            if (event.type === 'error') {
+              updateState = 'error';
+            }
+          } catch {
+            // ignore parse errors
+          }
+        }
+      }
+
+      // Stream ended without restarting — either success or error
+      const hasError = updateLog.some(e => e.type === 'error');
+      if (!hasError) updateState = 'idle';
+
+    } catch (err: any) {
+      // If the connection drops it means the server restarted — show reload state
+      if (updateState === 'restarting') return;
+      updateLog = [...updateLog, { type: 'error', message: `❌ ${err.message}` }];
+      updateState = 'error';
+    } finally {
+      try { reader?.cancel(); } catch {}
+    }
+  }
+
+  function pollUntilBack() {
+    const poll = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/health`);
+        if (res.ok) {
+          updateLog = [...updateLog, { type: 'step', message: '✅ Services back online — reloading...' }];
+          setTimeout(() => window.location.reload(), 1200);
+          return;
+        }
+      } catch {
+        // Still down — keep polling
+      }
+      setTimeout(poll, 2000);
+    };
+    // Give it a moment before starting to poll
+    setTimeout(poll, 3000);
+  }
+
   let settings = {
     alerts: {
       browserPush: true,
@@ -287,6 +375,57 @@
     </div>
   </div>
   
+  <!-- Self-Update -->
+  <div class="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-4">
+    <h3 class="font-medium mb-1">🚀 Update Mission Clawtrol</h3>
+    <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">
+      Pull the latest code from <code class="bg-gray-100 dark:bg-slate-700 px-1 rounded">origin main</code>,
+      rebuild the dashboard, and restart services automatically.
+    </p>
+
+    <div class="flex items-center gap-3 mb-4">
+      <button
+        on:click={runUpdate}
+        disabled={updateState === 'running' || updateState === 'restarting'}
+        class="px-5 py-2 rounded font-medium transition-colors text-sm
+          {updateState === 'running' || updateState === 'restarting'
+            ? 'bg-slate-400 dark:bg-slate-600 cursor-not-allowed opacity-70 text-white'
+            : 'bg-indigo-600 hover:bg-indigo-700 text-white'}"
+      >
+        {#if updateState === 'running'}
+          ⏳ Updating...
+        {:else if updateState === 'restarting'}
+          🔄 Restarting...
+        {:else}
+          ⬆️ Update to Latest
+        {/if}
+      </button>
+
+      {#if updateState === 'error'}
+        <span class="text-sm text-red-400">Update failed — check log below</span>
+      {/if}
+      {#if updateState === 'restarting'}
+        <span class="text-sm text-yellow-400 animate-pulse">Waiting for services to come back online…</span>
+      {/if}
+    </div>
+
+    {#if updateLog.length > 0}
+      <div class="bg-slate-950 dark:bg-black rounded-lg p-3 font-mono text-xs max-h-64 overflow-y-auto space-y-0.5">
+        {#each updateLog as entry}
+          <div class="
+            {entry.type === 'error' ? 'text-red-400' :
+             entry.type === 'step' ? 'text-green-400' :
+             entry.type === 'restarting' ? 'text-yellow-400' :
+             'text-slate-300'}
+          ">{entry.message}</div>
+        {/each}
+        {#if updateState === 'running' || updateState === 'restarting'}
+          <div class="text-slate-500 animate-pulse">▌</div>
+        {/if}
+      </div>
+    {/if}
+  </div>
+
   <!-- Save Button -->
   <div class="flex items-center justify-end gap-3">
     {#if saveMessage}
