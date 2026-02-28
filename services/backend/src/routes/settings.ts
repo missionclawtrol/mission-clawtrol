@@ -143,7 +143,8 @@ export async function settingsRoutes(fastify: FastifyInstance) {
       // Step 2: build dashboard
       send('step', '🔨 Building dashboard...');
       try {
-        await runCommand('npm', ['install'], join(repoRoot, 'apps', 'dashboard'));
+        await runCommand('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund'], join(repoRoot, 'apps', 'dashboard'));
+        await runCommand('npx', ['svelte-kit', 'sync'], join(repoRoot, 'apps', 'dashboard'));
         await runCommand('npm', ['run', 'build'], join(repoRoot, 'apps', 'dashboard'));
         send('step', '✅ Dashboard build complete');
       } catch (err: any) {
