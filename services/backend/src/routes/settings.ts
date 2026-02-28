@@ -143,9 +143,11 @@ export async function settingsRoutes(fastify: FastifyInstance) {
       // Step 2: build dashboard
       send('step', '🔨 Building dashboard...');
       try {
-        await runCommand('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund'], join(repoRoot, 'apps', 'dashboard'));
-        await runCommand('npx', ['svelte-kit', 'sync'], join(repoRoot, 'apps', 'dashboard'));
-        await runCommand('npm', ['run', 'build'], join(repoRoot, 'apps', 'dashboard'));
+        // Clean install to avoid lockfile/dep corruption
+        const dashDir = join(repoRoot, 'apps', 'dashboard');
+        await runCommand('rm', ['-rf', 'node_modules', 'package-lock.json'], dashDir);
+        await runCommand('npm', ['install', '--no-audit', '--no-fund'], dashDir);
+        await runCommand('npm', ['run', 'build'], dashDir);
         send('step', '✅ Dashboard build complete');
       } catch (err: any) {
         send('error', `❌ Build failed: ${err.message}`);
