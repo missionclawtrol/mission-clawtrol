@@ -146,7 +146,7 @@ export async function settingsRoutes(fastify: FastifyInstance) {
         // Clean install to avoid lockfile/dep corruption
         const dashDir = join(repoRoot, 'apps', 'dashboard');
         await runCommand('rm', ['-rf', 'node_modules', 'package-lock.json'], dashDir);
-        await runCommand('npm', ['install', '--no-audit', '--no-fund'], dashDir);
+        await runCommand('npm', ['install', '--include=dev', '--no-audit', '--no-fund'], dashDir);
         await runCommand('npm', ['run', 'build'], dashDir);
         send('step', '✅ Dashboard build complete');
       } catch (err: any) {
