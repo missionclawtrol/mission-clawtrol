@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { api, fetchSetupStatus, createMinimumAgents, fetchAgentsConfig, createAgentConfig, updateAgentConfig, deleteAgentConfig, type SetupStatus } from '$lib/api';
+  import { api, fetchSetupStatus, createMinimumAgents, createTeam, fetchAgentsConfig, createAgentConfig, updateAgentConfig, deleteAgentConfig, type SetupStatus, type CreateTeamResult } from '$lib/api';
 
   interface RosterAgent {
     id: string;
@@ -25,6 +25,13 @@
   let setupStatus: SetupStatus | null = null;
   let creatingMinimumAgents = false;
   let minAgentsError: string | null = null;
+
+  // Create Team modal state
+  let showCreateTeamModal = false;
+  let creatingTeam = false;
+  let createTeamError: string | null = null;
+  let createTeamResult: CreateTeamResult | null = null;
+  let snippetCopied = false;
 
   // Modal state — Details & Message
   let showDetailsModal = false;
@@ -85,6 +92,41 @@
       minAgentsError = err instanceof Error ? err.message : 'Failed to create agents';
     } finally {
       creatingMinimumAgents = false;
+    }
+  }
+
+  async function handleCreateTeam() {
+    creatingTeam = true;
+    createTeamError = null;
+    createTeamResult = null;
+    try {
+      createTeamResult = await createTeam();
+      showCreateTeamModal = true;
+      await Promise.all([loadRoster(), loadSetupStatus()]);
+    } catch (err) {
+      createTeamError = err instanceof Error ? err.message : 'Failed to create team';
+    } finally {
+      creatingTeam = false;
+    }
+  }
+
+  function closeCreateTeamModal() {
+    showCreateTeamModal = false;
+    createTeamResult = null;
+    snippetCopied = false;
+  }
+
+  async function copySnippet() {
+    if (!createTeamResult) return;
+    const json = JSON.stringify({ agents: { list: createTeamResult.snippet } }, null, 2);
+    // Format as just the array items to paste into existing list
+    const arrayContent = JSON.stringify(createTeamResult.snippet, null, 2);
+    try {
+      await navigator.clipboard.writeText(arrayContent);
+      snippetCopied = true;
+      setTimeout(() => (snippetCopied = false), 3000);
+    } catch {
+      // Fallback: select the textarea
     }
   }
 
@@ -302,25 +344,103 @@
     </div>
   </div>
 
-  <!-- Minimum Agents Banner -->
+  <!-- Getting Started / Create Team Banner -->
   {#if setupStatus && setupStatus.partialAgents < setupStatus.totalAgents}
     <div class="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center justify-between gap-4">
       <div>
-        <p class="font-medium text-amber-400">⚠️ Missing team members</p>
+        <p class="font-medium text-amber-400">🚀 Getting Started — Create your team</p>
         <p class="text-sm text-slate-400 mt-1">
-          Your team is incomplete ({setupStatus.partialAgents}/{setupStatus.totalAgents} agents). Click "Create Team" to set up the full roster.
+          Your team is incomplete ({setupStatus.partialAgents}/{setupStatus.totalAgents} agents configured in OpenClaw).
+          Click <strong class="text-slate-300">Create Team</strong> to set up workspace directories and get the config snippet to paste into your <code class="text-xs bg-slate-700 px-1 py-0.5 rounded">openclaw.json</code>.
         </p>
-        {#if minAgentsError}
-          <p class="text-sm text-red-400 mt-1">{minAgentsError}</p>
+        {#if createTeamError}
+          <p class="text-sm text-red-400 mt-1">{createTeamError}</p>
         {/if}
       </div>
       <button
-        on:click={handleCreateMinimumAgents}
-        disabled={creatingMinimumAgents}
-        class="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium flex-shrink-0"
+        on:click={handleCreateTeam}
+        disabled={creatingTeam}
+        class="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium flex-shrink-0 whitespace-nowrap"
       >
-        {creatingMinimumAgents ? 'Creating...' : 'Create Minimum Agents'}
+        {creatingTeam ? 'Creating...' : '✨ Create Team'}
       </button>
+    </div>
+  {/if}
+
+  <!-- Create Team Success Modal -->
+  {#if showCreateTeamModal && createTeamResult}
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+      <div class="bg-slate-800 border border-slate-600 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+        <!-- Modal Header -->
+        <div class="flex items-center justify-between p-5 border-b border-slate-700">
+          <div class="flex items-center gap-3">
+            <span class="text-2xl">✅</span>
+            <div>
+              <h2 class="text-lg font-semibold text-slate-100">Team Workspaces Created!</h2>
+              <p class="text-sm text-slate-400">
+                {createTeamResult.created.length} workspace{createTeamResult.created.length !== 1 ? 's' : ''} created
+                {createTeamResult.skipped.length > 0 ? `, ${createTeamResult.skipped.length} already existed` : ''}
+              </p>
+            </div>
+          </div>
+          <button on:click={closeCreateTeamModal} class="text-slate-400 hover:text-slate-200 text-xl p-1">✕</button>
+        </div>
+
+        <!-- Modal Body -->
+        <div class="p-5 space-y-4 overflow-y-auto flex-1">
+          <!-- Instructions -->
+          <div class="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+            <p class="text-sm font-medium text-blue-300 mb-2">📋 Next Steps</p>
+            <ol class="space-y-1.5">
+              {#each createTeamResult.instructions as step, i}
+                <li class="text-sm text-slate-300 flex gap-2">
+                  <span class="text-blue-400 font-mono font-medium flex-shrink-0">{i + 1}.</span>
+                  <span>{step}</span>
+                </li>
+              {/each}
+            </ol>
+          </div>
+
+          <!-- JSON Snippet -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <p class="text-sm font-medium text-slate-300">📄 Paste this into <code class="text-xs bg-slate-700 px-1.5 py-0.5 rounded">~/.openclaw/openclaw.json</code> → <code class="text-xs bg-slate-700 px-1.5 py-0.5 rounded">agents.list</code> array:</p>
+              <button
+                on:click={copySnippet}
+                class="px-3 py-1.5 text-xs font-medium rounded transition-colors {snippetCopied ? 'bg-green-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-slate-300'}"
+              >
+                {snippetCopied ? '✅ Copied!' : '📋 Copy'}
+              </button>
+            </div>
+            <pre class="bg-slate-900 border border-slate-700 rounded-lg p-4 text-xs text-slate-300 overflow-auto max-h-64 font-mono leading-relaxed">{JSON.stringify(createTeamResult.snippet, null, 2)}</pre>
+          </div>
+
+          <!-- Created workspaces list -->
+          <div>
+            <p class="text-sm font-medium text-slate-400 mb-2">Workspace files created in:</p>
+            <div class="space-y-1">
+              {#each createTeamResult.snippet as agent}
+                <div class="flex items-center gap-2 text-xs text-slate-500 bg-slate-900/50 px-3 py-1.5 rounded">
+                  <span class="text-slate-300">{agent.identity.emoji}</span>
+                  <span class="text-slate-400 font-medium">{agent.identity.name}</span>
+                  <span class="text-slate-600">→</span>
+                  <code class="text-slate-500 font-mono">{agent.workspace}/</code>
+                </div>
+              {/each}
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal Footer -->
+        <div class="p-5 border-t border-slate-700 flex justify-end gap-3">
+          <button
+            on:click={closeCreateTeamModal}
+            class="px-5 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-medium transition-colors"
+          >
+            Done
+          </button>
+        </div>
+      </div>
     </div>
   {/if}
 

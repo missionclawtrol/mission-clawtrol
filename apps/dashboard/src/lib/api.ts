@@ -840,6 +840,29 @@ export async function createMinimumAgents(): Promise<{ created: string[] }> {
   return res.json();
 }
 
+export interface CreateTeamResult {
+  created: string[];
+  skipped: string[];
+  snippet: Array<{
+    id: string;
+    name: string;
+    workspace: string;
+    model: string;
+    identity: { name: string; emoji: string };
+    groupChat: { mentionPatterns: string[] };
+  }>;
+  instructions: string[];
+}
+
+export async function createTeam(): Promise<CreateTeamResult> {
+  const res = await fetchWithTimeout(`${API_BASE}/setup/create-team`, { method: 'POST' });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as any).error || 'Failed to create team');
+  }
+  return res.json();
+}
+
 export async function createFirstProject(): Promise<{ created: boolean; projectId: string }> {
   const res = await fetchWithTimeout(`${API_BASE}/setup/first-project`, { method: 'POST' });
   if (!res.ok) {
