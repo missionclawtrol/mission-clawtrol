@@ -242,7 +242,7 @@ export async function taskRoutes(fastify: FastifyInstance) {
 
       // Filter by type if provided
       if (type) {
-        const validTypes = ['feature', 'bug', 'chore', 'spike', 'docs'];
+        const validTypes = ['development', 'feature', 'bug', 'chore', 'spike', 'docs'];
         if (!validTypes.includes(type)) {
           return reply.status(400).send({ error: 'Invalid type' });
         }

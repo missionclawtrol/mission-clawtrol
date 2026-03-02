@@ -499,7 +499,7 @@ export interface Task {
   assignedToName?: string | null; // Populated client-side
   dueDate?: string | null; // ISO timestamp for when task is due
   milestoneId?: string | null; // Milestone this task belongs to
-  type?: 'feature' | 'bug' | 'chore' | 'spike' | 'docs' | null; // Task type for bug tracking
+  type?: 'development' | 'feature' | 'bug' | 'chore' | 'spike' | 'docs' | null; // Task type for bug tracking
   /** Populated when PATCH response detects another in-progress task on the same project */
   conflictWarning?: { tasks: Array<{ id: string; title: string; agentId: string }> };
 }

@@ -28,7 +28,7 @@ export interface Task {
   assignedTo?: string | null; // User ID this task is assigned to
   dueDate?: string | null; // ISO timestamp for when task is due
   milestoneId?: string | null; // Milestone this task belongs to
-  type?: 'feature' | 'bug' | 'chore' | 'spike' | 'docs' | null; // Task type for bug tracking
+  type?: 'development' | 'feature' | 'bug' | 'chore' | 'spike' | 'docs' | null; // Task type for bug tracking
   blocked?: boolean | null; // Whether this task is currently blocked
   blockerNote?: string | null; // Description of what is blocking this task
 }

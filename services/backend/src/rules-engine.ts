@@ -270,6 +270,39 @@ export async function getInjectContextContent(context: RuleContext): Promise<str
 // ─────────────────────────────────────────────────────────────────
 
 function buildQAPrompt(task: Task): string {
+  // Only development and bug tasks can auto-advance to done.
+  // Writing, research, design, and other task types must stay in review for human approval.
+  const canAutoComplete = task.type === 'development' || task.type === 'bug';
+
+  const autoCompleteInstructions = canAutoComplete
+    ? `**2a. If ALL criteria pass — move to done:**
+\`\`\`bash
+curl -s -X PATCH ${BACKEND_URL}/api/tasks/${task.id} \\
+  -H 'Content-Type: application/json' \\
+  -d '{"status": "done"}'
+\`\`\`
+
+**2b. If any criteria FAIL — move back to in-progress:**
+\`\`\`bash
+curl -s -X PATCH ${BACKEND_URL}/api/tasks/${task.id} \\
+  -H 'Content-Type: application/json' \\
+  -d '{"status": "in-progress"}'
+\`\`\``
+    : `**2. ⚠️ HUMAN APPROVAL REQUIRED — do NOT auto-complete this task.**
+This task is type **${task.type || 'other'}** (not development or bug).
+Leave it in **review** — a human must approve before it moves to done.
+
+Only if criteria FAIL — move back to in-progress:
+\`\`\`bash
+curl -s -X PATCH ${BACKEND_URL}/api/tasks/${task.id} \\
+  -H 'Content-Type: application/json' \\
+  -d '{"status": "in-progress"}'
+\`\`\``;
+
+  const verdictLine = canAutoComplete
+    ? `**Verdict**: ✅ PASSED — All criteria met / ❌ FAILED — [list what's missing]`
+    : `**Verdict**: ✅ PASSED (awaiting human approval) / ❌ FAILED — [list what's missing]`;
+
   return `## QA Review Task
 
 You are a QA reviewer. Review this task and determine if it meets the Done Criteria.
@@ -277,6 +310,7 @@ You are a QA reviewer. Review this task and determine if it meets the Done Crite
 ### Task Details
 - **ID:** ${task.id}
 - **Title:** ${task.title}
+- **Type:** ${task.type || 'other'}
 - **Project:** ${task.projectId || 'unknown'}
 - **Description:** ${task.description || 'N/A'}
 - **Commit Hash:** ${task.commitHash || 'not provided'}
@@ -312,19 +346,7 @@ curl -s -X POST ${BACKEND_URL}/api/tasks/${task.id}/comments \\
   -d '{"userId": "qa-agent", "userName": "🔍 QA Agent", "content": "<your review markdown here>"}'
 \`\`\`
 
-**2a. If ALL criteria pass — move to done:**
-\`\`\`bash
-curl -s -X PATCH ${BACKEND_URL}/api/tasks/${task.id} \\
-  -H 'Content-Type: application/json' \\
-  -d '{"status": "done"}'
-\`\`\`
-
-**2b. If any criteria FAIL — move back to in-progress:**
-\`\`\`bash
-curl -s -X PATCH ${BACKEND_URL}/api/tasks/${task.id} \\
-  -H 'Content-Type: application/json' \\
-  -d '{"status": "in-progress"}'
-\`\`\`
+${autoCompleteInstructions}
 
 ### Review Comment Format
 Use this format for your comment:
@@ -339,7 +361,7 @@ Use this format for your comment:
 
 **Diff Summary**: [X files changed, Y insertions, Z deletions]
 
-**Verdict**: ✅ PASSED — All criteria met / ❌ FAILED — [list what's missing]
+${verdictLine}
 \`\`\`
 
 IMPORTANT: You MUST make the API calls. Do not just analyze — take action.`;
