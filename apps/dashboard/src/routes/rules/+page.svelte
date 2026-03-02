@@ -189,11 +189,27 @@
     }
   }
 
+  function formatConditionValue(k: string, v: any): string {
+    // Handle $in / $nin operator objects: { $in: [...] } or { $nin: [...] }
+    if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+      if ('$in' in v && Array.isArray(v.$in)) {
+        return `${k} in ${v.$in.join(', ')}`;
+      }
+      if ('$nin' in v && Array.isArray(v.$nin)) {
+        return `${k} not in ${v.$nin.join(', ')}`;
+      }
+      // Unknown operator object — show as JSON
+      return `${k} = ${JSON.stringify(v)}`;
+    }
+    // Plain array — treat as OR / "in" shorthand
+    if (Array.isArray(v)) {
+      return `${k} in ${v.join(' | ')}`;
+    }
+    return `${k} = ${String(v)}`;
+  }
+
   function formatConditions(conditions: Record<string, any>): string {
-    const parts = Object.entries(conditions).map(([k, v]) => {
-      const val = Array.isArray(v) ? v.join(' | ') : String(v);
-      return `${k} = ${val}`;
-    });
+    const parts = Object.entries(conditions).map(([k, v]) => formatConditionValue(k, v));
     return parts.length > 0 ? parts.join(', ') : '(any)';
   }
 
