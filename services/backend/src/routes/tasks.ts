@@ -435,27 +435,34 @@ export async function taskRoutes(fastify: FastifyInstance) {
         }
 
         if (updates.status === 'review') {
-          const notesToCheck = updates.handoffNotes ?? existingTask?.handoffNotes ?? null;
-          if (!hasReviewChecklist(notesToCheck)) {
-            return reply.status(400).send({
-              error: 'Review checklist missing in handoffNotes',
-              code: 'MISSING_REVIEW_CHECKLIST',
-            });
-          }
+          // Checklist + commit hash enforcement only applies to development and bug tasks.
+          // Other task types (research, docs, chore, design, etc.) can move to review freely.
+          const taskType = updates.type ?? existingTask?.type;
+          const isDevOrBug = taskType === 'development' || taskType === 'bug';
 
-          const commitHashFromNotes = extractCommitHash(notesToCheck);
-          const commitHash = updates.commitHash ?? existingTask?.commitHash ?? commitHashFromNotes;
-          const noCommitDeclared = typeof notesToCheck === 'string' && notesToCheck.includes('NO_COMMIT');
+          if (isDevOrBug) {
+            const notesToCheck = updates.handoffNotes ?? existingTask?.handoffNotes ?? null;
+            if (!hasReviewChecklist(notesToCheck)) {
+              return reply.status(400).send({
+                error: 'Review checklist missing in handoffNotes',
+                code: 'MISSING_REVIEW_CHECKLIST',
+              });
+            }
 
-          if (!commitHash && !noCommitDeclared) {
-            return reply.status(400).send({
-              error: 'Commit hash required to enter review',
-              code: 'MISSING_COMMIT_HASH',
-            });
-          }
+            const commitHashFromNotes = extractCommitHash(notesToCheck);
+            const commitHash = updates.commitHash ?? existingTask?.commitHash ?? commitHashFromNotes;
+            const noCommitDeclared = typeof notesToCheck === 'string' && notesToCheck.includes('NO_COMMIT');
 
-          if (!updates.commitHash && commitHashFromNotes) {
-            updates.commitHash = commitHashFromNotes;
+            if (!commitHash && !noCommitDeclared) {
+              return reply.status(400).send({
+                error: 'Commit hash required to enter review',
+                code: 'MISSING_COMMIT_HASH',
+              });
+            }
+
+            if (!updates.commitHash && commitHashFromNotes) {
+              updates.commitHash = commitHashFromNotes;
+            }
           }
         }
       }
