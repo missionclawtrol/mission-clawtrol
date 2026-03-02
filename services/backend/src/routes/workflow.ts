@@ -48,6 +48,7 @@ const workflowRules = {
           'Where to find it — file location or link',
           'Summary — plain English explanation of what was done',
           'Next steps — what the user should do with this',
+          'Deliverable registered — POST /api/deliverables entry exists for each output file',
         ],
       },
     },
@@ -55,7 +56,7 @@ const workflowRules = {
   heartbeatChecklist: {
     description: 'Checks to perform on each heartbeat',
     steps: [
-      'GET /api/tasks?status=review — check each against done criteria, move to done if met, back to in-progress if not',
+      'GET /api/tasks?status=review — monitor and report only; DO NOT change status. The rules engine handles all review → done and review → in-progress transitions automatically.',
       'GET /api/tasks?status=in-progress — ping assigned agents for status, note blockers',
       'Enforce WIP limit: flag any agent with more than 2 in-progress tasks',
     ],
@@ -79,13 +80,14 @@ const workflowRules = {
 const heartbeatPromptText = `Mission Clawtrol Heartbeat Checklist:
 
 1. Check tasks in review: GET http://localhost:3001/api/tasks?status=review
-   - For each: verify all 5 done criteria are in handoff notes
-   - Done criteria: files changed, how tested, edge cases/risks, rollback plan, commit hash
-   - If all met → PATCH status to "done"
-   - If missing → PATCH status back to "in-progress" with notes
+   - MONITOR AND REPORT ONLY — do not change status on review tasks.
+   - The rules engine handles all status transitions out of review automatically.
+   - Report: task title, handoff notes present (yes/no), how long it has been in review.
+   - Flag if a task appears stalled (e.g. in review for >24h with no rules engine activity).
 
 2. Check tasks in-progress: GET http://localhost:3001/api/tasks?status=in-progress
    - Flag any agent with >2 in-progress tasks (WIP limit exceeded)
+   - Note any tasks that appear blocked or stalled
 
 3. Periodic checks (rotate): email inbox, upcoming calendar events
 `;
