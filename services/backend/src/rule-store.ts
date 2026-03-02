@@ -16,6 +16,8 @@ interface RuleRow {
   priority: number;
   projectId: string | null;
   isBuiltIn: number;
+  schedule: string | null;
+  lastRunAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -24,6 +26,7 @@ interface RuleRow {
 export interface Rule {
   id: string;
   name: string;
+  /** 'task.status.changed' | 'task.created' | 'task.assigned' | 'agent.session.started' | 'cron' */
   trigger: string;
   conditions: Record<string, any>;
   actions: Array<Record<string, any>>;
@@ -31,6 +34,10 @@ export interface Rule {
   priority: number;
   projectId: string | null;
   isBuiltIn: boolean;
+  /** Cron expression (e.g. '0 20 * * *') — only for trigger=cron rules */
+  schedule: string | null;
+  /** ISO timestamp of last successful cron run */
+  lastRunAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -50,6 +57,8 @@ function rowToRule(row: RuleRow): Rule {
     priority: row.priority,
     projectId: row.projectId,
     isBuiltIn: row.isBuiltIn !== 0,
+    schedule: row.schedule ?? null,
+    lastRunAt: row.lastRunAt ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -95,6 +104,7 @@ export interface CreateRuleInput {
   priority?: number;
   projectId?: string | null;
   isBuiltIn?: boolean;
+  schedule?: string | null;
 }
 
 export async function createRule(data: CreateRuleInput): Promise<Rule> {
@@ -103,8 +113,8 @@ export async function createRule(data: CreateRuleInput): Promise<Rule> {
 
   await db.execute(
     `INSERT OR IGNORE INTO rules 
-      (id, name, trigger, conditions, actions, enabled, priority, projectId, isBuiltIn, createdAt, updatedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, name, trigger, conditions, actions, enabled, priority, projectId, isBuiltIn, schedule, createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       data.name,
@@ -115,6 +125,7 @@ export async function createRule(data: CreateRuleInput): Promise<Rule> {
       data.priority ?? 100,
       data.projectId ?? null,
       data.isBuiltIn ? 1 : 0,
+      data.schedule ?? null,
       now,
       now,
     ]
@@ -131,6 +142,8 @@ export interface UpdateRuleInput {
   enabled?: boolean;
   priority?: number;
   projectId?: string | null;
+  schedule?: string | null;
+  lastRunAt?: string | null;
 }
 
 export async function updateRule(id: string, updates: UpdateRuleInput): Promise<Rule | null> {
@@ -169,6 +182,14 @@ export async function updateRule(id: string, updates: UpdateRuleInput): Promise<
     fields.push('projectId = ?');
     values.push(updates.projectId);
   }
+  if (updates.schedule !== undefined) {
+    fields.push('schedule = ?');
+    values.push(updates.schedule);
+  }
+  if (updates.lastRunAt !== undefined) {
+    fields.push('lastRunAt = ?');
+    values.push(updates.lastRunAt);
+  }
 
   if (fields.length === 0) return existing;
 
@@ -178,6 +199,16 @@ export async function updateRule(id: string, updates: UpdateRuleInput): Promise<
 
   await db.execute(`UPDATE rules SET ${fields.join(', ')} WHERE id = ?`, values);
   return getRule(id);
+}
+
+/**
+ * Get all enabled cron rules.
+ */
+export async function getCronRules(): Promise<Rule[]> {
+  const rows = await db.query<RuleRow>(
+    `SELECT * FROM rules WHERE trigger = 'cron' AND enabled = 1 ORDER BY priority ASC, createdAt ASC`
+  );
+  return rows.map(rowToRule);
 }
 
 export async function deleteRule(id: string): Promise<boolean> {
@@ -381,6 +412,62 @@ This is a **non-development task**. Your primary output is a **concrete delivera
     priority: 15,
     isBuiltIn: true,
   },
+
+  // ── Cron rules ────────────────────────────────────────────────
+  {
+    id: 'builtin-memory-consolidation',
+    name: 'Memory Consolidation (Daily 8PM)',
+    trigger: 'cron',
+    schedule: '0 20 * * *',
+    conditions: {},
+    actions: [
+      {
+        type: 'spawn_agent',
+        agentId: 'cso',
+        template: 'memory-consolidation',
+        prompt: `Read today's memory file and MEMORY.md, then distill any new entries worth keeping long-term into MEMORY.md. Remove duplicate or stale entries. Keep MEMORY.md concise and high-signal.`,
+      },
+    ],
+    enabled: true,
+    priority: 200,
+    isBuiltIn: true,
+  },
+  {
+    id: 'builtin-daily-summary',
+    name: 'Daily Summary (5PM)',
+    trigger: 'cron',
+    schedule: '0 17 * * *',
+    conditions: {},
+    actions: [
+      {
+        type: 'spawn_agent',
+        agentId: 'cso',
+        template: 'daily-summary',
+        prompt: `Summarize tasks completed or moved to review today. Include task titles, agents, and any notable outcomes. Send the summary to Telegram.`,
+      },
+    ],
+    enabled: true,
+    priority: 201,
+    isBuiltIn: true,
+  },
+  {
+    id: 'builtin-weekly-cost-report',
+    name: 'Weekly Cost Report (Monday 9AM)',
+    trigger: 'cron',
+    schedule: '0 9 * * 1',
+    conditions: {},
+    actions: [
+      {
+        type: 'spawn_agent',
+        agentId: 'warren',
+        template: 'weekly-cost-report',
+        prompt: `Pull costs from the MC API (/api/costs), summarize AI cost vs estimated human cost savings for the past week. Include per-agent breakdown and weekly totals. Send the report to Telegram.`,
+      },
+    ],
+    enabled: true,
+    priority: 202,
+    isBuiltIn: true,
+  },
 ];
 
 /**
@@ -403,13 +490,14 @@ export async function seedBuiltInRules(): Promise<void> {
       // Already exists — update mutable fields so definition changes take effect
       await db.execute(
         `UPDATE rules
-         SET name = ?, conditions = ?, actions = ?, priority = ?, updatedAt = ?
+         SET name = ?, conditions = ?, actions = ?, priority = ?, schedule = ?, updatedAt = ?
          WHERE id = ? AND isBuiltIn = 1`,
         [
           rule.name,
           JSON.stringify(rule.conditions ?? {}),
           JSON.stringify(rule.actions ?? []),
           rule.priority ?? 100,
+          rule.schedule ?? null,
           now,
           id,
         ]

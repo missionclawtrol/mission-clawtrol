@@ -19,12 +19,18 @@ import {
   type CreateRuleInput,
   type UpdateRuleInput,
 } from '../rule-store.js';
+import {
+  isValidCronExpression,
+  registerCronRule,
+  unregisterCronRule,
+} from '../cron-scheduler.js';
 
 const VALID_TRIGGERS = [
   'task.status.changed',
   'task.created',
   'task.assigned',
   'agent.session.started',
+  'cron',
 ];
 
 const VALID_ACTION_TYPES = [
@@ -69,6 +75,7 @@ export async function rulesRoutes(fastify: FastifyInstance) {
       enabled?: boolean;
       priority?: number;
       projectId?: string | null;
+      schedule?: string | null;
     };
   }>('/', async (request, reply) => {
     try {
@@ -77,10 +84,20 @@ export async function rulesRoutes(fastify: FastifyInstance) {
         return reply.status(403).send({ error: 'Viewers cannot create rules' });
       }
 
-      const { name, trigger, conditions, actions, enabled, priority, projectId } = request.body;
+      const { name, trigger, conditions, actions, enabled, priority, projectId, schedule } = request.body;
 
       if (!name || !trigger) {
         return reply.status(400).send({ error: 'name and trigger are required' });
+      }
+
+      // Validate cron-specific requirements
+      if (trigger === 'cron') {
+        if (!schedule) {
+          return reply.status(400).send({ error: 'schedule is required for trigger=cron' });
+        }
+        if (!isValidCronExpression(schedule)) {
+          return reply.status(400).send({ error: `Invalid cron expression: "${schedule}"` });
+        }
       }
 
       const rule = await createRule({
@@ -92,7 +109,13 @@ export async function rulesRoutes(fastify: FastifyInstance) {
         priority: priority ?? 100,
         projectId: projectId ?? null,
         isBuiltIn: false,
+        schedule: schedule ?? null,
       });
+
+      // Register cron job if this is an enabled cron rule
+      if (rule.trigger === 'cron' && rule.enabled && rule.schedule) {
+        registerCronRule(rule);
+      }
 
       return reply.status(201).send(rule);
     } catch (err) {
@@ -115,6 +138,17 @@ export async function rulesRoutes(fastify: FastifyInstance) {
       const existing = await getRule(request.params.id);
       if (!existing) return reply.status(404).send({ error: 'Rule not found' });
 
+      // Validate schedule if provided (regardless of existing or updated trigger)
+      const newTrigger = request.body.trigger ?? existing.trigger;
+      const newSchedule = 'schedule' in request.body ? request.body.schedule : existing.schedule;
+
+      if (newTrigger === 'cron' && newSchedule && !isValidCronExpression(newSchedule)) {
+        return reply.status(400).send({ error: `Invalid cron expression: "${newSchedule}"` });
+      }
+      if (newTrigger === 'cron' && !newSchedule) {
+        return reply.status(400).send({ error: 'schedule is required for trigger=cron' });
+      }
+
       // Built-in rules can only have enabled toggled (not name/trigger/conditions/actions)
       const updates: UpdateRuleInput = {};
       if (existing.isBuiltIn) {
@@ -134,6 +168,21 @@ export async function rulesRoutes(fastify: FastifyInstance) {
 
       const updated = await updateRule(request.params.id, updates);
       if (!updated) return reply.status(404).send({ error: 'Rule not found' });
+
+      // Handle cron scheduler registration/unregistration
+      if (updated.trigger === 'cron') {
+        if (updated.enabled && updated.schedule) {
+          // (Re-)register the cron job
+          registerCronRule(updated);
+        } else {
+          // Disabled or no schedule — unregister
+          unregisterCronRule(updated.id);
+        }
+      } else if (existing.trigger === 'cron') {
+        // Trigger changed away from cron — unregister old job
+        unregisterCronRule(updated.id);
+      }
+
       return updated;
     } catch (err: any) {
       fastify.log.error(err, 'Failed to update rule');
@@ -156,6 +205,11 @@ export async function rulesRoutes(fastify: FastifyInstance) {
           error: 'Built-in rules cannot be deleted. Disable them instead.',
           code: 'BUILTIN_RULE',
         });
+      }
+
+      // Unregister cron job before deleting
+      if (existing.trigger === 'cron') {
+        unregisterCronRule(existing.id);
       }
 
       const deleted = await deleteRule(request.params.id);

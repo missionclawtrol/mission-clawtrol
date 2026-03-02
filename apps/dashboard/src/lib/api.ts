@@ -1149,6 +1149,7 @@ export async function sendWeeklyReport(params?: {
 export interface Rule {
   id: string;
   name: string;
+  /** 'task.status.changed' | 'task.created' | 'task.assigned' | 'agent.session.started' | 'cron' */
   trigger: string;
   conditions: Record<string, any>;
   actions: Array<Record<string, any>>;
@@ -1156,6 +1157,10 @@ export interface Rule {
   priority: number;
   projectId: string | null;
   isBuiltIn: boolean;
+  /** Cron expression (e.g. '0 20 * * *') — only for trigger=cron rules */
+  schedule: string | null;
+  /** ISO timestamp of last successful cron run */
+  lastRunAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -1175,6 +1180,7 @@ export async function createRule(data: {
   enabled?: boolean;
   priority?: number;
   projectId?: string | null;
+  schedule?: string | null;
 }): Promise<Rule> {
   const res = await fetchWithTimeout(`${API_BASE}/rules`, {
     method: 'POST',

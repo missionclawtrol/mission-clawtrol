@@ -37,6 +37,7 @@ import { agentMemoryRoutes } from './routes/agent-memory.js';
 import { deliverableRoutes, taskDeliverableRoutes } from './routes/deliverables.js';
 import { overviewRoutes } from './routes/overview.js';
 import { seedBuiltInRules } from './rule-store.js';
+import { initCronScheduler } from './cron-scheduler.js';
 import { createAuthMiddleware } from './middleware/auth.js';
 import { gatewayClient, ApprovalRequest, ApprovalResolved } from './gateway-client.js';
 import { loadAssociations } from './project-agents.js';
@@ -1158,6 +1159,10 @@ const start = async () => {
     // Seed built-in rules (idempotent — safe to run on every startup)
     console.log('📋 Seeding built-in rules...');
     await seedBuiltInRules();
+
+    // Initialize cron scheduler (after seeding so cron rules exist)
+    console.log('⏰ Initializing cron scheduler...');
+    await initCronScheduler();
 
     // Load project-agent associations
     await loadAssociations();

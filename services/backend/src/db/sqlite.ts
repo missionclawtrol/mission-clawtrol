@@ -212,6 +212,9 @@ export class SqliteDatabase implements IDatabase {
     addColumnIfMissing('tasks', 'tokensOut', 'INTEGER');
     addColumnIfMissing('users', 'username', 'TEXT');
     addColumnIfMissing('users', 'passwordHash', 'TEXT');
+    // Rules: cron trigger support
+    addColumnIfMissing('rules', 'schedule', 'TEXT');
+    addColumnIfMissing('rules', 'lastRunAt', 'TEXT');
 
     // Ensure sessions table exists (may not exist on older installs)
     this.db.exec(`

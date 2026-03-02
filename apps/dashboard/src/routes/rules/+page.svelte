@@ -15,6 +15,9 @@
   let saving = false;
   let successMsg: string | null = null;
 
+  // Filter state: 'all' | 'event' | 'scheduled'
+  let activeFilter: 'all' | 'event' | 'scheduled' = 'all';
+
   // Modal state
   let showModal = false;
   let editingRule: Rule | null = null;
@@ -27,13 +30,19 @@
   let formProjectId = '';
   let formConditionsRaw = '{}';
   let formActionsRaw = '[]';
+  let formSchedule = '';
   let formError: string | null = null;
 
-  const TRIGGER_OPTIONS = [
+  const EVENT_TRIGGERS = [
     { value: 'task.status.changed', label: 'Task Status Changed' },
     { value: 'task.created', label: 'Task Created' },
     { value: 'task.assigned', label: 'Task Assigned' },
     { value: 'agent.session.started', label: 'Agent Session Started' },
+  ];
+
+  const TRIGGER_OPTIONS = [
+    ...EVENT_TRIGGERS,
+    { value: 'cron', label: '⏱ Scheduled (Cron)' },
   ];
 
   const EXAMPLE_CONDITIONS: Record<string, string> = {
@@ -41,6 +50,7 @@
     'task.created': JSON.stringify({ 'task.projectId': 'my-project' }, null, 2),
     'task.assigned': JSON.stringify({}, null, 2),
     'agent.session.started': JSON.stringify({}, null, 2),
+    'cron': JSON.stringify({}, null, 2),
   };
 
   const EXAMPLE_ACTIONS: Record<string, string> = {
@@ -48,6 +58,54 @@
     inject_context: JSON.stringify([{ type: 'inject_context', content: '## Extra Instructions\n- Always check X\n- Never do Y' }], null, 2),
     notify: JSON.stringify([{ type: 'notify', message: 'Task moved to review!' }], null, 2),
   };
+
+  const CRON_EXAMPLES = [
+    { label: 'Every day at 8PM', value: '0 20 * * *' },
+    { label: 'Every day at 5PM', value: '0 17 * * *' },
+    { label: 'Every Mon at 9AM', value: '0 9 * * 1' },
+    { label: 'Every hour', value: '0 * * * *' },
+  ];
+
+  // ── Derived ──────────────────────────────────────────────────
+
+  $: filteredRules = (() => {
+    switch (activeFilter) {
+      case 'event':
+        return rules.filter(r => r.trigger !== 'cron');
+      case 'scheduled':
+        return rules.filter(r => r.trigger === 'cron');
+      default:
+        return rules;
+    }
+  })();
+
+  $: eventCount = rules.filter(r => r.trigger !== 'cron').length;
+  $: scheduledCount = rules.filter(r => r.trigger === 'cron').length;
+
+  $: isCronTrigger = formTrigger === 'cron';
+
+  // ── Helpers ──────────────────────────────────────────────────
+
+  function relativeTime(iso: string | null | undefined): string {
+    if (!iso) return 'Never';
+    const diff = Date.now() - new Date(iso).getTime();
+    const minutes = Math.floor(diff / 60000);
+    if (minutes < 1) return 'Just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  }
+
+  // Basic client-side cron validation (5-field standard format)
+  function validateCronExpression(expr: string): boolean {
+    if (!expr.trim()) return false;
+    const parts = expr.trim().split(/\s+/);
+    if (parts.length !== 5) return false;
+    // Very basic: each field is non-empty
+    return parts.every(p => p.length > 0);
+  }
 
   async function loadRules() {
     loading = true;
@@ -81,6 +139,7 @@
     formProjectId = '';
     formConditionsRaw = '{}';
     formActionsRaw = '[]';
+    formSchedule = '';
     formError = null;
     showModal = true;
   }
@@ -95,6 +154,7 @@
     formProjectId = rule.projectId ?? '';
     formConditionsRaw = JSON.stringify(rule.conditions, null, 2);
     formActionsRaw = JSON.stringify(rule.actions, null, 2);
+    formSchedule = rule.schedule ?? '';
     formError = null;
     showModal = true;
   }
@@ -112,6 +172,20 @@
   async function saveRule() {
     formError = null;
     saving = true;
+
+    // Validate schedule for cron rules
+    if (formTrigger === 'cron') {
+      if (!formSchedule.trim()) {
+        formError = 'Schedule (cron expression) is required for scheduled rules';
+        saving = false;
+        return;
+      }
+      if (!validateCronExpression(formSchedule)) {
+        formError = 'Invalid cron expression. Use 5-field format: minute hour day month weekday (e.g. 0 20 * * *)';
+        saving = false;
+        return;
+      }
+    }
 
     // Validate JSON
     let conditions: Record<string, any>;
@@ -148,6 +222,7 @@
           enabled: formEnabled,
           priority: formPriority,
           projectId: formProjectId.trim() || null,
+          schedule: formTrigger === 'cron' ? formSchedule.trim() : null,
         });
         rules = rules.map(r => r.id === editingRule!.id ? updated : r);
         successMsg = `Rule "${updated.name}" saved`;
@@ -160,6 +235,7 @@
           enabled: formEnabled,
           priority: formPriority,
           projectId: formProjectId.trim() || null,
+          schedule: formTrigger === 'cron' ? formSchedule.trim() : null,
         });
         rules = [...rules, created];
         successMsg = `Rule "${created.name}" created`;
@@ -219,12 +295,15 @@
       if (a.type === 'inject_context') return 'inject context';
       if (a.type === 'conflict_check') return 'conflict check';
       if (a.type === 'notify') return 'notify';
+      if (a.type === 'word_count_cost') return 'word-count cost';
+      if (a.type === 'post_comment') return 'post comment';
       return a.type ?? '?';
     }).join(', ');
   }
 
   function triggerLabel(trigger: string): string {
-    return TRIGGER_OPTIONS.find(t => t.value === trigger)?.label ?? trigger;
+    if (trigger === 'cron') return 'Scheduled (Cron)';
+    return EVENT_TRIGGERS.find(t => t.value === trigger)?.label ?? trigger;
   }
 
   onMount(loadRules);
@@ -243,7 +322,7 @@
           ⚡ Rules Engine
         </h1>
         <p class="text-gray-400 text-sm mt-1">
-          Automate your team's workflow — define what happens when tasks change.
+          Automate your team's workflow — event-based and scheduled rules in one engine.
         </p>
       </div>
       <button
@@ -267,18 +346,48 @@
       </div>
     {/if}
 
+    <!-- Filter tabs -->
+    {#if !loading && rules.length > 0}
+      <div class="flex gap-1 mb-5 p-1 bg-gray-900 border border-gray-800 rounded-xl w-fit">
+        <button
+          on:click={() => activeFilter = 'all'}
+          class="px-4 py-1.5 text-sm rounded-lg transition-colors font-medium {activeFilter === 'all' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-gray-200'}"
+        >
+          All <span class="ml-1 text-xs text-gray-500">{rules.length}</span>
+        </button>
+        <button
+          on:click={() => activeFilter = 'event'}
+          class="px-4 py-1.5 text-sm rounded-lg transition-colors font-medium {activeFilter === 'event' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-gray-200'}"
+        >
+          ⚡ Event <span class="ml-1 text-xs text-gray-500">{eventCount}</span>
+        </button>
+        <button
+          on:click={() => activeFilter = 'scheduled'}
+          class="px-4 py-1.5 text-sm rounded-lg transition-colors font-medium {activeFilter === 'scheduled' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-gray-200'}"
+        >
+          ⏱ Scheduled <span class="ml-1 text-xs text-gray-500">{scheduledCount}</span>
+        </button>
+      </div>
+    {/if}
+
     {#if loading}
       <div class="text-gray-500 text-center py-16">Loading rules...</div>
-    {:else if rules.length === 0}
+    {:else if filteredRules.length === 0}
       <div class="text-center py-16 text-gray-500">
-        <p class="text-4xl mb-3">⚡</p>
-        <p class="text-lg">No rules yet</p>
-        <p class="text-sm mt-2">Create a rule to automate your workflow.</p>
+        <p class="text-4xl mb-3">{activeFilter === 'scheduled' ? '⏱' : '⚡'}</p>
+        <p class="text-lg">No {activeFilter === 'all' ? '' : activeFilter + ' '}rules yet</p>
+        {#if activeFilter === 'all'}
+          <p class="text-sm mt-2">Create a rule to automate your workflow.</p>
+        {:else}
+          <button on:click={() => activeFilter = 'all'} class="mt-3 text-sm text-blue-400 hover:text-blue-300">
+            Show all rules →
+          </button>
+        {/if}
       </div>
     {:else}
       <!-- Rules list -->
       <div class="space-y-3">
-        {#each rules.sort((a, b) => a.priority - b.priority) as rule (rule.id)}
+        {#each filteredRules.sort((a, b) => a.priority - b.priority) as rule (rule.id)}
           <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 flex items-start gap-4 {rule.enabled ? '' : 'opacity-60'}">
             <!-- Priority badge -->
             <div class="text-xs text-gray-500 font-mono bg-gray-800 px-2 py-1 rounded shrink-0 mt-0.5">
@@ -289,6 +398,18 @@
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2 flex-wrap">
                 <span class="font-medium text-white">{rule.name}</span>
+
+                <!-- Trigger type badge -->
+                {#if rule.trigger === 'cron'}
+                  <span class="text-xs bg-orange-900/60 text-orange-300 px-2 py-0.5 rounded-full border border-orange-700 flex items-center gap-1">
+                    ⏱ Scheduled
+                  </span>
+                {:else}
+                  <span class="text-xs bg-yellow-900/40 text-yellow-400 px-2 py-0.5 rounded-full border border-yellow-800 flex items-center gap-1">
+                    ⚡ Event
+                  </span>
+                {/if}
+
                 {#if rule.isBuiltIn}
                   <span class="text-xs bg-purple-900/60 text-purple-300 px-2 py-0.5 rounded-full border border-purple-700">built-in</span>
                 {/if}
@@ -301,14 +422,27 @@
               </div>
 
               <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-400">
-                <span class="flex items-center gap-1">
-                  <span class="text-gray-600">WHEN</span>
-                  <span class="text-yellow-400 font-mono text-xs">{triggerLabel(rule.trigger)}</span>
-                </span>
-                <span class="flex items-center gap-1">
-                  <span class="text-gray-600">WHERE</span>
-                  <span class="text-blue-300 font-mono text-xs">{formatConditions(rule.conditions)}</span>
-                </span>
+                {#if rule.trigger === 'cron'}
+                  <!-- Cron rule: show schedule + lastRunAt -->
+                  <span class="flex items-center gap-1">
+                    <span class="text-gray-600">SCHEDULE</span>
+                    <span class="text-orange-300 font-mono text-xs">{rule.schedule ?? '(none)'}</span>
+                  </span>
+                  <span class="flex items-center gap-1">
+                    <span class="text-gray-600">LAST RUN</span>
+                    <span class="text-gray-400 text-xs">{relativeTime(rule.lastRunAt)}</span>
+                  </span>
+                {:else}
+                  <!-- Event rule: show trigger + conditions -->
+                  <span class="flex items-center gap-1">
+                    <span class="text-gray-600">WHEN</span>
+                    <span class="text-yellow-400 font-mono text-xs">{triggerLabel(rule.trigger)}</span>
+                  </span>
+                  <span class="flex items-center gap-1">
+                    <span class="text-gray-600">WHERE</span>
+                    <span class="text-blue-300 font-mono text-xs">{formatConditions(rule.conditions)}</span>
+                  </span>
+                {/if}
                 <span class="flex items-center gap-1">
                   <span class="text-gray-600">THEN</span>
                   <span class="text-green-400 font-mono text-xs">{formatActions(rule.actions)}</span>
@@ -355,7 +489,12 @@
       <!-- Legend -->
       <div class="mt-6 p-4 bg-gray-900/50 border border-gray-800 rounded-xl text-xs text-gray-500">
         <p class="mb-1 font-medium text-gray-400">How rules work</p>
-        <p><span class="text-yellow-400">WHEN</span> an event occurs → <span class="text-blue-300">WHERE</span> conditions match → <span class="text-green-400">THEN</span> actions execute</p>
+        <p>
+          <span class="text-yellow-400">⚡ Event rules</span>: WHEN trigger fires → WHERE conditions match → THEN actions execute
+        </p>
+        <p class="mt-1">
+          <span class="text-orange-300">⏱ Scheduled rules</span>: Fire on cron schedule → THEN actions execute (agent spawns)
+        </p>
         <p class="mt-1">Rules run in priority order (lower number = first). Built-in rules can be disabled but not deleted.</p>
       </div>
     {/if}
@@ -402,28 +541,68 @@
             />
           </div>
 
-          <!-- Trigger + Priority row -->
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-300 mb-1" for="rule-trigger">
-                Trigger (WHEN)
-              </label>
-              <select
-                id="rule-trigger"
-                bind:value={formTrigger}
-                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
+          <!-- Trigger type selector -->
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">
+              Trigger Type
+            </label>
+            <div class="flex gap-2 mb-3">
+              <button
+                type="button"
+                on:click={() => { formTrigger = 'task.status.changed'; formSchedule = ''; }}
+                class="flex-1 py-2 px-3 rounded-lg text-sm font-medium border transition-colors {formTrigger !== 'cron' ? 'bg-yellow-900/40 border-yellow-700 text-yellow-300' : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'}"
               >
-                {#each TRIGGER_OPTIONS as opt}
-                  <option value={opt.value}>{opt.label}</option>
-                {/each}
-              </select>
+                ⚡ Event-based
+              </button>
+              <button
+                type="button"
+                on:click={() => { formTrigger = 'cron'; formConditionsRaw = '{}'; }}
+                class="flex-1 py-2 px-3 rounded-lg text-sm font-medium border transition-colors {formTrigger === 'cron' ? 'bg-orange-900/40 border-orange-700 text-orange-300' : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'}"
+              >
+                ⏱ Scheduled (Cron)
+              </button>
             </div>
+          </div>
+
+          <!-- Event trigger selector (only when not cron) -->
+          {#if !isCronTrigger}
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1" for="rule-trigger">
+                  Event (WHEN)
+                </label>
+                <select
+                  id="rule-trigger"
+                  bind:value={formTrigger}
+                  class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
+                >
+                  {#each EVENT_TRIGGERS as opt}
+                    <option value={opt.value}>{opt.label}</option>
+                  {/each}
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-300 mb-1" for="rule-priority">
+                  Priority (lower = first)
+                </label>
+                <input
+                  id="rule-priority"
+                  type="number"
+                  bind:value={formPriority}
+                  min="1"
+                  max="9999"
+                  class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
+                />
+              </div>
+            </div>
+          {:else}
+            <!-- Priority (when cron, full width) -->
             <div>
-              <label class="block text-sm font-medium text-gray-300 mb-1" for="rule-priority">
+              <label class="block text-sm font-medium text-gray-300 mb-1" for="rule-priority-cron">
                 Priority (lower = first)
               </label>
               <input
-                id="rule-priority"
+                id="rule-priority-cron"
                 type="number"
                 bind:value={formPriority}
                 min="1"
@@ -431,7 +610,38 @@
                 class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
               />
             </div>
-          </div>
+          {/if}
+
+          <!-- Cron schedule input (only for cron trigger) -->
+          {#if isCronTrigger}
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1" for="rule-schedule">
+                Cron Schedule <span class="text-red-400">*</span>
+              </label>
+              <input
+                id="rule-schedule"
+                type="text"
+                bind:value={formSchedule}
+                placeholder="e.g. 0 20 * * *"
+                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-orange-500"
+              />
+              <div class="flex flex-wrap gap-2 mt-2">
+                {#each CRON_EXAMPLES as ex}
+                  <button
+                    type="button"
+                    on:click={() => formSchedule = ex.value}
+                    class="text-xs bg-gray-800 text-orange-300 px-2 py-1 rounded border border-gray-700 hover:border-orange-700 transition-colors"
+                  >
+                    {ex.label} <code class="ml-1 opacity-70">{ex.value}</code>
+                  </button>
+                {/each}
+              </div>
+              <p class="text-xs text-gray-500 mt-1">
+                5-field cron: <code>minute hour day-of-month month day-of-week</code>.
+                Powered by node-cron.
+              </p>
+            </div>
+          {/if}
 
           <!-- Project ID (optional) -->
           <div>
@@ -447,31 +657,33 @@
             />
           </div>
 
-          <!-- Conditions -->
-          <div>
-            <div class="flex items-center justify-between mb-1">
-              <label class="text-sm font-medium text-gray-300" for="rule-conditions">
-                Conditions (WHERE) — JSON
-              </label>
-              <button
-                on:click={applyExampleConditions}
-                class="text-xs text-blue-400 hover:text-blue-300"
-              >
-                Insert example
-              </button>
+          <!-- Conditions (hidden for cron rules since they're time-driven) -->
+          {#if !isCronTrigger}
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-sm font-medium text-gray-300" for="rule-conditions">
+                  Conditions (WHERE) — JSON
+                </label>
+                <button
+                  on:click={applyExampleConditions}
+                  class="text-xs text-blue-400 hover:text-blue-300"
+                >
+                  Insert example
+                </button>
+              </div>
+              <textarea
+                id="rule-conditions"
+                bind:value={formConditionsRaw}
+                rows="4"
+                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-blue-500 resize-none"
+                placeholder={"{ \"task.status.to\": \"review\" }"}
+              ></textarea>
+              <p class="text-xs text-gray-500 mt-1">
+                Keys: <code>task.status.to</code>, <code>task.status.from</code>, <code>task.type</code>, <code>task.projectId</code>, <code>task.agentId</code>.
+                Use arrays for OR matching: <code>"task.type": ["development", "bug"]</code>
+              </p>
             </div>
-            <textarea
-              id="rule-conditions"
-              bind:value={formConditionsRaw}
-              rows="4"
-              class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-blue-500 resize-none"
-              placeholder={"{ \"task.status.to\": \"review\" }"}
-            ></textarea>
-            <p class="text-xs text-gray-500 mt-1">
-              Keys: <code>task.status.to</code>, <code>task.status.from</code>, <code>task.type</code>, <code>task.projectId</code>, <code>task.agentId</code>.
-              Use arrays for OR matching: <code>"task.type": ["development", "bug"]</code>
-            </p>
-          </div>
+          {/if}
 
           <!-- Actions -->
           <div>
@@ -495,10 +707,14 @@
               bind:value={formActionsRaw}
               rows="5"
               class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-blue-500 resize-none"
-              placeholder={"[{ \"type\": \"spawn_agent\", \"agentId\": \"qa\", \"template\": \"qa-review\" }]"}
+              placeholder={"[{ \"type\": \"spawn_agent\", \"agentId\": \"cso\", \"template\": \"daily-summary\", \"prompt\": \"Summarize today's work...\" }]"}
             ></textarea>
             <p class="text-xs text-gray-500 mt-1">
-              Types: <code>spawn_agent</code>, <code>inject_context</code>, <code>notify</code>, <code>warn</code>.
+              {#if isCronTrigger}
+                For scheduled rules: use <code>spawn_agent</code> with a <code>prompt</code> field. Example: <code>[{`{"type":"spawn_agent","agentId":"cso","prompt":"Do the thing..."}`}]</code>
+              {:else}
+                Types: <code>spawn_agent</code>, <code>inject_context</code>, <code>notify</code>, <code>warn</code>.
+              {/if}
             </p>
           </div>
 
