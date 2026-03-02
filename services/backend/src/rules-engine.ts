@@ -39,9 +39,43 @@ export interface RuleContext {
 
 /**
  * Check if a condition value matches an actual value.
- * Supports string, number, and array (any-of).
+ * Supports:
+ *   - string/number: exact match
+ *   - array: any-of (OR)
+ *   - object with operators: { $eq, $ne, $in, $nin }
+ *     e.g. { "$nin": ["development", "bug"] }  → actual must NOT be in the list
+ *          { "$ne": "development" }             → actual must not equal "development"
  */
 function matchesConditionValue(expected: any, actual: any): boolean {
+  // Operator object: { $eq | $ne | $in | $nin }
+  if (expected !== null && typeof expected === 'object' && !Array.isArray(expected)) {
+    const ops = expected as Record<string, any>;
+    for (const [op, operand] of Object.entries(ops)) {
+      switch (op) {
+        case '$eq':
+          if (String(operand) !== String(actual ?? '')) return false;
+          break;
+        case '$ne':
+          if (String(operand) === String(actual ?? '')) return false;
+          break;
+        case '$in': {
+          const list = (Array.isArray(operand) ? operand : [operand]).map(String);
+          if (!list.includes(String(actual ?? ''))) return false;
+          break;
+        }
+        case '$nin': {
+          const list = (Array.isArray(operand) ? operand : [operand]).map(String);
+          if (list.includes(String(actual ?? ''))) return false;
+          break;
+        }
+        default:
+          console.warn(`[RulesEngine] Unknown condition operator: ${op}`);
+      }
+    }
+    return true;
+  }
+
+  // Array = any-of (OR match)
   if (Array.isArray(expected)) {
     return expected.map(String).includes(String(actual ?? ''));
   }

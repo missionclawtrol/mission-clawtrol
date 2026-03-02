@@ -197,10 +197,12 @@ export async function deleteRule(id: string): Promise<boolean> {
 export const BUILT_IN_RULES: CreateRuleInput[] = [
   {
     id: 'builtin-qa-on-review',
-    name: 'QA Review on Status → review',
+    name: 'QA Review on Status → review (dev/bug only)',
     trigger: 'task.status.changed',
     conditions: {
       'task.status.to': 'review',
+      // Only spawn QA for development and bug tasks; other types require human approval
+      'task.type': ['development', 'bug'],
     },
     actions: [
       {
@@ -215,10 +217,12 @@ export const BUILT_IN_RULES: CreateRuleInput[] = [
   },
   {
     id: 'builtin-docs-on-done',
-    name: 'Docs Update on Status → done',
+    name: 'Docs Update on Status → done (dev/docs only)',
     trigger: 'task.status.changed',
     conditions: {
       'task.status.to': 'done',
+      // Only update docs for development and docs tasks
+      'task.type': ['development', 'docs'],
     },
     actions: [
       {
@@ -248,14 +252,77 @@ export const BUILT_IN_RULES: CreateRuleInput[] = [
     priority: 5,
     isBuiltIn: true,
   },
+  {
+    id: 'builtin-deliverable-inject-inprogress',
+    name: 'Inject Deliverable Requirements for Non-Dev Tasks',
+    trigger: 'agent.session.started',
+    conditions: {
+      // Apply to all non-development, non-bug task types
+      // (research, docs, chore, spike, feature, design, writing, etc.)
+      'task.type': { $nin: ['development', 'bug'] },
+    },
+    actions: [
+      {
+        type: 'inject_context',
+        content: `## ⚠️ Deliverable Required
+
+This is a **non-development task**. Your primary output is a **concrete deliverable file** (document, report, spreadsheet, design, plan, etc.), not code changes.
+
+### Before Marking This Task Done
+
+1. **Produce your deliverable** — create the document, report, or artifact appropriate for this task type
+2. **Save it** to the workspace at an appropriate path (e.g. \`~/.openclaw/workspace/<projectId>/deliverables/\`)
+3. **Register it with Mission Clawtrol** — this is mandatory:
+   \`\`\`bash
+   curl -s -X POST http://localhost:3001/api/tasks/<task-id>/deliverables \\
+     -H "Content-Type: application/json" \\
+     -d '{"title":"<descriptive title>","description":"<what it contains>","fileType":"<md|docx|pdf|csv|png|etc>","filePath":"<absolute path>","agentId":"<your agent id>","status":"pending_review"}'
+   \`\`\`
+4. **Include the file path** in your handoff notes when marking the task done
+
+> A task without a registered deliverable will be sent back to in-progress during review.`,
+      },
+    ],
+    enabled: true,
+    priority: 15,
+    isBuiltIn: true,
+  },
 ];
 
 /**
- * Seed built-in rules on first run (idempotent — uses INSERT OR IGNORE).
+ * Seed built-in rules — idempotent upsert.
+ * Inserts new rules and updates conditions/actions/name for existing ones
+ * so changes to BUILT_IN_RULES are applied on every server start.
  */
 export async function seedBuiltInRules(): Promise<void> {
+  const now = new Date().toISOString();
+
   for (const rule of BUILT_IN_RULES) {
-    await createRule(rule);
+    const id = rule.id!;
+    const existing = await getRule(id);
+
+    if (!existing) {
+      // First run — insert the rule
+      await createRule(rule);
+      console.log(`[RuleStore] Built-in rule inserted: ${id}`);
+    } else {
+      // Already exists — update mutable fields so definition changes take effect
+      await db.execute(
+        `UPDATE rules
+         SET name = ?, conditions = ?, actions = ?, priority = ?, updatedAt = ?
+         WHERE id = ? AND isBuiltIn = 1`,
+        [
+          rule.name,
+          JSON.stringify(rule.conditions ?? {}),
+          JSON.stringify(rule.actions ?? []),
+          rule.priority ?? 100,
+          now,
+          id,
+        ]
+      );
+      console.log(`[RuleStore] Built-in rule updated: ${id}`);
+    }
   }
-  console.log('[RuleStore] Built-in rules seeded');
+
+  console.log('[RuleStore] Built-in rules seeded/updated');
 }
