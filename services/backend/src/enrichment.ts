@@ -1,13 +1,22 @@
 /**
- * Task enrichment utilities — LOC counting, cost estimation, commit hash extraction.
+ * Task enrichment utilities — LOC counting, cost estimation, commit hash extraction,
+ * and word-count-based cost for non-dev tasks.
  * Shared between route handlers and stage agents to ensure consistent enrichment.
  */
 
 import { exec } from 'child_process';
+import { readFile } from 'fs/promises';
 import { promisify } from 'util';
 import { join } from 'path';
 import { Task } from './task-store.js';
 import { getRawDb } from './database.js';
+import { getDeliverablesByTask } from './deliverable-store.js';
+
+/**
+ * Adjustable constant: human minutes per 1000 words for non-dev deliverables.
+ * At 30 min/1000 words, a 5000-word report → 150 min of estimated human time.
+ */
+export const MINUTES_PER_1000_WORDS = 30;
 
 const execAsync = promisify(exec);
 const WORKSPACE_PATH = join(process.env.HOME || '', '.openclaw/workspace');
@@ -151,6 +160,79 @@ export async function enrichDoneTransition(
     const estimatedHumanMinutes = Math.ceil((runtimeSeconds * 10) / 60);
     updates.estimatedHumanMinutes = estimatedHumanMinutes;
     updates.humanCost = (estimatedHumanMinutes / 60) * hourlyRate;
+  }
+
+  return updates;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Non-dev enrichment: word-count-based cost estimation
+// ─────────────────────────────────────────────────────────────────
+
+/**
+ * Count total words across all registered deliverables for a task.
+ * Reads file content from disk (filePath) first; falls back to inline content field.
+ */
+export async function countDeliverableWords(taskId: string): Promise<number> {
+  const deliverables = await getDeliverablesByTask(taskId);
+  let totalWords = 0;
+
+  for (const d of deliverables) {
+    let text = '';
+
+    if (d.filePath) {
+      try {
+        text = await readFile(d.filePath, 'utf-8');
+      } catch {
+        // File not accessible — fall through to inline content
+        text = d.content ?? '';
+      }
+    } else {
+      text = d.content ?? '';
+    }
+
+    if (text) {
+      const words = text.trim().split(/\s+/).filter(Boolean).length;
+      totalWords += words;
+    }
+  }
+
+  return totalWords;
+}
+
+/**
+ * Enrich a non-dev task transition to "done" using word count from deliverables.
+ *
+ * Priority:
+ *   1. Word count from registered deliverables (30 min / 1000 words)
+ *   2. Runtime-based estimate as fallback (same as enrichDoneTransition)
+ *
+ * Mutates and returns the updates object.
+ */
+export async function enrichNonDevDoneTransition(
+  task: Task,
+  updates: Record<string, any>
+): Promise<Record<string, any>> {
+  const hourlyRate = getHumanHourlyRate();
+
+  const totalWords = await countDeliverableWords(task.id);
+
+  if (totalWords > 0) {
+    const estimatedHumanMinutes = (totalWords / 1000) * MINUTES_PER_1000_WORDS;
+    updates.estimatedHumanMinutes = Math.round(estimatedHumanMinutes);
+    updates.humanCost = parseFloat(((estimatedHumanMinutes / 60) * hourlyRate).toFixed(2));
+    console.log(
+      `[Enrichment] Word-count cost for task ${task.id}: ${totalWords} words → ${updates.estimatedHumanMinutes} min → $${updates.humanCost}`
+    );
+  } else if (!updates.humanCost && !task.humanCost && task.runtime) {
+    // Fallback: runtime-based estimate (no deliverables found)
+    const runtimeSeconds = task.runtime / 1000;
+    const estimatedHumanMinutes = Math.ceil((runtimeSeconds * 10) / 60);
+    updates.estimatedHumanMinutes = estimatedHumanMinutes;
+    updates.humanCost = parseFloat(((estimatedHumanMinutes / 60) * hourlyRate).toFixed(2));
+    console.log(
+      `[Enrichment] Runtime fallback cost for task ${task.id}: ${runtimeSeconds}s → ${estimatedHumanMinutes} min → $${updates.humanCost}`
+    );
   }
 
   return updates;

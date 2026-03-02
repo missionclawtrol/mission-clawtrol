@@ -195,6 +195,52 @@ export async function deleteRule(id: string): Promise<boolean> {
 // ─────────────────────────────────────────────────────────────
 
 export const BUILT_IN_RULES: CreateRuleInput[] = [
+  // ── Stage: in-progress ───────────────────────────────────────
+  {
+    id: 'builtin-dev-brief-inprogress',
+    name: 'Inject Dev Brief for Development/Bug Tasks',
+    trigger: 'agent.session.started',
+    conditions: {
+      // Only inject dev brief for development and bug tasks
+      'task.type': ['development', 'bug'],
+    },
+    actions: [
+      {
+        type: 'inject_context',
+        content: `## 📋 Development Task Brief
+
+This is a **development or bug task**. Your output is working code committed to git.
+
+### Done Criteria (ALL required in handoffNotes)
+1. **Files changed** — list every file you modified
+2. **How tested** — describe tests run (unit, manual, smoke)
+3. **Edge cases / risks** — known limitations or things to watch
+4. **Rollback plan** — how to revert this change if needed
+5. **Commit hash** — the git commit hash for your changes (or \`NO_COMMIT\` if no code changes)
+
+### Commit Requirements
+- Make a git commit with a clear message explaining the **why**, not just the what
+- Format: \`feat|fix|refactor|chore|docs: short description\`
+- Example: \`fix(rules): handle null task.type in condition evaluation\`
+
+### Before Moving to Review
+\`\`\`bash
+# Verify your commit
+git -C ~/.openclaw/workspace/<projectId> log --oneline -3
+
+# Include the hash in your handoffNotes like:
+# Commit hash: abc1234
+\`\`\`
+
+> Missing any of the 5 done criteria will cause QA to send the task back to in-progress.`,
+      },
+    ],
+    enabled: true,
+    priority: 12,
+    isBuiltIn: true,
+  },
+
+  // ── Stage: review ─────────────────────────────────────────────
   {
     id: 'builtin-qa-on-review',
     name: 'QA Review on Status → review (dev/bug only)',
@@ -216,6 +262,34 @@ export const BUILT_IN_RULES: CreateRuleInput[] = [
     isBuiltIn: true,
   },
   {
+    id: 'builtin-review-awaiting-human',
+    name: 'Awaiting Human Approval on Status → review (non-dev tasks)',
+    trigger: 'task.status.changed',
+    conditions: {
+      'task.status.to': 'review',
+      // Non-dev tasks require human approval — no QA auto-complete
+      'task.type': { $nin: ['development', 'bug'] },
+    },
+    actions: [
+      {
+        type: 'post_comment',
+        userId: 'system',
+        userName: '📋 Mission Clawtrol',
+        content:
+          '👀 **Awaiting Human Approval** — This task type requires a human reviewer before moving to done. ' +
+          'An AI agent will **not** auto-complete it.\n\n' +
+          'Please review the deliverables and handoff notes, then either:\n' +
+          '- ✅ Move to **Done** if everything looks good\n' +
+          '- 🔁 Move back to **In Progress** with feedback if changes are needed',
+      },
+    ],
+    enabled: true,
+    priority: 11,
+    isBuiltIn: true,
+  },
+
+  // ── Stage: done ───────────────────────────────────────────────
+  {
     id: 'builtin-docs-on-done',
     name: 'Docs Update on Status → done (dev/docs only)',
     trigger: 'task.status.changed',
@@ -235,6 +309,26 @@ export const BUILT_IN_RULES: CreateRuleInput[] = [
     priority: 20,
     isBuiltIn: true,
   },
+  {
+    id: 'builtin-word-count-cost-done',
+    name: 'Word-Count Cost on Status → done (non-dev tasks)',
+    trigger: 'task.status.changed',
+    conditions: {
+      'task.status.to': 'done',
+      // Calculate word-count cost for non-dev, non-bug tasks
+      'task.type': { $nin: ['development', 'bug'] },
+    },
+    actions: [
+      {
+        type: 'word_count_cost',
+      },
+    ],
+    enabled: true,
+    priority: 21,
+    isBuiltIn: true,
+  },
+
+  // ── Cross-cutting ─────────────────────────────────────────────
   {
     id: 'builtin-conflict-warning',
     name: 'Conflict Warning on Parallel Work',

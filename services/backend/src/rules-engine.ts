@@ -9,8 +9,10 @@
 
 import { getRulesByTrigger, type Rule } from './rule-store.js';
 import type { Task } from './task-store.js';
+import { updateTask } from './task-store.js';
 import { createComment } from './comment-store.js';
 import { logAudit } from './audit-store.js';
+import { countDeliverableWords, enrichNonDevDoneTransition } from './enrichment.js';
 
 const GATEWAY_URL = process.env.GATEWAY_URL || 'ws://127.0.0.1:18789';
 const GATEWAY_PORT = (() => {
@@ -219,6 +221,119 @@ async function executeSpawnAgent(
   }
 }
 
+/**
+ * Execute a post_comment action — posts a comment on the task.
+ */
+async function executePostComment(
+  action: Record<string, any>,
+  context: RuleContext,
+  rule: Rule
+): Promise<void> {
+  const { task } = context;
+  const content: string = action.content;
+
+  if (!content) {
+    console.warn(`[RulesEngine] post_comment action missing content in rule ${rule.id}`);
+    return;
+  }
+
+  console.log(
+    `[RulesEngine] Executing post_comment for task ${task.id} (rule ${rule.id})`
+  );
+
+  try {
+    await createComment({
+      taskId: task.id,
+      userId: action.userId || 'system',
+      userName: action.userName || '🦞 Mission Clawtrol',
+      userAvatar: null,
+      content,
+    });
+
+    await logAudit({
+      userId: `rule:${rule.id}`,
+      action: 'rule.post_comment',
+      entityType: 'task',
+      entityId: task.id,
+      details: { ruleId: rule.id },
+    });
+  } catch (err: any) {
+    console.error(
+      `[RulesEngine] Error executing post_comment for rule ${rule.id}:`,
+      err.message
+    );
+  }
+}
+
+/**
+ * Execute a word_count_cost action — counts words in deliverables, calculates
+ * human cost, patches the task, and warns if no deliverables are found.
+ */
+async function executeWordCountCost(
+  action: Record<string, any>,
+  context: RuleContext,
+  rule: Rule
+): Promise<void> {
+  const { task } = context;
+
+  console.log(
+    `[RulesEngine] Executing word_count_cost for task ${task.id} (rule ${rule.id})`
+  );
+
+  try {
+    const totalWords = await countDeliverableWords(task.id);
+
+    if (totalWords === 0) {
+      // No deliverables found — post a warning comment
+      await createComment({
+        taskId: task.id,
+        userId: 'system',
+        userName: '📋 Mission Clawtrol',
+        userAvatar: null,
+        content:
+          '⚠️ **No deliverables found** — this task moved to done but has no registered deliverables. ' +
+          'Please register a deliverable file or this task may be sent back to in-progress during review.',
+      });
+      console.warn(`[RulesEngine] word_count_cost: no deliverables for task ${task.id}`);
+      return;
+    }
+
+    // Calculate cost from word count
+    const costUpdates: Record<string, any> = {};
+    await enrichNonDevDoneTransition(task, costUpdates);
+
+    if (costUpdates.estimatedHumanMinutes) {
+      await updateTask(task.id, {
+        estimatedHumanMinutes: costUpdates.estimatedHumanMinutes,
+        humanCost: costUpdates.humanCost,
+      });
+
+      await logAudit({
+        userId: `rule:${rule.id}`,
+        action: 'rule.word_count_cost',
+        entityType: 'task',
+        entityId: task.id,
+        details: {
+          ruleId: rule.id,
+          totalWords,
+          estimatedHumanMinutes: costUpdates.estimatedHumanMinutes,
+          humanCost: costUpdates.humanCost,
+        },
+      });
+
+      console.log(
+        `[RulesEngine] word_count_cost: task ${task.id} → ${totalWords} words → ` +
+        `${costUpdates.estimatedHumanMinutes} min → $${costUpdates.humanCost}`
+      );
+    }
+  } catch (err: any) {
+    console.error(
+      `[RulesEngine] Error executing word_count_cost for rule ${rule.id}:`,
+      err.message
+    );
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────
 // Public API
 // ─────────────────────────────────────────────────────────────────
@@ -249,6 +364,14 @@ export async function evaluateAndExecuteRules(
             // Fire-and-forget (don't await — keep response fast)
             executeSpawnAgent(action, context, rule).catch((err) => {
               console.error(`[RulesEngine] spawn_agent error in rule ${rule.id}:`, err);
+            });
+          } else if (action.type === 'post_comment') {
+            // post_comment: synchronous — we want the comment before the response returns
+            await executePostComment(action, context, rule);
+          } else if (action.type === 'word_count_cost') {
+            // word_count_cost: fire-and-forget (async enrichment, doesn't block)
+            executeWordCountCost(action, context, rule).catch((err) => {
+              console.error(`[RulesEngine] word_count_cost error in rule ${rule.id}:`, err);
             });
           } else if (action.type === 'inject_context') {
             // inject_context is handled at spawn time via getInjectContextContent()

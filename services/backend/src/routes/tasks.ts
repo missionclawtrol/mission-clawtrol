@@ -21,7 +21,7 @@ import type { SqliteDatabase } from '../db/sqlite.js';
 import { logAudit } from '../audit-store.js';
 import { requireRole, canModifyTask } from '../middleware/auth.js';
 import { onTaskStatusChange } from '../stage-agents/index.js';
-import { enrichDoneTransition } from '../enrichment.js';
+import { enrichDoneTransition, enrichNonDevDoneTransition } from '../enrichment.js';
 import { dispatchWebhookEvent } from '../webhook-dispatcher.js';
 import { autoSpawnIfNeeded, spawnTaskSession } from '../auto-spawn.js';
 
@@ -467,13 +467,21 @@ export async function taskRoutes(fastify: FastifyInstance) {
         }
       }
 
-      // LOC-based capture when moving to done
+      // Cost enrichment when moving to done:
+      //   dev/bug tasks → LOC-based (enrichDoneTransition)
+      //   all other types → word-count-based (enrichNonDevDoneTransition)
       if (updates.status === 'done') {
         const task = existingTask ?? (await findTaskById(id));
         if (!task) {
           return reply.status(404).send({ error: 'Task not found' });
         }
-        await enrichDoneTransition(task, updates);
+        const taskType = (updates as any).type ?? task.type;
+        const isDevOrBug = taskType === 'development' || taskType === 'bug';
+        if (isDevOrBug) {
+          await enrichDoneTransition(task, updates);
+        } else {
+          await enrichNonDevDoneTransition(task, updates);
+        }
       }
 
       // LEARNED.md enforcement: when a task moves to review or done, check whether the
