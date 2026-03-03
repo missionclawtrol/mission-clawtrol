@@ -8,6 +8,7 @@ const BUSINESS_DIR = join(process.env.HOME || '/root', '.openclaw', 'business');
 const PROFILE_JSON = join(BUSINESS_DIR, 'PROFILE.json');
 const PROFILE_MD = join(BUSINESS_DIR, 'PROFILE.md');
 const TOOLS_MD = join(BUSINESS_DIR, 'TOOLS.md');
+const SETTINGS_JSON = join(BUSINESS_DIR, 'SETTINGS.json');
 
 interface CompanyProfile {
   companyName: string;
@@ -32,6 +33,10 @@ interface ToolEntry {
 interface AgentTraining {
   instructions: string;
   tools: ToolEntry[];
+}
+
+interface OnboardingSettings {
+  documentFormat: string;
 }
 
 async function ensureDir(path: string) {
@@ -124,6 +129,10 @@ const DEFAULT_PROFILE: CompanyProfile = {
 const DEFAULT_TRAINING: AgentTraining = {
   instructions: '',
   tools: [],
+};
+
+const DEFAULT_SETTINGS: OnboardingSettings = {
+  documentFormat: 'docx',
 };
 
 // ── API Key Helpers ──────────────────────────────────────────────────────────
@@ -493,6 +502,38 @@ export async function onboardingRoutes(fastify: FastifyInstance) {
       }
       fastify.log.error(err);
       return reply.status(500).send({ error: 'Failed to delete file' });
+    }
+  });
+
+  // ── Team Preferences / Settings ───────────────────────────────────────────
+
+  // GET /api/onboarding/settings
+  fastify.get('/settings', async (_request, reply) => {
+    try {
+      await ensureDir(BUSINESS_DIR);
+      const settings = await readJsonSafe<OnboardingSettings>(SETTINGS_JSON, DEFAULT_SETTINGS);
+      return { ...DEFAULT_SETTINGS, ...settings };
+    } catch (err) {
+      fastify.log.error(err);
+      return reply.status(500).send({ error: 'Failed to load settings' });
+    }
+  });
+
+  // PUT /api/onboarding/settings
+  fastify.put<{ Body: Partial<OnboardingSettings> }>('/settings', async (request, reply) => {
+    try {
+      await ensureDir(BUSINESS_DIR);
+      const existing = await readJsonSafe<OnboardingSettings>(SETTINGS_JSON, DEFAULT_SETTINGS);
+      const updated: OnboardingSettings = {
+        ...DEFAULT_SETTINGS,
+        ...existing,
+        ...request.body,
+      };
+      await writeJson(SETTINGS_JSON, updated);
+      return { success: true, settings: updated };
+    } catch (err) {
+      fastify.log.error(err);
+      return reply.status(500).send({ error: 'Failed to save settings' });
     }
   });
 }

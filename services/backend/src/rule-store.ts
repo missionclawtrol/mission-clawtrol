@@ -263,7 +263,25 @@ git -C ~/.openclaw/workspace/<projectId> log --oneline -3
 # Commit hash: abc1234
 \`\`\`
 
-> Missing any of the 5 done criteria will cause QA to send the task back to in-progress.`,
+> Missing any of the 5 done criteria will cause QA to send the task back to in-progress.
+
+---
+
+**DOCUMENT FORMAT REQUIREMENT:**
+All deliverable files must be in .docx format (NOT .md or .txt), unless the file is:
+- Code or configuration (e.g. .ts, .py, .json, .yaml)
+- An OpenClaw workspace file that must be .md (SOUL.md, AGENTS.md, IDENTITY.md, USER.md, LEARNED.md, HEARTBEAT.md, MEMORY.md, README.md)
+- A template or structured data file required in a specific format
+
+To create .docx files, use python-docx:
+\`\`\`python
+pip install python-docx --break-system-packages
+from docx import Document
+doc = Document()
+doc.add_heading("Title", 0)
+doc.add_paragraph("Content")
+doc.save("/path/to/file.docx")
+\`\`\``,
       },
     ],
     enabled: true,
@@ -405,7 +423,25 @@ This is a **non-development task**. Your primary output is a **concrete delivera
    \`\`\`
 4. **Include the file path** in your handoff notes when marking the task done
 
-> A task without a registered deliverable will be sent back to in-progress during review.`,
+> A task without a registered deliverable will be sent back to in-progress during review.
+
+---
+
+**DOCUMENT FORMAT REQUIREMENT:**
+All deliverable files must be in .docx format (NOT .md or .txt), unless the file is:
+- Code or configuration (e.g. .ts, .py, .json, .yaml)
+- An OpenClaw workspace file that must be .md (SOUL.md, AGENTS.md, IDENTITY.md, USER.md, LEARNED.md, HEARTBEAT.md, MEMORY.md, README.md)
+- A template or structured data file required in a specific format
+
+To create .docx files, use python-docx:
+\`\`\`python
+pip install python-docx --break-system-packages
+from docx import Document
+doc = Document()
+doc.add_heading("Title", 0)
+doc.add_paragraph("Content")
+doc.save("/path/to/file.docx")
+\`\`\``,
       },
     ],
     enabled: true,

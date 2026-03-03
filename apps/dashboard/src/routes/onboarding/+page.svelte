@@ -105,6 +105,17 @@
   let expandedAgents: Record<string, boolean> = {};
   let agentUploading: Record<string, boolean> = {};
 
+  // ── State: Team Preferences / Settings ───────────────────────────────────
+
+  interface OnboardingSettings {
+    documentFormat: string;
+  }
+
+  let settings: OnboardingSettings = { documentFormat: 'docx' };
+  let settingsLoading = true;
+  let settingsSaving = false;
+  let settingsSaveMsg = '';
+
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   function newTool(): ToolEntry {
@@ -352,11 +363,52 @@
     }
   }
 
+  async function loadSettings() {
+    settingsLoading = true;
+    try {
+      const res = await fetch(`${API_BASE}/api/onboarding/settings`, { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        settings = { documentFormat: 'docx', ...data };
+      }
+    } catch (e) {
+      console.error('Failed to load settings', e);
+    } finally {
+      settingsLoading = false;
+    }
+  }
+
+  async function saveSettings() {
+    settingsSaving = true;
+    settingsSaveMsg = '';
+    try {
+      const res = await fetch(`${API_BASE}/api/onboarding/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(settings),
+      });
+      if (res.ok) {
+        settingsSaveMsg = '✅ Settings saved';
+        await loadSettings();
+      } else {
+        const err = await res.json().catch(() => ({ error: 'Unknown error' }));
+        settingsSaveMsg = `❌ ${err.error || 'Failed to save'}`;
+      }
+    } catch {
+      settingsSaveMsg = '❌ Network error';
+    } finally {
+      settingsSaving = false;
+      setTimeout(() => (settingsSaveMsg = ''), 5000);
+    }
+  }
+
   onMount(() => {
     loadApiKeys();
     loadCompany();
     loadAgents();
     loadFiles();
+    loadSettings();
   });
 </script>
 
@@ -929,6 +981,61 @@
             {/if}
           </div>
         {/each}
+      </div>
+    {/if}
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       SECTION: TEAM PREFERENCES
+       ══════════════════════════════════════════════════════════════════════ -->
+  <section>
+    <div class="flex items-center gap-2 mb-4">
+      <span class="text-xl">⚙️</span>
+      <h2 class="text-lg font-semibold">Team Preferences</h2>
+      <span class="text-xs text-slate-500 ml-1">— default behaviours for all agents</span>
+    </div>
+
+    {#if settingsLoading}
+      <div class="bg-slate-800 border border-slate-700 rounded-lg p-8 text-center text-slate-400">
+        Loading settings...
+      </div>
+    {:else}
+      <div class="bg-slate-800 border border-slate-700 rounded-lg p-6 space-y-6">
+
+        <!-- Document Format -->
+        <div>
+          <label class="block text-sm font-medium text-slate-300 mb-1">Document Format</label>
+          <p class="text-xs text-slate-500 mb-2">
+            Default file format for all agent-produced documents and reports. Agents will be instructed to use this format at spawn time.
+          </p>
+          <select
+            bind:value={settings.documentFormat}
+            class="w-full max-w-xs px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="docx">.docx (Microsoft Word — recommended)</option>
+            <option value="pdf">.pdf (PDF — read-only)</option>
+            <option value="md">.md (Markdown)</option>
+          </select>
+          <p class="text-xs text-slate-600 mt-2">
+            When set to <span class="font-mono text-slate-400">docx</span>, agents will use <code class="text-xs bg-slate-700 px-1 rounded">python-docx</code> to create Word documents instead of plain Markdown files.
+          </p>
+        </div>
+
+        <!-- Save button -->
+        <div class="flex items-center gap-3 pt-2 border-t border-slate-700">
+          {#if settingsSaveMsg}
+            <span class="text-sm {settingsSaveMsg.startsWith('✅') ? 'text-green-400' : 'text-red-400'}">
+              {settingsSaveMsg}
+            </span>
+          {/if}
+          <button
+            on:click={saveSettings}
+            disabled={settingsSaving}
+            class="ml-auto px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg text-sm font-medium transition-colors"
+          >
+            {settingsSaving ? 'Saving...' : 'Save Preferences'}
+          </button>
+        </div>
       </div>
     {/if}
   </section>

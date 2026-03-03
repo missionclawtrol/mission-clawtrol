@@ -12,6 +12,8 @@ import { logAudit } from './audit-store.js';
 import { Task } from './task-store.js';
 import { getAgentDefinitions } from './config-reader.js';
 import { getInjectContextContent } from './rules-engine.js';
+import { promises as fs } from 'fs';
+import { join } from 'path';
 
 const GATEWAY_PORT = (() => {
   const url = process.env.GATEWAY_URL || 'ws://127.0.0.1:18789';
@@ -58,6 +60,26 @@ async function getKnownAgentIds(): Promise<Set<string>> {
 
 // Default timeout for spawned sessions (30 minutes)
 const DEFAULT_TIMEOUT_SECONDS = 1800;
+
+const SETTINGS_JSON = join(process.env.HOME || '', '.openclaw', 'business', 'SETTINGS.json');
+
+interface OnboardingSettings {
+  documentFormat: string;
+}
+
+const DEFAULT_ONBOARDING_SETTINGS: OnboardingSettings = {
+  documentFormat: 'docx',
+};
+
+async function getOnboardingSettings(): Promise<OnboardingSettings> {
+  try {
+    const raw = await fs.readFile(SETTINGS_JSON, 'utf-8');
+    const parsed = JSON.parse(raw);
+    return { ...DEFAULT_ONBOARDING_SETTINGS, ...parsed };
+  } catch {
+    return DEFAULT_ONBOARDING_SETTINGS;
+  }
+}
 
 export interface AutoSpawnResult {
   success: boolean;
@@ -158,8 +180,10 @@ You have 5 memory types, modeled on how humans think:
  * Build the task prompt for the spawned agent.
  * Calls the Agent Memory API and injects assembled memory context,
  * then evaluates inject_context rules and appends injected content.
+ *
+ * @param extraContext - Optional extra context to inject (e.g., deliverable review feedback)
  */
-export async function buildTaskPrompt(task: Task, projectRepoPath: string, agentId?: string): Promise<string> {
+export async function buildTaskPrompt(task: Task, projectRepoPath: string, agentId?: string, extraContext?: string): Promise<string> {
   const apiUrl = BACKEND_URL;
   const taskDesc = task.description
     ? task.description.length > 2000
@@ -234,10 +258,19 @@ Always register deliverables BEFORE marking the task done.`;
     console.warn('[AutoSpawn] inject_context evaluation failed (non-fatal):', err.message);
   }
 
-  let fullPrompt = basePrompt + memorySection;
+  // ── Inject Onboarding Settings ────────────────────────────────────────────
+  const settings = await getOnboardingSettings();
+  const settingsSection = `\n\n## Team Preferences\n\nDocument format preference: ${settings.documentFormat} — all deliverable documents must use this format`;
+
+  let fullPrompt = basePrompt + memorySection + settingsSection;
 
   if (injectedSections.length > 0) {
     fullPrompt += '\n\n## Injected Context (from Rules)\n\n' + injectedSections.join('\n\n---\n\n');
+  }
+
+  // ── Extra Context (e.g., deliverable review feedback) ──────────────────
+  if (extraContext && extraContext.trim().length > 0) {
+    fullPrompt += '\n\n' + extraContext.trim();
   }
 
   return fullPrompt;
@@ -250,7 +283,7 @@ Always register deliverables BEFORE marking the task done.`;
 export async function spawnTaskSession(
   task: Task,
   agentId: string,
-  opts?: { force?: boolean }
+  opts?: { force?: boolean; extraContext?: string }
 ): Promise<AutoSpawnResult> {
   // Safety: only spawn for known agents
   const knownAgentIds = await getKnownAgentIds();
@@ -275,7 +308,7 @@ export async function spawnTaskSession(
   const projectRepoPath = `${WORKSPACE_PATH}/${task.projectId}`;
 
   // Build the prompt (async — evaluates inject_context rules + fetches agent memory)
-  const prompt = await buildTaskPrompt(task, projectRepoPath, agentId);
+  const prompt = await buildTaskPrompt(task, projectRepoPath, agentId, opts?.extraContext);
 
   console.log(`[AutoSpawn] Spawning ${agentId} for task ${task.id}: ${task.title}`);
 
