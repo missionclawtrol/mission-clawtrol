@@ -1,0 +1,125 @@
+// openclaw.json — Agent Configuration Example for Mission Clawtrol
+// 
+// This shows a full multi-agent team setup. Paste the "agents" block
+// into your ~/.openclaw/openclaw.json (or wherever your config lives).
+//
+// Minimum requirement: "qa" and "editor" agents (used by MC's rules engine).
+// Everything else is optional — add agents to match your team structure.
+//
+// Docs: https://docs.openclaw.ai
+
+{
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "anthropic/claude-sonnet-4-6",
+        "fallbacks": ["openai/gpt-4o"]
+      },
+      "workspace": "/home/you/.openclaw/workspace",
+      "heartbeat": { "every": "1h" },
+      "subagents": {
+        "maxConcurrent": 4,
+        "model": "anthropic/claude-sonnet-4-6"
+      }
+    },
+
+    "list": [
+      // ─── Orchestrator (your main agent) ───────────────────────
+      {
+        "id": "cso",
+        "default": true,
+        "name": "Chief Strategy Officer",
+        "workspace": "/home/you/.openclaw/workspace-cso",
+        "model": "anthropic/claude-sonnet-4-6",
+        "identity": {
+          "name": "CSO",
+          "emoji": "🎯"
+        },
+        "groupChat": {
+          "mentionPatterns": ["@cso"]
+        },
+        // This agent can spawn subagents from this list:
+        "subagents": {
+          "allowAgents": ["henry", "elon", "marie", "ernest", "warren", "steve"]
+        }
+      },
+
+      // ─── Required by Mission Clawtrol ─────────────────────────
+      // These two agents are triggered automatically by MC's rules engine.
+      // "qa" runs when a task enters Review; "editor" runs when a task is Done.
+      // You can use cheap/fast models here — they do focused, narrow work.
+      {
+        "id": "qa",
+        "name": "QA Reviewer",
+        "workspace": "/home/you/.openclaw/workspace-qa",
+        "model": "anthropic/claude-haiku-4-5",
+        "identity": {
+          "name": "QA",
+          "emoji": "🔍"
+        }
+      },
+      {
+        "id": "editor",
+        "name": "Docs Editor",
+        "workspace": "/home/you/.openclaw/workspace-editor",
+        "model": "anthropic/claude-haiku-4-5",
+        "identity": {
+          "name": "Editor",
+          "emoji": "📝"
+        }
+      },
+
+      // ─── Specialist Agents (optional) ─────────────────────────
+      // Add as many or as few as you need. These are examples.
+
+      {
+        "id": "henry",
+        "name": "Henry — Manager",
+        "workspace": "/home/you/.openclaw/workspace-henry",
+        "model": "anthropic/claude-sonnet-4-6",
+        "identity": { "name": "Henry" },
+        "groupChat": { "mentionPatterns": ["@henry", "@manager"] }
+      },
+      {
+        "id": "elon",
+        "name": "Elon — Builder",
+        "workspace": "/home/you/.openclaw/workspace-elon",
+        "model": "anthropic/claude-sonnet-4-6",
+        "identity": { "name": "Elon" },
+        "groupChat": { "mentionPatterns": ["@elon", "@builder", "@dev"] }
+      },
+      {
+        "id": "marie",
+        "name": "Marie — Researcher",
+        "workspace": "/home/you/.openclaw/workspace-marie",
+        "model": "anthropic/claude-sonnet-4-6",
+        "identity": { "name": "Marie" },
+        "groupChat": { "mentionPatterns": ["@marie", "@researcher"] }
+      },
+      {
+        "id": "ernest",
+        "name": "Ernest — Writer",
+        "workspace": "/home/you/.openclaw/workspace-ernest",
+        "model": "anthropic/claude-sonnet-4-6",
+        "identity": { "name": "Ernest" },
+        "groupChat": { "mentionPatterns": ["@ernest", "@writer"] }
+      },
+      {
+        "id": "warren",
+        "name": "Warren — Analyst",
+        "workspace": "/home/you/.openclaw/workspace-warren",
+        "model": "anthropic/claude-sonnet-4-6",
+        "identity": { "name": "Warren" },
+        "groupChat": { "mentionPatterns": ["@warren", "@analyst"] }
+      },
+      {
+        "id": "steve",
+        "name": "Steve — Designer",
+        "workspace": "/home/you/.openclaw/workspace-steve",
+        "model": "anthropic/claude-sonnet-4-6",
+        "identity": { "name": "Steve" },
+        "groupChat": { "mentionPatterns": ["@steve", "@designer"] }
+      }
+    ]
+  }
+}

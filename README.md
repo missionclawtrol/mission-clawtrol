@@ -59,24 +59,81 @@ Follow it exactly.
 
 That's it — the workflow rules live in Mission Clawtrol and are served at runtime. No other config needed. See [`skill/SKILL.md`](skill/SKILL.md) for the full skill reference.
 
-## Required OpenClaw Agents
+## OpenClaw Agent Configuration
 
-Mission Clawtrol automates two stages of the task lifecycle. You must have these agent IDs configured in OpenClaw:
+Agents are defined in your OpenClaw config file (`~/.openclaw/openclaw.json`) under the `agents` key. MC reads this config to know which agents are available for task assignment.
+
+### Required Agents
+
+MC's rules engine automatically triggers these two agents. They must exist in your config:
 
 | Agent ID | Purpose | When it runs |
 |----------|---------|-------------|
-| `qa` | Reviews handoff notes and verifies done criteria | Every time a task moves to Review |
-| `editor` | Reads the commit diff and updates PROJECT.md | Every time a task is marked Done |
+| `qa` | Reviews handoff notes and verifies done criteria | Every time a task moves to **Review** |
+| `editor` | Reads the commit diff and updates PROJECT.md | Every time a task is marked **Done** |
 
-Both agents use whatever model is configured for them in OpenClaw. If an agent is unavailable, MC logs a warning and the task stays in its current state for manual review.
+Both agents use whatever model you configure. A fast/cheap model like Haiku works well — they do focused, narrow work. If an agent is unavailable, MC logs a warning and the task stays in its current state for manual review.
 
-**Minimum viable OpenClaw agent config:**
-```yaml
-agents:
-  - id: qa
-    model: anthropic/claude-haiku-4-5
-  - id: editor
-    model: anthropic/claude-haiku-4-5
+### Minimal Setup (just QA + Editor)
+
+Add this to your `~/.openclaw/openclaw.json`:
+
+```json
+{
+  "agents": {
+    "list": [
+      { "id": "qa", "name": "QA Reviewer", "model": "anthropic/claude-haiku-4-5" },
+      { "id": "editor", "name": "Docs Editor", "model": "anthropic/claude-haiku-4-5" }
+    ]
+  }
+}
+```
+
+### Full Team Setup
+
+For a complete multi-agent team with an orchestrator + specialists, see the annotated example config:
+
+📄 **[`docs/openclaw-agents-example.jsonc`](docs/openclaw-agents-example.jsonc)**
+
+This example includes:
+- **Orchestrator agent** — your main agent that delegates to others via `subagents.allowAgents`
+- **QA + Editor** — required by MC's rules engine
+- **Specialist agents** — builder, researcher, writer, analyst, designer (all optional)
+
+Each agent entry supports these fields:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | ✅ | Unique identifier (used in task assignment) |
+| `name` | ✅ | Display name |
+| `model` | ✅ | Model to use (e.g. `anthropic/claude-sonnet-4-6`) |
+| `workspace` | | Agent's working directory |
+| `default` | | Set `true` on your primary/orchestrator agent |
+| `identity.name` | | Short name for UI display |
+| `identity.emoji` | | Emoji shown in MC roster |
+| `groupChat.mentionPatterns` | | `@mention` triggers in group chats |
+| `subagents.allowAgents` | | Agent IDs this agent can spawn as subagents |
+
+### Agent Defaults
+
+Set defaults that apply to all agents unless overridden:
+
+```json
+{
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "anthropic/claude-sonnet-4-6",
+        "fallbacks": ["openai/gpt-4o"]
+      },
+      "workspace": "/home/you/.openclaw/workspace",
+      "subagents": {
+        "maxConcurrent": 4
+      }
+    },
+    "list": [ ... ]
+  }
+}
 ```
 
 ## PROJECT.md Conventions
