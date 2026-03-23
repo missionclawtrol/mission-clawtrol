@@ -10,7 +10,7 @@
 import { getRulesByTrigger, type Rule } from './rule-store.js';
 import type { Task } from './task-store.js';
 import { updateTask } from './task-store.js';
-import { createComment } from './comment-store.js';
+import { createComment, getCommentsByTask } from './comment-store.js';
 import { logAudit } from './audit-store.js';
 import { countDeliverableWords, enrichNonDevDoneTransition } from './enrichment.js';
 
@@ -128,6 +128,107 @@ function evaluateConditions(conditions: Record<string, any>, context: RuleContex
 // ─────────────────────────────────────────────────────────────────
 
 /**
+ * Parse the QA verdict from a comment posted by the QA agent.
+ * Returns 'passed', 'failed', or null if no verdict found.
+ */
+function parseQAVerdict(content: string): 'passed' | 'failed' | null {
+  // Look for explicit verdict lines: "✅ PASSED" or "❌ FAILED"
+  if (/✅\s*PASSED/i.test(content)) return 'passed';
+  if (/❌\s*FAILED/i.test(content)) return 'failed';
+  return null;
+}
+
+/**
+ * After a QA agent session completes, poll for the QA comment and auto-advance
+ * the task status based on the verdict.
+ * - PASSED + dev/bug → done
+ * - FAILED → in-progress
+ * - No comment found → post warning
+ */
+async function handleQACompletion(task: Task, commentsCountBefore: number): Promise<void> {
+  const canAutoComplete = task.type === 'development' || task.type === 'bug';
+
+  // Poll for new QA comment (up to 60s after agent completes)
+  const pollIntervalMs = 3000;
+  const pollMaxAttempts = 20;
+
+  let qaComment: string | null = null;
+
+  for (let attempt = 0; attempt < pollMaxAttempts; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+
+    const comments = await getCommentsByTask(task.id);
+    // Find a new comment posted by qa-agent after the spawn
+    const qaComments = comments.filter(
+      (c) => c.userId === 'qa-agent' && comments.indexOf(c) >= commentsCountBefore
+    );
+
+    if (qaComments.length > 0) {
+      // Use the most recent QA comment
+      qaComment = qaComments[qaComments.length - 1].content;
+      console.log(`[RulesEngine] QA comment found for task ${task.id} (attempt ${attempt + 1})`);
+      break;
+    }
+  }
+
+  if (!qaComment) {
+    // Fallback: no QA comment found — post a warning
+    console.warn(`[RulesEngine] No QA comment found after agent completed for task ${task.id}`);
+    await createComment({
+      taskId: task.id,
+      userId: 'system',
+      userName: '⚠️ Mission Clawtrol',
+      userAvatar: null,
+      content:
+        '⚠️ **QA Agent completed but posted no review comment.** ' +
+        'The task remains in **review** — please trigger a manual QA review or advance the task manually.',
+    }).catch(() => {});
+    return;
+  }
+
+  const verdict = parseQAVerdict(qaComment);
+
+  if (verdict === 'passed' && canAutoComplete) {
+    console.log(`[RulesEngine] QA PASSED — auto-advancing task ${task.id} to done`);
+    await updateTask(task.id, { status: 'done' });
+    await logAudit({
+      userId: 'rules-engine',
+      action: 'rule.qa_auto_advance',
+      entityType: 'task',
+      entityId: task.id,
+      details: { verdict: 'passed', newStatus: 'done' },
+    });
+  } else if (verdict === 'failed') {
+    console.log(`[RulesEngine] QA FAILED — moving task ${task.id} back to in-progress`);
+    await updateTask(task.id, { status: 'in-progress' });
+    await logAudit({
+      userId: 'rules-engine',
+      action: 'rule.qa_auto_advance',
+      entityType: 'task',
+      entityId: task.id,
+      details: { verdict: 'failed', newStatus: 'in-progress' },
+    });
+  } else if (verdict === 'passed' && !canAutoComplete) {
+    // Non-dev task passed — leave in review for human approval, just log it
+    console.log(
+      `[RulesEngine] QA PASSED for non-dev task ${task.id} (type=${task.type}) — leaving in review for human approval`
+    );
+  } else {
+    // Verdict unclear — post a warning comment
+    console.warn(`[RulesEngine] Could not parse QA verdict for task ${task.id}`);
+    await createComment({
+      taskId: task.id,
+      userId: 'system',
+      userName: '⚠️ Mission Clawtrol',
+      userAvatar: null,
+      content:
+        '⚠️ **QA review posted but verdict was unclear** (no ✅ PASSED or ❌ FAILED found). ' +
+        'The task remains in **review** — please check the QA comment and advance manually.',
+    }).catch(() => {});
+  }
+}
+
+/**
  * Execute a spawn_agent action — spawns an agent session via the gateway.
  */
 async function executeSpawnAgent(
@@ -156,6 +257,17 @@ async function executeSpawnAgent(
   } else {
     // Generic spawn
     prompt = `You are spawned by Mission Clawtrol for task: ${task.title}\nTask ID: ${task.id}`;
+  }
+
+  // Capture comment count before spawn so we can detect new QA comments after
+  let commentsCountBefore = 0;
+  if (template === 'qa-review') {
+    try {
+      const existing = await getCommentsByTask(task.id);
+      commentsCountBefore = existing.length;
+    } catch {
+      commentsCountBefore = 0;
+    }
   }
 
   try {
@@ -207,6 +319,15 @@ async function executeSpawnAgent(
       entityId: task.id,
       details: { ruleId: rule.id, agentId, sessionKey, template },
     });
+
+    // For QA reviews: after the agent session completes, parse the verdict and auto-advance
+    if (template === 'qa-review') {
+      // handleQACompletion waits for the agent to post a comment, then advances the task.
+      // This runs in the background — spawn_agent is already fire-and-forget.
+      handleQACompletion(task, commentsCountBefore).catch((err) => {
+        console.error(`[RulesEngine] handleQACompletion error for task ${task.id}:`, err.message);
+      });
+    }
   } catch (err: any) {
     console.error(`[RulesEngine] Error executing spawn_agent for rule ${rule.id}:`, err.message);
     if (template === 'qa-review') {
@@ -431,34 +552,13 @@ function buildQAPrompt(task: Task): string {
   // Writing, research, design, and other task types must stay in review for human approval.
   const canAutoComplete = task.type === 'development' || task.type === 'bug';
 
-  const autoCompleteInstructions = canAutoComplete
-    ? `**2a. If ALL criteria pass — move to done:**
-\`\`\`bash
-curl -s -X PATCH ${BACKEND_URL}/api/tasks/${task.id} \\
-  -H 'Content-Type: application/json' \\
-  -d '{"status": "done"}'
-\`\`\`
-
-**2b. If any criteria FAIL — move back to in-progress:**
-\`\`\`bash
-curl -s -X PATCH ${BACKEND_URL}/api/tasks/${task.id} \\
-  -H 'Content-Type: application/json' \\
-  -d '{"status": "in-progress"}'
-\`\`\``
-    : `**2. ⚠️ HUMAN APPROVAL REQUIRED — do NOT auto-complete this task.**
-This task is type **${task.type || 'other'}** (not development or bug).
-Leave it in **review** — a human must approve before it moves to done.
-
-Only if criteria FAIL — move back to in-progress:
-\`\`\`bash
-curl -s -X PATCH ${BACKEND_URL}/api/tasks/${task.id} \\
-  -H 'Content-Type: application/json' \\
-  -d '{"status": "in-progress"}'
-\`\`\``;
-
   const verdictLine = canAutoComplete
     ? `**Verdict**: ✅ PASSED — All criteria met / ❌ FAILED — [list what's missing]`
     : `**Verdict**: ✅ PASSED (awaiting human approval) / ❌ FAILED — [list what's missing]`;
+
+  const autoAdvanceNote = canAutoComplete
+    ? `> ℹ️ The rules engine will automatically advance this task to **done** if you post ✅ PASSED, or back to **in-progress** if you post ❌ FAILED. You do NOT need to call any status-change API — just post your review comment.`
+    : `> ℹ️ This is a **${task.type || 'other'}** task (not development/bug). The rules engine will NOT auto-advance it — a human must approve. If ALL criteria FAIL, you may still post ❌ FAILED in your comment and the rules engine will move it back to in-progress.`;
 
   return `## QA Review Task
 
@@ -493,17 +593,16 @@ ${task.handoffNotes || 'None provided'}
    git -C ~/.openclaw/workspace/${task.projectId || 'mission-clawtrol'} diff --stat ${task.commitHash || 'HEAD'}^..${task.commitHash || 'HEAD'}
    \`\`\`
 
-### Actions Required
-After your review, you MUST call the Mission Clawtrol API to post your findings:
+### Action Required
+After your review, post your findings as a comment. This is the ONLY API call you need to make:
 
-**1. Post your review as a comment:**
 \`\`\`bash
 curl -s -X POST ${BACKEND_URL}/api/tasks/${task.id}/comments \\
   -H 'Content-Type: application/json' \\
   -d '{"userId": "qa-agent", "userName": "🔍 QA Agent", "content": "<your review markdown here>"}'
 \`\`\`
 
-${autoCompleteInstructions}
+${autoAdvanceNote}
 
 ### Review Comment Format
 Use this format for your comment:
@@ -521,7 +620,7 @@ Use this format for your comment:
 ${verdictLine}
 \`\`\`
 
-IMPORTANT: You MUST make the API calls. Do not just analyze — take action.`;
+IMPORTANT: You MUST post the comment. The verdict line (✅ PASSED / ❌ FAILED) is required — the rules engine uses it to auto-advance the task.`;
 }
 
 function buildDocsPrompt(task: Task): string {
