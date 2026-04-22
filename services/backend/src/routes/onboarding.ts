@@ -186,6 +186,96 @@ function maskKey(key: string): string {
   return key.slice(0, 8) + '***';
 }
 
+/**
+ * Map from env var name → auth-profiles.json profile key
+ * Only API-key type providers need propagation; OAuth tokens are agent-specific.
+ */
+const ENV_TO_PROFILE_KEY: Record<string, string> = {
+  ANTHROPIC_API_KEY: 'anthropic:default',
+  OPENAI_API_KEY: 'openai:default',
+};
+
+/**
+ * Propagate updated API keys from openclaw.json env block to every
+ * agent's auth-profiles.json so they pick up rotated keys immediately.
+ *
+ * Only updates profiles that (a) already exist in the file and (b) are
+ * of type "api_key". OAuth tokens are per-agent and are left untouched.
+ */
+async function propagateApiKeysToAgentProfiles(
+  envPatch: Record<string, string>,
+  log?: { error: (...args: any[]) => void; info: (...args: any[]) => void }
+): Promise<{ updated: number; skipped: number; errors: string[] }> {
+  const agentsBaseDir = join(process.env.HOME || '/root', '.openclaw', 'agents');
+
+  // Discover agent directories without glob dependency
+  let profileFiles: string[] = [];
+  try {
+    const agentDirs = await fs.readdir(agentsBaseDir);
+    for (const agentId of agentDirs) {
+      const candidate = join(agentsBaseDir, agentId, 'agent', 'auth-profiles.json');
+      try {
+        await fs.access(candidate, fs.constants.F_OK);
+        profileFiles.push(candidate);
+      } catch {
+        // File doesn't exist for this agent — skip silently
+      }
+    }
+  } catch (err: any) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      // agents directory doesn't exist yet — nothing to propagate
+      return { updated: 0, skipped: 0, errors: [] };
+    }
+    log?.error('propagateApiKeys: failed to read agents dir', err);
+    return { updated: 0, skipped: 0, errors: [err?.message || String(err)] };
+  }
+
+  let updated = 0;
+  let skipped = 0;
+  const errors: string[] = [];
+
+  for (const filePath of profileFiles) {
+    try {
+      const raw = await fs.readFile(filePath, 'utf-8');
+      const data = JSON.parse(raw) as {
+        version: number;
+        profiles: Record<string, { type: string; provider: string; key?: string; [k: string]: any }>;
+      };
+
+      let dirty = false;
+
+      for (const [envVar, profileKey] of Object.entries(ENV_TO_PROFILE_KEY)) {
+        const newKey = envPatch[envVar];
+        if (!newKey) continue; // not in this update batch
+
+        const profile = data.profiles?.[profileKey];
+        if (!profile) continue; // agent doesn't have this provider — skip
+
+        if (profile.type !== 'api_key') continue; // only touch api_key profiles
+
+        if (profile.key === newKey) continue; // already up-to-date
+
+        profile.key = newKey;
+        dirty = true;
+      }
+
+      if (dirty) {
+        await fs.writeFile(filePath, JSON.stringify(data, null, 4), 'utf-8');
+        updated++;
+        log?.info(`propagateApiKeys: updated ${filePath}`);
+      } else {
+        skipped++;
+      }
+    } catch (err: any) {
+      const msg = `Failed to update ${filePath}: ${err?.message || String(err)}`;
+      errors.push(msg);
+      log?.error('propagateApiKeys:', msg);
+    }
+  }
+
+  return { updated, skipped, errors };
+}
+
 export async function onboardingRoutes(fastify: FastifyInstance) {
   // Register multipart plugin for file uploads
   await fastify.register(import('@fastify/multipart'), {
@@ -247,7 +337,15 @@ export async function onboardingRoutes(fastify: FastifyInstance) {
 
       await writeOpenClawConfig({ env: envPatch });
 
-      return { ok: true };
+      // Propagate to all agent auth-profiles.json files so rotated keys
+      // take effect immediately without manual intervention.
+      const propagation = await propagateApiKeysToAgentProfiles(envPatch, fastify.log);
+      fastify.log.info(`API key propagation: ${propagation.updated} updated, ${propagation.skipped} skipped, ${propagation.errors.length} errors`);
+      if (propagation.errors.length > 0) {
+        fastify.log.error(`API key propagation errors: ${propagation.errors.join('; ')}`);
+      }
+
+      return { ok: true, propagation };
     } catch (err: any) {
       fastify.log.error(err);
       return reply.status(500).send({
